@@ -1,6 +1,13 @@
 // sfx.js — WebAudio-synthesized sound effects. No audio files.
 // Exposes window.SFX. AudioContext is created lazily and resumed on first
 // user gesture (autoplay policy). M toggles mute.
+//
+// AESTHETIC: crisp arcade / retro chip. Everything is short and mid-band with
+// punchy envelopes (fast attack, quick decay) — no long tails that smear at
+// bullet-hell density. MIX LAW (binding): SFX carry information over the music.
+// The score is mid-low and lowpassed ~2.6kHz; SFX own the top/transient band so
+// a kill-pop or a graze still reads at a 200-bullet crest. Gain-staging is tuned
+// as a set (see per-patch peaks) against master 0.5 so nothing masks gameplay.
 (function () {
   'use strict';
 
@@ -28,7 +35,7 @@
 
     lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
-    lp.frequency.value = 9000;
+    lp.frequency.value = 10000;   // keep the arcade top; SFX carry the top band
     lp.Q.value = 0.4;
 
     comp = ctx.createDynamicsCompressor();
@@ -114,37 +121,45 @@
   var lastShot = 0;
   var lastGraze = 0;   // graze whisper rate-limit (grazing a wall must not machine-gun)
   var lastPop = 0;     // popcorn tick anti-stack (a formation wipe shouldn't clip)
+  var shotRR = 0;      // shot round-robin pitch index (avoids a monotone drone)
 
+  // Player shot: fires constantly, so it must be TINY and unobtrusive but
+  // satisfying. A short square blip with a small downward chirp; a 3-step
+  // round-robin pitch keeps a stream of shots from fusing into one droning tone.
+  var SHOT_PITCH = [900, 850, 810];
   SFX.shot = function () {
     if (!ready || muted) return;
     var t = now();
     if (t - lastShot < 0.028) return;
     lastShot = t;
+    var f0 = SHOT_PITCH[shotRR % SHOT_PITCH.length]; shotRR++;
     var o = ctx.createOscillator();
     o.type = 'square';
-    o.frequency.setValueAtTime(880, t);
-    o.frequency.exponentialRampToValueAtTime(560, t + 0.06);
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(f0 * 0.62, t + 0.05);
     var f = ctx.createBiquadFilter();
     f.type = 'lowpass';
-    f.frequency.setValueAtTime(2200, t);
+    f.frequency.setValueAtTime(2600, t);
     var g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.06, t + 0.005);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    g.gain.exponentialRampToValueAtTime(0.045, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
     o.connect(f); f.connect(g); g.connect(master);
-    o.start(t); o.stop(t + 0.11);
+    o.start(t); o.stop(t + 0.08);
   };
 
+  // light damage tick (enemy took a hit, or special-not-charged nudge): a crisp,
+  // quiet mid blip. Short so it never smears under sustained fire.
   SFX.hit = function () {
     if (!ready || muted) return;
     var t = now();
     var o = ctx.createOscillator();
-    o.type = 'triangle';
-    o.frequency.setValueAtTime(1400, t);
-    o.frequency.exponentialRampToValueAtTime(700, t + 0.04);
+    o.type = 'square';
+    o.frequency.setValueAtTime(1200, t);
+    o.frequency.exponentialRampToValueAtTime(720, t + 0.035);
     var g = ctx.createGain();
-    g.gain.setValueAtTime(0.05, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    g.gain.setValueAtTime(0.045, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
     o.connect(g); g.connect(master);
     o.start(t); o.stop(t + 0.06);
   };
@@ -152,7 +167,7 @@
   SFX.explosion = function (big) {
     if (!ready || muted) return;
     var t = now();
-    var dur = big ? 0.6 : 0.32;
+    var dur = big ? 0.55 : 0.3;
     // noise burst
     var n = noiseSource(t, dur, null);
     var nf = ctx.createBiquadFilter();
@@ -174,46 +189,47 @@
     o.start(t); o.stop(t + dur + 0.02);
   };
 
-  // popcorn kill: a light, bright tick — the kill-cadence filler. Short, mid-band
-  // (music sits low; SFX carry the top). Gently anti-stacked so a formation wipe
-  // ticks without clipping into a wall of noise.
+  // popcorn kill: a bright zap-pop — the kill-cadence filler. A fast square
+  // zap-chirp + a tight bandpassed noise transient (the "pop"). Mid/high so it
+  // reads over the music bed; gently anti-stacked so a formation wipe ticks
+  // cleanly instead of clipping into a wall.
   SFX.pop = function () {
     if (!ready || muted) return;
     var t = now();
     if (t - lastPop < 0.022) return;
     lastPop = t;
     var o = ctx.createOscillator();
-    o.type = 'triangle';
-    o.frequency.setValueAtTime(680, t);
-    o.frequency.exponentialRampToValueAtTime(300, t + 0.05);
+    o.type = 'square';
+    o.frequency.setValueAtTime(1050, t);
+    o.frequency.exponentialRampToValueAtTime(360, t + 0.05);
     var g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.05, t + 0.004);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.075);
+    g.gain.exponentialRampToValueAtTime(0.055, t + 0.003);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
     o.connect(g); g.connect(master);
-    o.start(t); o.stop(t + 0.09);
-    // tiny bandpassed noise transient — the "pop"
+    o.start(t); o.stop(t + 0.085);
+    // bandpassed noise transient — the burst
     var n = noiseSource(t, 0.035, null);
     var nf = ctx.createBiquadFilter();
-    nf.type = 'bandpass'; nf.Q.value = 0.9; nf.frequency.setValueAtTime(1900, t);
+    nf.type = 'bandpass'; nf.Q.value = 1.1; nf.frequency.setValueAtTime(2400, t);
     n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
-    n.g.gain.setValueAtTime(0.055, t);
+    n.g.gain.setValueAtTime(0.05, t);
     n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
   };
 
-  // midship / elite death: a deep, layered boom (heavier than SFX.explosion) —
-  // lowpassed noise body + a sub thump + a mid saw crack. Kept under ~0.4s.
+  // midship / elite death: a deep, punchy boom (heavier than SFX.explosion) —
+  // lowpassed noise body + a sub thump + a mid crack. Kept short (~0.36s).
   SFX.boom = function () {
     if (!ready || muted) return;
     var t = now();
-    var dur = 0.4;
+    var dur = 0.36;
     var n = noiseSource(t, dur, null);
     var nf = ctx.createBiquadFilter();
     nf.type = 'lowpass';
     nf.frequency.setValueAtTime(2400, t);
     nf.frequency.exponentialRampToValueAtTime(170, t + dur);
     n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
-    n.g.gain.setValueAtTime(0.36, t);
+    n.g.gain.setValueAtTime(0.34, t);
     n.g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     var o = ctx.createOscillator();
     o.type = 'sine';
@@ -225,55 +241,61 @@
     o.connect(g); g.connect(master);
     o.start(t); o.stop(t + dur + 0.02);
     var o2 = ctx.createOscillator();
-    o2.type = 'sawtooth';
-    o2.frequency.setValueAtTime(320, t);
-    o2.frequency.exponentialRampToValueAtTime(90, t + 0.12);
+    o2.type = 'square';
+    o2.frequency.setValueAtTime(300, t);
+    o2.frequency.exponentialRampToValueAtTime(90, t + 0.1);
     var g2 = ctx.createGain();
     g2.gain.setValueAtTime(0.12, t);
-    g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
     o2.connect(g2); g2.connect(master);
-    o2.start(t); o2.stop(t + 0.18);
+    o2.start(t); o2.stop(t + 0.16);
   };
 
-  // cancel-to-gold cascade (APOTHEOSIS / boss phase). Note count scales with the
-  // number of bullets cancelled — a denser screen sounds like a bigger payday —
-  // but is capped at 6 so it stays a short golden shimmer layered under the
-  // whoosh/gong, not a machine-gun. `n` = bullets cancelled.
+  // cancel-to-gold cascade (APOTHEOSIS / boss phase). A rising arcade coin
+  // cascade — square blips climbing a bright scale. Note count scales with the
+  // number of bullets cancelled (a denser screen sounds like a bigger payday) but
+  // is capped at 6 so it stays a short shimmer layered under the whoosh/gong.
+  // `n` = bullets cancelled.
   SFX.cancelCascade = function (n) {
     if (!ready || muted) return;
     var t = now();
-    var scale = [523.25, 659.25, 783.99, 987.77, 1174.7, 1567.98];
+    var scale = [659.25, 783.99, 987.77, 1174.7, 1567.98, 1975.5];
     var voices = Math.max(2, Math.min(6, Math.round((n || 0) / 12)));
     for (var i = 0; i < voices; i++) {
       var tt = t + i * 0.035;
       var o = ctx.createOscillator();
-      o.type = 'triangle';
+      o.type = 'square';
       o.frequency.setValueAtTime(scale[i], tt);
       var g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, tt);
-      g.gain.exponentialRampToValueAtTime(0.055, tt + 0.006);
-      g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.15);
+      g.gain.exponentialRampToValueAtTime(0.05, tt + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.13);
       o.connect(g); g.connect(master);
-      o.start(tt); o.stop(tt + 0.17);
+      o.start(tt); o.stop(tt + 0.15);
     }
   };
 
-  // gold pickup: rising blip; pitch climbs with combo index
+  // gold pickup: the classic two-note arcade COIN blip (the Jamestown dopamine).
+  // A quick low->high square couplet; the base pitch climbs with the combo index
+  // so a rapid pickup streak arpeggios upward. Short and bright.
   SFX.gold = function (combo) {
     if (!ready || muted) return;
     var t = now();
     var step = Math.min(combo || 0, 24);
-    var base = 620 * Math.pow(2, step / 24); // up to ~1 octave
-    var o = ctx.createOscillator();
-    o.type = 'triangle';
-    o.frequency.setValueAtTime(base, t);
-    o.frequency.exponentialRampToValueAtTime(base * 1.5, t + 0.05);
-    var g = ctx.createGain();
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.05, t + 0.006);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
-    o.connect(g); g.connect(master);
-    o.start(t); o.stop(t + 0.13);
+    var lo = 784 * Math.pow(2, step / 32);   // B5-ish, climbs up to ~a 5th over a long streak
+    var notes = [lo, lo * 1.5];              // the coin's signature interval (a fifth up)
+    for (var i = 0; i < 2; i++) {
+      var tt = t + i * 0.05;
+      var o = ctx.createOscillator();
+      o.type = 'square';
+      o.frequency.setValueAtTime(notes[i], tt);
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, tt);
+      g.gain.exponentialRampToValueAtTime(i === 0 ? 0.05 : 0.075, tt + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, tt + (i === 0 ? 0.05 : 0.1));
+      o.connect(g); g.connect(master);
+      o.start(tt); o.stop(tt + 0.12);
+    }
   };
 
   // barely-audible whisper tick. Rate-limited to ~8/s: grazing 20 bullets in a
@@ -286,41 +308,57 @@
     lastGraze = t;
     var o = ctx.createOscillator();
     o.type = 'sine';
-    o.frequency.setValueAtTime(2400, t);
-    o.frequency.exponentialRampToValueAtTime(3400, t + 0.025);
+    o.frequency.setValueAtTime(2600, t);
+    o.frequency.exponentialRampToValueAtTime(3500, t + 0.02);
     var g = ctx.createGain();
-    g.gain.setValueAtTime(0.022, t);   // quieter than before — a whisper under the mix
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+    g.gain.setValueAtTime(0.02, t);   // a whisper under the mix, up in the top band
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
     o.connect(g); g.connect(master);
-    o.start(t); o.stop(t + 0.05);
+    o.start(t); o.stop(t + 0.045);
   };
 
+  // APOTHEOSIS activate: a rising arcade sweep — a fast upward square arpeggio
+  // riding a filtered-noise whoosh, with a sub thump. The payday's fanfare.
   SFX.vaunt = function () {
     if (!ready || muted) return;
     var t = now();
-    // whoosh: filtered noise sweeping up
-    var dur = 0.9;
+    var dur = 0.52;   // kept under the 600ms tail budget (this is not the gong)
+    // noise whoosh sweeping up
     var n = noiseSource(t, dur, null);
     var nf = ctx.createBiquadFilter();
     nf.type = 'bandpass';
     nf.Q.value = 0.8;
-    nf.frequency.setValueAtTime(300, t);
-    nf.frequency.exponentialRampToValueAtTime(5200, t + 0.5);
-    nf.frequency.exponentialRampToValueAtTime(400, t + dur);
+    nf.frequency.setValueAtTime(400, t);
+    nf.frequency.exponentialRampToValueAtTime(6000, t + 0.34);
+    nf.frequency.exponentialRampToValueAtTime(2000, t + dur);
     n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
     n.g.gain.setValueAtTime(0.0001, t);
-    n.g.gain.exponentialRampToValueAtTime(0.5, t + 0.1);
+    n.g.gain.exponentialRampToValueAtTime(0.42, t + 0.07);
     n.g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    // rising square arpeggio (the chip fanfare)
+    var arp = [392, 523.25, 659.25, 783.99, 1046.5, 1318.5];
+    for (var i = 0; i < arp.length; i++) {
+      var tt = t + i * 0.04;
+      var o = ctx.createOscillator();
+      o.type = 'square';
+      o.frequency.setValueAtTime(arp[i], tt);
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, tt);
+      g.gain.exponentialRampToValueAtTime(0.07, tt + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.16);
+      o.connect(g); g.connect(master);
+      o.start(tt); o.stop(tt + 0.18);
+    }
     // sub thump
-    var o = ctx.createOscillator();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(90, t);
-    o.frequency.exponentialRampToValueAtTime(45, t + 0.5);
-    var g = ctx.createGain();
-    g.gain.setValueAtTime(0.6, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
-    o.connect(g); g.connect(master);
-    o.start(t); o.stop(t + 0.7);
+    var s = ctx.createOscillator();
+    s.type = 'sine';
+    s.frequency.setValueAtTime(120, t);
+    s.frequency.exponentialRampToValueAtTime(48, t + 0.34);
+    var sg = ctx.createGain();
+    sg.gain.setValueAtTime(0.5, t);
+    sg.gain.exponentialRampToValueAtTime(0.0001, t + 0.44);
+    s.connect(sg); sg.connect(master);
+    s.start(t); s.stop(t + 0.48);
   };
 
   SFX.vauntBonus = function () {
@@ -328,43 +366,45 @@
     var t = now();
     var notes = [523.25, 659.25, 783.99, 1046.5, 1318.5];
     for (var i = 0; i < notes.length; i++) {
-      var tt = t + i * 0.06;
+      var tt = t + i * 0.055;
       var o = ctx.createOscillator();
-      o.type = 'triangle';
+      o.type = 'square';
       o.frequency.setValueAtTime(notes[i], tt);
       var g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, tt);
-      g.gain.exponentialRampToValueAtTime(0.09, tt + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.28);
+      g.gain.exponentialRampToValueAtTime(0.08, tt + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.22);
       o.connect(g); g.connect(master);
-      o.start(tt); o.stop(tt + 0.3);
+      o.start(tt); o.stop(tt + 0.24);
     }
   };
 
+  // player hit (lost a life): a heavy, brief sting — a fast descending square
+  // through a closing lowpass, plus the big body boom. Kept under ~0.6s.
   SFX.death = function () {
     if (!ready || muted) return;
     var t = now();
     var o = ctx.createOscillator();
     o.type = 'sawtooth';
     o.frequency.setValueAtTime(440, t);
-    o.frequency.exponentialRampToValueAtTime(55, t + 0.7);
+    o.frequency.exponentialRampToValueAtTime(60, t + 0.4);
     var f = ctx.createBiquadFilter();
     f.type = 'lowpass';
-    f.frequency.setValueAtTime(2000, t);
-    f.frequency.exponentialRampToValueAtTime(300, t + 0.7);
+    f.frequency.setValueAtTime(2200, t);
+    f.frequency.exponentialRampToValueAtTime(300, t + 0.4);
     var g = ctx.createGain();
     g.gain.setValueAtTime(0.4, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
     o.connect(f); f.connect(g); g.connect(master);
-    o.start(t); o.stop(t + 0.85);
+    o.start(t); o.stop(t + 0.55);
     SFX.explosion(true);
   };
 
   SFX.special = function () {
     if (!ready || muted) return;
     var t = now();
-    // heavy charged discharge: noise whoosh + descending saw + sub thump
-    var dur = 0.5;
+    // heavy charged discharge: noise whoosh + descending square + sub thump
+    var dur = 0.45;
     var n = noiseSource(t, dur, null);
     var nf = ctx.createBiquadFilter();
     nf.type = 'lowpass';
@@ -374,14 +414,14 @@
     n.g.gain.setValueAtTime(0.45, t);
     n.g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     var o = ctx.createOscillator();
-    o.type = 'sawtooth';
-    o.frequency.setValueAtTime(520, t);
-    o.frequency.exponentialRampToValueAtTime(120, t + 0.3);
+    o.type = 'square';
+    o.frequency.setValueAtTime(560, t);
+    o.frequency.exponentialRampToValueAtTime(120, t + 0.28);
     var g = ctx.createGain();
     g.gain.setValueAtTime(0.3, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
     o.connect(g); g.connect(master);
-    o.start(t); o.stop(t + 0.4);
+    o.start(t); o.stop(t + 0.36);
     var sub = ctx.createOscillator();
     sub.type = 'sine';
     sub.frequency.setValueAtTime(110, t);
@@ -400,16 +440,16 @@
     var o = ctx.createOscillator();
     o.type = 'sine';
     o.frequency.setValueAtTime(160, t);
-    o.frequency.exponentialRampToValueAtTime(38, t + 0.18);
+    o.frequency.exponentialRampToValueAtTime(38, t + 0.16);
     var g = ctx.createGain();
     g.gain.setValueAtTime(0.6, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
     o.connect(g); g.connect(master);
-    o.start(t); o.stop(t + 0.3);
+    o.start(t); o.stop(t + 0.28);
     // click transient
     var n = noiseSource(t, 0.05, null);
     var nf = ctx.createBiquadFilter();
-    nf.type = 'lowpass'; nf.frequency.setValueAtTime(1200, t);
+    nf.type = 'lowpass'; nf.frequency.setValueAtTime(1400, t);
     n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
     n.g.gain.setValueAtTime(0.3, t);
     n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
@@ -420,50 +460,51 @@
     var t = now();
     var o = ctx.createOscillator();
     o.type = 'square';
-    o.frequency.setValueAtTime(2400, t);
-    o.frequency.exponentialRampToValueAtTime(3600, t + 0.03);
+    o.frequency.setValueAtTime(2600, t);
+    o.frequency.exponentialRampToValueAtTime(3900, t + 0.028);
     var g = ctx.createGain();
     g.gain.setValueAtTime(0.06, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.055);
     o.connect(g); g.connect(master);
-    o.start(t); o.stop(t + 0.07);
+    o.start(t); o.stop(t + 0.065);
   };
 
-  // boss phase-transition name-card hit: a gong-like metallic sting (bright
-  // struck partial over a low bloom) — lands on the card, distinct from vaunt.
+  // boss phase-transition name-card hit: a chip-flavored "gong" — a stack of
+  // detuned square partials ringing down over a low bloom, with a bright noise
+  // strike. Lands on the card, distinct from vaunt. Longest patch (~0.9s).
   SFX.bossPhase = function () {
     if (!ready || muted) return;
     var t = now();
-    // struck metallic body: two detuned partials ringing down
+    // struck metallic body: detuned square partials ringing down
     var parts = [523.25, 784.0, 1174.7];
     for (var i = 0; i < parts.length; i++) {
       var o = ctx.createOscillator();
-      o.type = 'triangle';
-      o.frequency.setValueAtTime(parts[i] * (1 + 0.004 * i), t);
+      o.type = 'square';
+      o.frequency.setValueAtTime(parts[i] * (1 + 0.006 * i), t);
       var g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.10 / (i + 1), t + 0.008);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9 - i * 0.18);
+      g.gain.exponentialRampToValueAtTime(0.09 / (i + 1), t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9 - i * 0.2);
       o.connect(g); g.connect(master);
-      o.start(t); o.stop(t + 1.0);
+      o.start(t); o.stop(t + 0.95);
     }
     // low bloom under it
     var s = ctx.createOscillator();
-    s.type = 'sine';
+    s.type = 'triangle';
     s.frequency.setValueAtTime(130.8, t);
-    s.frequency.exponentialRampToValueAtTime(65.4, t + 0.5);
+    s.frequency.exponentialRampToValueAtTime(65.4, t + 0.45);
     var sg = ctx.createGain();
     sg.gain.setValueAtTime(0.5, t);
-    sg.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+    sg.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
     s.connect(sg); sg.connect(master);
-    s.start(t); s.stop(t + 0.7);
-    // bright transient shimmer
-    var n = noiseSource(t, 0.18, null);
+    s.start(t); s.stop(t + 0.6);
+    // bright transient strike
+    var n = noiseSource(t, 0.16, null);
     var nf = ctx.createBiquadFilter();
-    nf.type = 'bandpass'; nf.Q.value = 1.2; nf.frequency.setValueAtTime(4200, t);
+    nf.type = 'bandpass'; nf.Q.value = 1.2; nf.frequency.setValueAtTime(4400, t);
     n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
     n.g.gain.setValueAtTime(0.18, t);
-    n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
   };
 
   // HUBRIS meter step-up: bright, short two-note rise (a rung climbed).
@@ -474,14 +515,14 @@
     for (var i = 0; i < notes.length; i++) {
       var tt = t + i * 0.05;
       var o = ctx.createOscillator();
-      o.type = 'triangle';
+      o.type = 'square';
       o.frequency.setValueAtTime(notes[i], tt);
       var g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, tt);
-      g.gain.exponentialRampToValueAtTime(0.07, tt + 0.008);
-      g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.14);
+      g.gain.exponentialRampToValueAtTime(0.07, tt + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.13);
       o.connect(g); g.connect(master);
-      o.start(tt); o.stop(tt + 0.16);
+      o.start(tt); o.stop(tt + 0.15);
     }
   };
 
@@ -490,17 +531,17 @@
     if (!ready || muted) return;
     var t = now();
     var o = ctx.createOscillator();
-    o.type = 'sine';
+    o.type = 'triangle';
     o.frequency.setValueAtTime(360, t);
-    o.frequency.exponentialRampToValueAtTime(150, t + 0.14);
+    o.frequency.exponentialRampToValueAtTime(150, t + 0.13);
     var f = ctx.createBiquadFilter();
     f.type = 'lowpass'; f.frequency.setValueAtTime(900, t);
     var g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(0.09, t + 0.008);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
     o.connect(f); f.connect(g); g.connect(master);
-    o.start(t); o.stop(t + 0.2);
+    o.start(t); o.stop(t + 0.19);
   };
 
   // Named skill event (FORMATION WIPE / UNTOUCHED / PHASE SEIZED): a bright gold
@@ -512,30 +553,31 @@
     for (var i = 0; i < notes.length; i++) {
       var tt = t + i * 0.045;
       var o = ctx.createOscillator();
-      o.type = 'triangle';
+      o.type = 'square';
       o.frequency.setValueAtTime(notes[i], tt);
       var g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, tt);
       g.gain.exponentialRampToValueAtTime(0.08, tt + 0.008);
-      g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.2);
+      g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.18);
       o.connect(g); g.connect(master);
-      o.start(tt); o.stop(tt + 0.22);
+      o.start(tt); o.stop(tt + 0.2);
     }
   };
 
+  // UI confirm / powerup pickup: a rising square sweep (a satisfying "yes").
   SFX.powerup = function () {
     if (!ready || muted) return;
     var t = now();
     var o = ctx.createOscillator();
     o.type = 'square';
-    o.frequency.setValueAtTime(300, t);
-    o.frequency.exponentialRampToValueAtTime(900, t + 0.18);
+    o.frequency.setValueAtTime(320, t);
+    o.frequency.exponentialRampToValueAtTime(960, t + 0.16);
     var g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(0.08, t + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.24);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
     o.connect(g); g.connect(master);
-    o.start(t); o.stop(t + 0.26);
+    o.start(t); o.stop(t + 0.24);
   };
 
 })();

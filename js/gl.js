@@ -12,6 +12,11 @@
   GL.W = 1080;
   GL.H = 1920;
 
+  // Enemy-bullet look: 'A' = white core -> thick colour rim (Touhou-style),
+  // 'B' = solid colour core + hot centre + thick faded ring (DU3/CAVE-style).
+  // Switch live from the console: GL.setBulletStyle('B'). Default A.
+  GL.bulletStyle = 'A';
+
   // Sprite ids -> atlas region index.
   GL.SPR = {
     GLOW: 0,        // soft radial glow disc
@@ -80,6 +85,37 @@
 // exactly as before; authored sprite overrides contribute their own colors.
 '  vec4 t = texture(u_atlas, v_uv);\n' +
 '  frag = vec4(t.rgb * v_color.rgb * v_color.a, t.a * v_color.a);\n' +  // premultiplied, additive blend ONE,ONE
+'}\n';
+
+  // Enemy-bullet shader. The atlas cell is NOT a plain white mask: it encodes a
+  // per-texel recolour recipe so a genuinely white core survives the family
+  // tint (a single multiplicative tint could never keep white). Channels (in
+  // straight-alpha, decoded here after the premultiplied upload):
+  //   A = coverage (silhouette + baked outer fade)
+  //   R = tint weight  W  (1 = full family colour, 0 = stay pure white)
+  //   G = value        V  (1 = full bright, low = the dark #231A20-ish edge)
+  // Output colour = coverage * mix(white, tint, W) * V. mix() can only travel
+  // white<->tint (both bright), so V is what lets the baked dark edge exist and
+  // occlude the crest behind it in the premult-over pass. Legacy white cells
+  // (R==G==A) would decode to W=1,V=1 -> identical to FS_SPRITE, but bullet
+  // cells are only ever drawn through THIS program, so authored ship overrides
+  // (which need their own texture colours) keep using FS_SPRITE untouched.
+  var FS_SPRITE_BULLET =
+'#version 300 es\n' +
+'precision highp float;\n' +
+'in vec2 v_uv;\n' +
+'in vec4 v_color;\n' +
+'uniform sampler2D u_atlas;\n' +
+'out vec4 frag;\n' +
+'void main(){\n' +
+'  vec4 t = texture(u_atlas, v_uv);\n' +
+'  float cov = t.a;\n' +
+'  float inv = cov > 0.0039 ? 1.0 / cov : 0.0;\n' +
+'  float w = clamp(t.r * inv, 0.0, 1.0);\n' +   // straight red  = tint weight
+'  float v = cov > 0.0039 ? clamp(t.g * inv, 0.0, 1.0) : 1.0;\n' + // straight green = value
+'  const float WB = 1.7;\n' +                   // white-core over-brightness: pushes pure-white texels into
+'  vec3 body = mix(vec3(WB), v_color.rgb, w) * v;\n' +           // HDR so they bloom hot past the reinhard tonemap;
+'  frag = vec4(body * cov * v_color.a, cov * v_color.a);\n' +   // rims (w=1) keep their saturated colour. premult-over
 '}\n';
 
   var VS_FULL =
@@ -192,6 +228,8 @@
   // ---- programs -------------------------------------------------------------
 
   var progSprite, uSprite;
+  var progSpriteBullet, uSpriteBullet;
+  var spriteMode = 'normal';   // 'normal' | 'bullet' — which program flushSprites binds
   var progThresh, uThresh;
   var progBlur, uBlur;
   var progComp, uComp;
@@ -219,6 +257,152 @@
     var cx = (i % COLS) * CELL;
     var cy = ((i / COLS) | 0) * CELL;
     return { x: cx, y: cy };
+  }
+
+  // ---- enemy-bullet family painters -----------------------------------------
+  // The bullet shader (FS_SPRITE_BULLET) decodes each cell texel as:
+  //   RED   = tint weight W (1 = full family colour, 0 = pure white)
+  //   GREEN = value       V (1 = full bright, low = dark #231A20-ish edge)
+  //   ALPHA = coverage      (silhouette + baked outer fade)
+  // encode(w,v,a) returns a canvas colour that writes exactly those channels.
+  // GL.bulletStyle selects: 'A' = large white core -> thick colour rim (Touhou);
+  // 'B' = solid colour core + small hot centre + thick faded ring (DU3/CAVE).
+  var TAUL = Math.PI * 2;
+  var BINK_W = 0.20, BINK_V = 0.13;   // dark-edge recipe (faint family tint, near-black value)
+  function encode(w, v, a) {
+    return 'rgba(' + Math.round(w * 255) + ',' + Math.round(v * 255) + ',0,' + a + ')';
+  }
+  // register a family: records the region and paints the current-style cell into
+  // the shared atlas canvas (called from buildAtlas via its local draw()).
+  function paintBulletFamily(draw, spr, fn) {
+    draw(spr, function (ctx, r) { fn(ctx, r, GL.bulletStyle); });
+  }
+  var BULLET_FAMILIES = null;   // spr -> painter (built lazily for runtime restyle)
+
+  function paintOrb(ctx, r, style) {
+    var br = r * 0.98;
+    var g = ctx.createRadialGradient(0, 0, 0, 0, 0, br);
+    if (style === 'B') {
+      g.addColorStop(0.00, encode(0.14, 1, 1));      // near-white hot centre
+      g.addColorStop(0.14, encode(0.14, 1, 1));
+      g.addColorStop(0.28, encode(1, 1, 1));         // solid family colour
+      g.addColorStop(0.76, encode(1, 1, 1));
+      g.addColorStop(0.815, encode(BINK_W, BINK_V, 1)); // dark edge
+      g.addColorStop(0.86, encode(1, 0.98, 0.85));   // thick faded outer ring
+      g.addColorStop(1.00, encode(1, 0.95, 0));
+    } else {
+      g.addColorStop(0.00, encode(0, 1, 1));         // white-hot core
+      g.addColorStop(0.40, encode(0, 1, 1));
+      g.addColorStop(0.58, encode(1, 1, 1));         // thick family rim
+      g.addColorStop(0.80, encode(1, 1, 1));
+      g.addColorStop(0.845, encode(BINK_W, BINK_V, 1)); // thin dark edge
+      g.addColorStop(0.89, encode(1, 1, 0.7));       // soft colour fade
+      g.addColorStop(1.00, encode(1, 1, 0));
+    }
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, br, 0, TAUL); ctx.fill();
+    // off-centre glassy specular (pure white pip)
+    var sr = br * (style === 'B' ? 0.24 : 0.30), sx = -br * 0.30, sy = -br * 0.32;
+    var sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr);
+    sg.addColorStop(0, encode(0, 1, 0.95)); sg.addColorStop(1, encode(0, 1, 0));
+    ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(sx, sy, sr, 0, TAUL); ctx.fill();
+  }
+
+  function paintPellet(ctx, r, style) {
+    var br = r * 0.92;
+    var g = ctx.createRadialGradient(0, 0, 0, 0, 0, br);
+    if (style === 'B') {
+      g.addColorStop(0.00, encode(0.12, 1, 1));      // tiny hot centre
+      g.addColorStop(0.42, encode(1, 1, 1));         // hard solid colour dot
+      g.addColorStop(0.74, encode(1, 1, 1));
+      g.addColorStop(0.80, encode(BINK_W, BINK_V, 1));
+      g.addColorStop(0.85, encode(1, 0.98, 0.78));
+      g.addColorStop(1.00, encode(1, 0.95, 0));
+    } else {
+      g.addColorStop(0.00, encode(0, 1, 1));         // white core
+      g.addColorStop(0.34, encode(0, 1, 1));
+      g.addColorStop(0.54, encode(1, 1, 1));         // colour rim
+      g.addColorStop(0.74, encode(1, 1, 1));
+      g.addColorStop(0.80, encode(BINK_W, BINK_V, 1));
+      g.addColorStop(0.86, encode(1, 1, 0.68));
+      g.addColorStop(1.00, encode(1, 1, 0));
+    }
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, br, 0, TAUL); ctx.fill();
+  }
+
+  function paintGRing(ctx, r, style) {
+    var ro = r * 0.98;
+    var g = ctx.createRadialGradient(0, 0, 0, 0, 0, ro);
+    if (style === 'B') {
+      g.addColorStop(0.00, encode(1, 1, 0));         // hollow
+      g.addColorStop(0.42, encode(1, 1, 0));
+      g.addColorStop(0.49, encode(0.16, 1, 0.85));   // small near-white inner highlight
+      g.addColorStop(0.55, encode(1, 1, 1));         // colour body
+      g.addColorStop(0.74, encode(1, 1, 1));
+      g.addColorStop(0.80, encode(BINK_W, BINK_V, 1)); // dark outer edge
+      g.addColorStop(0.86, encode(1, 0.98, 0.75));   // thick fade
+      g.addColorStop(1.00, encode(1, 0.95, 0));
+    } else {
+      g.addColorStop(0.00, encode(1, 1, 0));         // hollow
+      g.addColorStop(0.40, encode(1, 1, 0));
+      g.addColorStop(0.47, encode(0, 1, 1));         // white-hot inner rim edge
+      g.addColorStop(0.55, encode(1, 1, 1));         // thick colour ring body
+      g.addColorStop(0.78, encode(1, 1, 1));
+      g.addColorStop(0.835, encode(BINK_W, BINK_V, 1)); // dark outer edge
+      g.addColorStop(0.89, encode(1, 1, 0.6));       // soft fade
+      g.addColorStop(1.00, encode(1, 1, 0));
+    }
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, ro, 0, TAUL); ctx.fill();
+  }
+
+  function paintKunai(ctx, r, style) {
+    ctx.beginPath();                                                      // wider leaf so the colour walls read
+    ctx.moveTo(0, -r * 0.96); ctx.lineTo(r * 0.44, r * 0.18); ctx.lineTo(0, r * 0.92); ctx.lineTo(-r * 0.44, r * 0.18);
+    ctx.closePath();
+    ctx.fillStyle = encode(1, 1, 1); ctx.fill();                          // colour edge walls
+    ctx.lineJoin = 'round'; ctx.strokeStyle = encode(BINK_W, BINK_V, 1);  // dark outline
+    ctx.lineWidth = r * 0.14; ctx.stroke();
+    var sw = style === 'B' ? r * 0.10 : r * 0.19;                         // bright pale spine
+    var wv = style === 'B' ? 0.12 : 0.0;
+    var g = ctx.createLinearGradient(0, -r * 0.9, 0, r * 0.9);
+    g.addColorStop(0.0, encode(wv, 1, 0));
+    g.addColorStop(0.18, encode(wv, 1, style === 'B' ? 0.85 : 1));
+    g.addColorStop(0.5, encode(wv, 1, style === 'B' ? 0.6 : 0.9));
+    g.addColorStop(1.0, encode(wv, 1, 0));
+    ctx.fillStyle = g; ctx.fillRect(-sw, -r * 0.9, sw * 2, r * 1.8);
+  }
+
+  function paintShard(ctx, r, style) {
+    ctx.beginPath();
+    ctx.moveTo(0, -r * 0.92); ctx.lineTo(r * 0.5, 0); ctx.lineTo(0, r * 0.92); ctx.lineTo(-r * 0.5, 0);
+    ctx.closePath();
+    ctx.fillStyle = encode(1, 1, 1); ctx.fill();                          // colour body
+    ctx.lineJoin = 'round'; ctx.strokeStyle = encode(BINK_W, BINK_V, 1);
+    ctx.lineWidth = r * 0.13; ctx.stroke();
+    var fw = style === 'B' ? 0.62 : 1.0, wv = style === 'B' ? 0.14 : 0.0; // bright pale central facet
+    ctx.fillStyle = encode(wv, 1, style === 'B' ? 0.9 : 1);
+    ctx.beginPath();
+    ctx.moveTo(0, -r * 0.62 * fw); ctx.lineTo(r * 0.17 * fw, 0); ctx.lineTo(0, r * 0.42 * fw); ctx.lineTo(-r * 0.17 * fw, 0);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function paintStar(ctx, r, style) {
+    ctx.beginPath();
+    for (var a = 0; a < 8; a++) {
+      var ang = a * Math.PI / 4 - Math.PI / 2;
+      var rr = (a % 2 === 0) ? r * 0.94 : r * 0.34;
+      var px = Math.cos(ang) * rr, py = Math.sin(ang) * rr;
+      if (a === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = encode(1, 1, 1); ctx.fill();                          // colour points
+    ctx.lineJoin = 'round'; ctx.strokeStyle = encode(BINK_W, BINK_V, 1);
+    ctx.lineWidth = r * 0.10; ctx.stroke();
+    var cr = style === 'B' ? r * 0.34 : r * 0.52, wv = style === 'B' ? 0.12 : 0.0; // white centre
+    var g = ctx.createRadialGradient(0, 0, 0, 0, 0, cr);
+    g.addColorStop(0.0, encode(wv, 1, 1));
+    g.addColorStop(0.6, encode(wv, 1, style === 'B' ? 0.7 : 0.9));
+    g.addColorStop(1.0, encode(wv, 1, 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, cr, 0, TAUL); ctx.fill();
   }
 
   function buildAtlas() {
@@ -452,89 +636,16 @@
       ctx.fill();
     });
 
-    // ---- enemy-bullet family cells (coloured, drawn in the premult pass) -----
-    // Body grey tints to the family hue; white marks stay hot; #231A20 outline
-    // stays dark under any tint so the silhouette reads over the brightest crest.
-    var INK = '#231A20';
-    var TAUL = Math.PI * 2;
-
-    // ORB — glass ball: graded body, dark rim, off-centre specular.
-    draw(GL.SPR.ORB, function (ctx, r) {
-      var br = r * 0.9;
-      var g = ctx.createRadialGradient(-br * 0.28, -br * 0.30, br * 0.08, 0, 0, br);
-      g.addColorStop(0.0, 'rgba(255,255,255,1)');
-      g.addColorStop(0.34, 'rgba(226,226,226,1)');
-      g.addColorStop(0.80, 'rgba(158,158,158,1)');
-      g.addColorStop(1.0, 'rgba(120,120,120,1)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, br, 0, TAUL); ctx.fill();
-      ctx.strokeStyle = INK; ctx.lineWidth = r * 0.15; ctx.beginPath(); ctx.arc(0, 0, br - r * 0.06, 0, TAUL); ctx.stroke();
-      var sg = ctx.createRadialGradient(-br * 0.30, -br * 0.34, 0, -br * 0.30, -br * 0.34, br * 0.36);
-      sg.addColorStop(0, 'rgba(255,255,255,1)'); sg.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(-br * 0.30, -br * 0.34, br * 0.36, 0, TAUL); ctx.fill();
-    });
-
-    // GRING — hollow thick glass rim (zoning bullet).
-    draw(GL.SPR.GRING, function (ctx, r) {
-      var ro = r * 0.9, ri = r * 0.5;
-      ctx.strokeStyle = INK; ctx.lineWidth = r * 0.12;
-      ctx.beginPath(); ctx.arc(0, 0, ro - r * 0.02, 0, TAUL); ctx.stroke();
-      ctx.beginPath(); ctx.arc(0, 0, ri, 0, TAUL); ctx.stroke();
-      var rw = (ro + ri) / 2;
-      ctx.strokeStyle = 'rgba(180,180,180,1)'; ctx.lineWidth = (ro - ri) * 0.72;
-      ctx.beginPath(); ctx.arc(0, 0, rw, 0, TAUL); ctx.stroke();
-      ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = (ro - ri) * 0.30; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.arc(0, 0, rw, -Math.PI * 0.85, -Math.PI * 0.35); ctx.stroke();
-      ctx.lineCap = 'butt';
-    });
-
-    // KUNAI — oriented edged needle (cell nose UP), bright spine.
-    draw(GL.SPR.KUNAI, function (ctx, r) {
-      ctx.fillStyle = 'rgba(150,150,150,1)';
-      ctx.beginPath();
-      ctx.moveTo(0, -r * 0.95); ctx.lineTo(r * 0.26, r * 0.35); ctx.lineTo(0, r * 0.9); ctx.lineTo(-r * 0.26, r * 0.35);
-      ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = INK; ctx.lineWidth = r * 0.12; ctx.lineJoin = 'round'; ctx.stroke();
-      var g = ctx.createLinearGradient(0, -r, 0, r);
-      g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.55, 'rgba(255,255,255,0.85)'); g.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = g; ctx.fillRect(-r * 0.07, -r * 0.9, r * 0.14, r * 1.7);
-    });
-
-    // SHARD — oriented diamond / petal (cell nose UP).
-    draw(GL.SPR.SHARD, function (ctx, r) {
-      var g = ctx.createLinearGradient(-r * 0.5, 0, r * 0.5, 0);
-      g.addColorStop(0, 'rgba(140,140,140,1)'); g.addColorStop(0.5, 'rgba(220,220,220,1)'); g.addColorStop(1, 'rgba(140,140,140,1)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.moveTo(0, -r * 0.92); ctx.lineTo(r * 0.5, 0); ctx.lineTo(0, r * 0.92); ctx.lineTo(-r * 0.5, 0);
-      ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = INK; ctx.lineWidth = r * 0.12; ctx.lineJoin = 'round'; ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
-      ctx.beginPath(); ctx.moveTo(0, -r * 0.62); ctx.lineTo(r * 0.14, -r * 0.1); ctx.lineTo(0, r * 0.2); ctx.lineTo(-r * 0.14, -r * 0.1); ctx.closePath(); ctx.fill();
-    });
-
-    // PELLET — small hard dot with a bright rim (popcorn filler).
-    draw(GL.SPR.PELLET, function (ctx, r) {
-      var br = r * 0.78;
-      ctx.fillStyle = 'rgba(170,170,170,1)'; ctx.beginPath(); ctx.arc(0, 0, br, 0, TAUL); ctx.fill();
-      ctx.strokeStyle = INK; ctx.lineWidth = r * 0.14; ctx.beginPath(); ctx.arc(0, 0, br - r * 0.05, 0, TAUL); ctx.stroke();
-      ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = r * 0.14; ctx.beginPath(); ctx.arc(0, 0, br * 0.62, 0, TAUL); ctx.stroke();
-      radial(ctx, br * 0.5, [[0, 'rgba(255,255,255,1)'], [1, 'rgba(255,255,255,0)']]);
-    });
-
-    // STAR — 4-point spark (slow spin), dark-edged with a hot core.
-    draw(GL.SPR.STAR, function (ctx, r) {
-      ctx.fillStyle = 'rgba(210,210,210,1)';
-      ctx.beginPath();
-      for (var a = 0; a < 8; a++) {
-        var ang = a * Math.PI / 4 - Math.PI / 2;
-        var rr = (a % 2 === 0) ? r * 0.92 : r * 0.32;
-        var px = Math.cos(ang) * rr, py = Math.sin(ang) * rr;
-        if (a === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      }
-      ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = INK; ctx.lineWidth = r * 0.10; ctx.lineJoin = 'round'; ctx.stroke();
-      radial(ctx, r * 0.5, [[0, 'rgba(255,255,255,1)'], [0.6, 'rgba(255,255,255,0.9)'], [1, 'rgba(255,255,255,0)']]);
-    });
+    // ---- enemy-bullet family cells (channel-encoded; see FS_SPRITE_BULLET) ---
+    // Painted with the encode() recipe so a real white core survives the family
+    // tint. Registered here (so the region + the default style-A cell land in the
+    // full atlas upload); GL.setBulletStyle repaints them to style B at runtime.
+    paintBulletFamily(draw, GL.SPR.ORB,    paintOrb);
+    paintBulletFamily(draw, GL.SPR.GRING,  paintGRing);
+    paintBulletFamily(draw, GL.SPR.KUNAI,  paintKunai);
+    paintBulletFamily(draw, GL.SPR.SHARD,  paintShard);
+    paintBulletFamily(draw, GL.SPR.PELLET, paintPellet);
+    paintBulletFamily(draw, GL.SPR.STAR,   paintStar);
 
     function roundRectPath(ctx, x, y, w, h, rr) {
       ctx.beginPath();
@@ -818,11 +929,13 @@
 
   function flushSprites() {
     if (instCount === 0) return;
-    gl.useProgram(progSprite);
-    gl.uniform2f(uSprite.u_playfield, GL.W, GL.H);
+    var prog = spriteMode === 'bullet' ? progSpriteBullet : progSprite;
+    var u = spriteMode === 'bullet' ? uSpriteBullet : uSprite;
+    gl.useProgram(prog);
+    gl.uniform2f(u.u_playfield, GL.W, GL.H);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, atlasTex);
-    gl.uniform1i(uSprite.u_atlas, 0);
+    gl.uniform1i(u.u_atlas, 0);
     gl.bindVertexArray(spriteVAO);
     gl.bindBuffer(gl.ARRAY_BUFFER, instVBO);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, instData.subarray(0, instCount * STRIDE));
@@ -982,6 +1095,39 @@
   GL.blendPremult = function () { flushSprites(); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); };
   GL.blendAdditive = function () { flushSprites(); gl.blendFunc(gl.ONE, gl.ONE); };
 
+  // Bind the enemy-bullet shader (channel-mix recolour) for the next batch, or
+  // restore the default sprite shader. Flushes at the boundary so the pending
+  // batch draws with the program it was queued under. Bullet cells are the only
+  // thing drawn under the bullet shader; every other sprite keeps FS_SPRITE
+  // (so authored ship overrides render their own texture colours unchanged).
+  GL.useBulletShader = function (on) { flushSprites(); spriteMode = on ? 'bullet' : 'normal'; };
+
+  // Repaint the six bullet-family cells to style 'A' or 'B' and re-upload them.
+  // Safe to call at runtime (console: GL.setBulletStyle('B')); at build time the
+  // cells are painted directly into the full-atlas upload instead.
+  GL.setBulletStyle = function (s) {
+    s = (s === 'B') ? 'B' : 'A';
+    GL.bulletStyle = s;
+    if (!atlasTex || !gl) return;
+    if (!BULLET_FAMILIES) BULLET_FAMILIES = [
+      [GL.SPR.ORB, paintOrb], [GL.SPR.GRING, paintGRing], [GL.SPR.KUNAI, paintKunai],
+      [GL.SPR.SHARD, paintShard], [GL.SPR.PELLET, paintPellet], [GL.SPR.STAR, paintStar]
+    ];
+    gl.bindTexture(gl.TEXTURE_2D, atlasTex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    for (var i = 0; i < BULLET_FAMILIES.length; i++) {
+      var spr = BULLET_FAMILIES[i][0], fn = BULLET_FAMILIES[i][1];
+      var off = document.createElement('canvas'); off.width = CELL; off.height = CELL;
+      var oc = off.getContext('2d');
+      oc.translate(CELL / 2, CELL / 2);
+      fn(oc, CELL / 2 - 2, s);
+      var rc = cellRect(spr);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, rc.x, rc.y, CELL, CELL, gl.RGBA, gl.UNSIGNED_BYTE,
+        premultiplied(oc.getImageData(0, 0, CELL, CELL)));
+    }
+  };
+
   // ---- init -----------------------------------------------------------------
 
   GL.init = function (canvas) {
@@ -999,12 +1145,14 @@
     GL.gl = gl;
 
     progSprite = link(VS_SPRITE, FS_SPRITE);
+    progSpriteBullet = link(VS_SPRITE, FS_SPRITE_BULLET);
     progThresh = link(VS_FULL, FS_THRESHOLD);
     progBlur = link(VS_FULL, FS_BLUR);
     progComp = link(VS_FULL, FS_COMPOSITE);
-    if (!progSprite || !progThresh || !progBlur || !progComp) return false;
+    if (!progSprite || !progSpriteBullet || !progThresh || !progBlur || !progComp) return false;
 
     uSprite = uniforms(progSprite, ['u_playfield', 'u_atlas']);
+    uSpriteBullet = uniforms(progSpriteBullet, ['u_playfield', 'u_atlas']);
     uThresh = uniforms(progThresh, ['u_tex', 'u_threshold']);
     uBlur = uniforms(progBlur, ['u_tex', 'u_dir']);
     uComp = uniforms(progComp, ['u_scene', 'u_bloomHalf', 'u_bloomQuarter', 'u_chroma', 'u_bloom']);

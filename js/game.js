@@ -3325,6 +3325,10 @@
     kill: function (i) { var e = Engine.enemies.items[i]; if (e && e.active && !e.dying) killEnemy(e, true); },
     hurt: function () { G.player.invuln = 0; G.vaunt.active = false; G.vaunt.mercy = 0; playerHit(); },
     hitstopT: function () { return G.hitstopT; },
+    freeze: function (v) { G.hitstopT = (v == null) ? 1e9 : v; },   // headless: halt the sim for identical-state screenshots
+    apotheosis: function () { G.vaunt.gauge = GAUGE_MAX; tryVaunt(); },   // headless: force the APOTHEOSIS cancel path
+    setPost: function (bloom, chroma) { if (bloom != null) { G.bloom = G.bloomTarget = bloom; } if (chroma != null) { G.chroma = G.chromaTarget = chroma; } },  // headless: preview at combat bloom
+    setMode: function (m) { G.mode = m; },   // headless: force render mode
     simTime: function () { return G.time; },
     shakeMag: function () { return G.shakeMag; }
   };
@@ -3773,9 +3777,13 @@
       // (explosions included, so a bullet frozen over a white blast still reads).
       drawHazards();
       drawGold(); drawEnemies(); drawShots(); drawParticles(); drawBulletHalos();
-      // PASS B — enemy-bullet opaque bodies (premultiplied-over)
+      // PASS B — enemy-bullet opaque bodies (premultiplied-over). The bullet
+      // shader recolours each cell so the baked white cores survive the family
+      // tint; restore the default sprite shader immediately after.
       GL.blendPremult();
+      GL.useBulletShader(true);
       drawBulletBodies();
+      GL.useBulletShader(false);
       // PASS C — additive over the bullets: allies + the player (and its core
       // gem) always read on top of the danmaku.
       GL.blendAdditive();
@@ -3920,9 +3928,17 @@
   // halo UNDER the body — glow without eating the outline. PASS B (premult):
   // the opaque glassy body whose dark #231A20 outline survives the crest.
   function drawBulletHalos() {
+    // Additive under-halo, re-balanced now that the colour lives in a thick rim
+    // with a baked outer fade inside the sprite. Variant A carries its glow in
+    // the sprite, so the halo is a whisper (never fog); variant B has a harder
+    // solid body, so it gets a modest neon corona. Muzzle flash still punches.
+    var A = GL.bulletStyle !== 'B';
+    var wideS = A ? 2.7 : 3.1, wideA = A ? 0.10 : 0.18;
+    var tightS = A ? 1.5 : 1.8, tightA = A ? 0.16 : 0.30;
     Engine.bullets.forEach(function (b) {
       var R = b.scale, fl = b.flash > 0 ? b.flash / 0.1 : 0;
-      GL.draw(GL.SPR.GLOW, b.x, b.y, R * 2.5, R * 2.5, 0, b.r, b.g, b.b, 0.24 + fl * 0.35);
+      GL.draw(GL.SPR.GLOW, b.x, b.y, R * wideS, R * wideS, 0, b.r, b.g, b.b, wideA + fl * 0.28);
+      GL.draw(GL.SPR.GLOW, b.x, b.y, R * tightS, R * tightS, 0, b.r, b.g, b.b, tightA + fl * 0.32);
       if (b.slowT > 0) GL.draw(GL.SPR.RING, b.x, b.y, R * 3.2, R * 3.2, 0, 0.6, 0.9, 1.0, 0.25);
     });
   }
@@ -3932,8 +3948,8 @@
       var r = b.r, g = b.g, bl = b.b;
       switch (b.fam) {
         case 1: GL.draw(GL.SPR.GRING, b.x, b.y, R * 2 * sc, R * 2 * sc, b.age * b.spin, r, g, bl, 1); break;   // ring
-        case 2: GL.draw(GL.SPR.KUNAI, b.x, b.y, R * 0.95, R * 2.3, b.dir + Math.PI / 2, r, g, bl, 1); break;   // kunai
-        case 3: GL.draw(GL.SPR.SHARD, b.x, b.y, R * 1.4, R * 2.0, b.dir + Math.PI / 2, r, g, bl, 1); break;    // shard
+        case 2: GL.draw(GL.SPR.KUNAI, b.x, b.y, R * 1.28, R * 2.25, b.dir + Math.PI / 2, r, g, bl, 1); break;  // kunai
+        case 3: GL.draw(GL.SPR.SHARD, b.x, b.y, R * 1.55, R * 2.0, b.dir + Math.PI / 2, r, g, bl, 1); break;   // shard
         case 4: GL.draw(GL.SPR.PELLET, b.x, b.y, R * 2 * sc, R * 2 * sc, 0, r, g, bl, 1); break;               // pellet
         case 5: GL.draw(GL.SPR.STAR, b.x, b.y, R * 2, R * 2, b.age * b.spin, r, g, bl, 1); break;              // star
         default: GL.draw(GL.SPR.ORB, b.x, b.y, R * 2 * sc, R * 2 * sc, b.age * b.spin, r, g, bl, 1);           // orb

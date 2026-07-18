@@ -1,12 +1,22 @@
 // music.js — procedural WebAudio score for HUBRIS. Exposes window.MUSIC.
 //
-// Doctrine (DANMAKU.md "Music: the level's pulse"): layered stems (pad / pulse /
-// crest) driven by the wave-slot arc; per-sector themes matching pantheon
-// identity, seeded deterministically off the run seed; title + per-sector boss
-// themes; APOTHEOSIS opens a filter/lift; pause ducks; shop is a quiet pad
-// variant. The score sits mid-low and UNDER the SFX — SFX carry information and
-// are never masked. Real-time scheduling on the AudioContext clock (lookahead),
-// NOT the fixed-step sim.
+// AESTHETIC (owner verdict): UPBEAT RETRO CHIP MUSIC. Classic chip palette —
+// square/pulse leads, triangle bass, noise-burst drums, thin triangle chord
+// stabs. NO continuously-gliding drones anywhere (the old pad stem's three
+// forever-sliding oscillators read as a "whirr" that drowned the mix — GONE).
+// Every voice articulates: fast attack, quick decay, scheduled per 16th on the
+// AudioContext clock. Each sector theme carries an AUTHORED 2-bar lead hook
+// (composed note sequence, not a random walk), a driving bassline locked to the
+// kick, and a kick/snare/hat groove with fills.
+//
+// ARCHITECTURE (DANMAKU.md "Music: the level's pulse") is UNCHANGED: layered
+// stems (chords / bass / drums+lead) driven by the wave-slot arc via
+// setIntensity 0-3; per-sector themes seeded deterministically off the run seed;
+// title + per-sector boss themes; boss themes escalate per phase; APOTHEOSIS
+// opens the filter (lift) + adds a chip sparkle; pause ducks; shop is a chill
+// low-key variant. The score sits mid-low and UNDER the SFX — SFX carry
+// information and are never masked. Real-time lookahead scheduling on the
+// AudioContext clock (NOT the fixed-step sim).
 //
 // Shares SFX's AudioContext (SFX.context()) so it unlocks on the same first
 // gesture and never spawns a second context. Silent-safe headless: every entry
@@ -27,10 +37,14 @@
   var duck = null;     // pause duck (1 -> 0.25)
   var lp = null;       // filter for APOTHEOSIS sweep; also keeps score mid-low
   var bus = null;      // stem sum
+  // Stem gains. The three stems map to the slot-arc layers:
+  //   padGain    = thin triangle CHORD STABS (replaces the old gliding drone)
+  //   pulseGain  = triangle BASSLINE (present even at breather level)
+  //   crestGain  = DRUMS (kick/snare/hat) + the square LEAD hook
+  //   shimmerGain= APOTHEOSIS sparkle
   var padGain = null, pulseGain = null, crestGain = null, shimmerGain = null;
-  var padOsc = [];     // persistent drone voices
 
-  var MASTER_LEVEL = 0.35;   // binding: music master modest, under SFX
+  var MASTER_LEVEL = 0.32;   // binding: music master modest, under SFX
 
   // pending desired state (applied when ready)
   var wantSeed = 1;
@@ -50,54 +64,85 @@
   var step = 0;              // absolute 16th counter
   var chordIdx = 0;
 
-  // ---- scales / themes ------------------------------------------------------
-  var DORIAN = [0, 2, 3, 5, 7, 9, 10];
-  var PHRYGIAN = [0, 1, 3, 5, 7, 8, 10];
-  var LYDIAN = [0, 2, 4, 6, 7, 9, 11];
-  var AEOLIAN = [0, 2, 3, 5, 7, 8, 10];
-  var MAJPENT = [0, 2, 4, 7, 9];
+  // ---- verify/debug taps (non-API; used only by the headless harness) -------
+  var schedCount = 0;        // scheduled voices since debugClear()
+  var noteLog = [];          // ordered lead-note midis since debugClear()
 
-  // Per-sector identity (mode / tempo / timbre matched to pantheon):
-  //  S1 TALOS  — bronze, processional: Dorian, mid tempo, soft triangles.
-  //  S2 AMMIT  — Kemet, dark low reeds: Phrygian, slow, saw-through-lowpass.
-  //  S3 SOVEREIGN — gilded, regal: Lydian, brighter/faster, square+triangle.
-  // `intensity` is the theme's BASELINE stem level, re-applied every setTheme so a
-  // section can't inherit the prior one's stack (boss 3 -> shop, or a stopped
-  // score -> title). In-combat waves override it per-slot via MUSIC.setIntensity.
-  //  title = pad+pulse (audible menu) · shop = quiet pad only (spec) · boss = full.
+  // ---- scales / themes ------------------------------------------------------
+  var DORIAN   = [0, 2, 3, 5, 7, 9, 10];
+  var PHRYGIAN = [0, 1, 3, 5, 7, 8, 10];
+  var LYDIAN   = [0, 2, 4, 6, 7, 9, 11];
+  var AEOLIAN  = [0, 2, 3, 5, 7, 8, 10];
+  var MAJPENT  = [0, 2, 4, 7, 9];
+
+  var R = -1;   // rest, in a melody array
+
+  // Per-sector identity (mode / tempo / timbre matched to pantheon). `melody` is
+  // the AUTHORED 2-bar (32 x 16th) lead hook in scale-degree space — a composed
+  // sequence, NOT random. Seeded variation only picks octave lifts and bar fills.
+  // `intensity` is the theme's BASELINE stem level (re-applied every setTheme so a
+  // section can't inherit the prior one's stack). In-combat waves override it
+  // per-slot via MUSIC.setIntensity.
+  //  title = mid-energy hook (lvl 2) · shop = chill low-key hook (lvl 2, softened)
+  //  · boss = full stack (lvl 3).
   var THEMES = {
-    title:   { root: 57, scale: MAJPENT,  bpm: 72,  pad: 'sine',     bass: 'triangle', lead: 'triangle', cut: 2600, bright: 0.55, chords: [0, 4, 3, 4], intensity: 1 },
-    sector0: { root: 45, scale: DORIAN,   bpm: 88,  pad: 'triangle', bass: 'sawtooth', lead: 'triangle', cut: 2400, bright: 0.55, chords: [0, 5, 3, 4], intensity: 1 },
-    sector1: { root: 38, scale: PHRYGIAN, bpm: 76,  pad: 'sawtooth', bass: 'sawtooth', lead: 'sawtooth', cut: 1400, bright: 0.35, chords: [0, 1, 5, 0], intensity: 1 },
-    sector2: { root: 40, scale: LYDIAN,   bpm: 100, pad: 'triangle', bass: 'sawtooth', lead: 'square',   cut: 3000, bright: 0.70, chords: [0, 3, 4, 3], intensity: 1 },
-    shop:    { root: 57, scale: MAJPENT,  bpm: 66,  pad: 'sine',     bass: 'triangle', lead: 'triangle', cut: 2000, bright: 0.45, chords: [0, 3, 4, 0], intensity: 0 },
-    boss0:   { root: 45, scale: AEOLIAN,  bpm: 100, pad: 'sawtooth', bass: 'sawtooth', lead: 'square',   cut: 2600, bright: 0.55, chords: [0, 5, 4, 5], boss: true, intensity: 3 },
-    boss1:   { root: 38, scale: PHRYGIAN, bpm: 92,  pad: 'sawtooth', bass: 'sawtooth', lead: 'sawtooth', cut: 1700, bright: 0.40, chords: [0, 1, 0, 5], boss: true, intensity: 3 },
-    boss2:   { root: 40, scale: LYDIAN,   bpm: 116, pad: 'square',   bass: 'sawtooth', lead: 'square',   cut: 3200, bright: 0.75, chords: [0, 4, 3, 4], boss: true, intensity: 3 }
+    title: {
+      root: 57, scale: MAJPENT, bpm: 120, bass: 'triangle', lead: 'square',
+      cut: 2800, chords: [0, 3, 1, 4], intensity: 2, leadOct: 1, bassOct: -1,
+      melody: [0, R, 2, R, 4, R, 2, R,  4, R, 5, R, 4, R, 2, R,   3, R, 2, R, 0, R, 2, R,  4, R, R, R, 2, R, 0, R]
+    },
+    sector0: {   // TALOS — bronze, driving, hopeful (Dorian)
+      root: 45, scale: DORIAN, bpm: 132, bass: 'triangle', lead: 'square',
+      cut: 2600, chords: [0, 5, 3, 4], intensity: 1, leadOct: 2, bassOct: 0,
+      melody: [0, R, 4, R, 3, R, 4, R,  5, R, 4, R, 2, R, 0, R,   0, R, 3, R, 4, R, 3, R,  2, R, 4, R, 0, R, R, R]
+    },
+    sector1: {   // AMMIT — Kemet, exotic/dark but upbeat (Phrygian)
+      root: 38, scale: PHRYGIAN, bpm: 128, bass: 'triangle', lead: 'square',
+      cut: 2200, chords: [0, 1, 5, 0], intensity: 1, leadOct: 2, bassOct: 0,
+      melody: [0, R, R, 1, 3, R, 1, R,  0, R, R, R, 5, R, 3, R,   1, R, 0, R, 3, R, 5, R,  3, R, 1, R, 0, R, R, R]
+    },
+    sector2: {   // SOVEREIGN — gilded, regal, bright (Lydian #4)
+      root: 40, scale: LYDIAN, bpm: 138, bass: 'triangle', lead: 'square',
+      cut: 3200, chords: [0, 3, 4, 3], intensity: 1, leadOct: 2, bassOct: 0,
+      melody: [0, R, 2, R, 4, R, 3, R,  4, R, 6, R, 4, R, 2, R,   0, R, 4, R, 6, R, 4, R,  3, R, 2, R, 0, R, R, R]
+    },
+    shop: {      // chill low-key chip variant — sparse hook, softened groove
+      root: 57, scale: MAJPENT, bpm: 96, bass: 'triangle', lead: 'triangle',
+      cut: 2000, chords: [0, 3, 4, 0], intensity: 2, leadOct: 1, bassOct: -1, chill: true,
+      melody: [0, R, R, R, 4, R, R, R,  2, R, R, R, R, R, R, R,   3, R, R, R, 2, R, R, R,  0, R, R, R, R, R, R, R]
+    },
+    boss0: {     // menacing, driving (Aeolian / natural minor)
+      root: 45, scale: AEOLIAN, bpm: 144, bass: 'triangle', lead: 'square',
+      cut: 2800, chords: [0, 5, 4, 5], boss: true, intensity: 3, leadOct: 2, bassOct: 0,
+      melody: [0, R, 0, R, 3, R, 2, R,  0, R, R, 4, 3, R, 2, R,   0, R, 0, R, 5, R, 4, R,  3, R, 2, R, 0, R, R, R]
+    },
+    boss1: {     // dark, relentless (Phrygian)
+      root: 38, scale: PHRYGIAN, bpm: 140, bass: 'triangle', lead: 'square',
+      cut: 2400, chords: [0, 1, 0, 5], boss: true, intensity: 3, leadOct: 2, bassOct: 0,
+      melody: [0, R, 1, R, 0, R, R, 1,  3, R, 1, R, 0, R, R, R,   5, R, 4, R, 3, R, 1, R,  0, R, 1, R, 0, R, R, R]
+    },
+    boss2: {     // triumphant, blazing (Lydian)
+      root: 40, scale: LYDIAN, bpm: 150, bass: 'triangle', lead: 'square',
+      cut: 3400, chords: [0, 4, 3, 4], boss: true, intensity: 3, leadOct: 2, bassOct: 0,
+      melody: [0, R, 4, R, 6, R, 4, R,  3, R, 4, R, 6, R, 4, R,   0, R, 4, R, 6, R, 5, R,  4, R, 3, R, 2, R, 0, R]
+    }
   };
 
   // ---- deterministic PRNG (per composition; NOT Math.random) ----------------
   // Uses the shared Engine.mulberry32 (single source; see engine.js) — only ever
-  // called at runtime from buildArp, by which point engine.js has parsed.
-  var arp = null;            // deterministic 16-step degree pattern for the theme
+  // called at runtime from buildArp, by which point engine.js has parsed. Drives
+  // seeded VARIATION (octave lifts / fill choice) around the authored hook, never
+  // the hook itself, so the same run always sounds the same.
+  var arp = null;
 
   function themeHash(name) {
     var h = 0; for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
     return h;
   }
   function buildArp() {
-    // Seeded by run seed + theme name so the same run sounds the same. Chooses
-    // scale degrees only — it never invents pitch outside the mode.
     var rnd = Engine.mulberry32((wantSeed ^ themeHash(curThemeName)) >>> 0);
-    var sc = curTheme.scale, n = sc.length;
     arp = new Array(16);
-    for (var i = 0; i < 16; i++) {
-      // favor arpeggio-ish motion; occasional rest (-1)
-      if (rnd() < 0.18) { arp[i] = -1; continue; }
-      arp[i] = (Math.floor(rnd() * n) + (rnd() < 0.4 ? n : 0)); // sometimes up an octave
-    }
-    // ensure the downbeat states the root
-    arp[0] = 0;
+    for (var i = 0; i < 16; i++) arp[i] = rnd();   // 0..1 seeded variation bits
   }
 
   function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
@@ -119,27 +164,19 @@
 
     master = ctx.createGain(); master.gain.value = muted ? 0 : MASTER_LEVEL;
     duck = ctx.createGain();   duck.gain.value = 1;
-    lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400; lp.Q.value = 0.5;
+    lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600; lp.Q.value = 0.4;
     bus = ctx.createGain();    bus.gain.value = 1;
 
-    padGain = ctx.createGain();    padGain.gain.value = 0.0001;
-    pulseGain = ctx.createGain();  pulseGain.gain.value = 0.0001;
-    crestGain = ctx.createGain();  crestGain.gain.value = 0.0001;
+    padGain = ctx.createGain();     padGain.gain.value = 0.0001;
+    pulseGain = ctx.createGain();   pulseGain.gain.value = 0.0001;
+    crestGain = ctx.createGain();   crestGain.gain.value = 0.0001;
     shimmerGain = ctx.createGain(); shimmerGain.gain.value = 0.0001;
 
     padGain.connect(bus); pulseGain.connect(bus); crestGain.connect(bus); shimmerGain.connect(bus);
     bus.connect(lp); lp.connect(duck); duck.connect(master); master.connect(ctx.destination);
 
-    // three persistent pad drone voices (root / fifth / octave), gliding on chords
-    for (var i = 0; i < 3; i++) {
-      var o = ctx.createOscillator();
-      o.type = 'sine';
-      o.frequency.value = 110 * (i + 1);
-      var g = ctx.createGain(); g.gain.value = [1, 0.5, 0.32][i];
-      o.connect(g); g.connect(padGain);
-      try { o.start(); } catch (e) {}
-      padOsc.push({ o: o, g: g });
-    }
+    // NO persistent oscillators — the score is built entirely from scheduled,
+    // enveloped one-shots. Nothing sustains, nothing glides: no whirr.
 
     ready = true;
     applyTheme(wantTheme, true);
@@ -147,8 +184,6 @@
     startScheduler();
     return true;
   };
-
-  function safeSet(param, v, t) { try { param.setTargetAtTime(v, t, 0.4); } catch (e) {} }
 
   // ---- theme / stems --------------------------------------------------------
   function applyTheme(name, immediate) {
@@ -160,23 +195,10 @@
     stepDur = 60 / th.bpm / 4;
     chordIdx = 0;
     var now = ctx.currentTime;
-    // pad chord to theme root, filter to timbre brightness
-    updatePadChord(now, immediate ? 0.02 : 1.2);
+    // filter to timbre brightness (a param ramp on a FILTER, not an oscillator —
+    // this is not a drone glide; it just sets the score's mid-low ceiling)
     lp.frequency.cancelScheduledValues(now);
-    lp.frequency.setTargetAtTime(apoOn ? 8000 : th.cut, now, immediate ? 0.05 : 0.8);
-    // set persistent pad osc timbre
-    for (var i = 0; i < padOsc.length; i++) padOsc[i].o.type = th.pad;
-  }
-
-  function updatePadChord(now, glide) {
-    if (!curTheme) return;
-    var deg = curTheme.chords[chordIdx % curTheme.chords.length];
-    var voices = [degToMidi(curTheme, deg, 0), degToMidi(curTheme, deg + 4, 0), degToMidi(curTheme, deg, 1)];
-    for (var i = 0; i < padOsc.length; i++) {
-      var f = mtof(voices[i]);
-      padOsc[i].o.frequency.cancelScheduledValues(now);
-      padOsc[i].o.frequency.setTargetAtTime(f, now, glide);
-    }
+    lp.frequency.setTargetAtTime(apoOn ? 8500 : th.cut, now, immediate ? 0.05 : 0.6);
   }
 
   MUSIC.setSeed = function (seed) {
@@ -201,8 +223,10 @@
   MUSIC.setSector = function (idx) { MUSIC.setTheme('sector' + idx); };
   MUSIC.setBossTheme = function (idx) { MUSIC.setTheme('boss' + idx); };   // boss theme carries intensity 3
 
-  // level 0 pad-only (breather) · 1 pad+pulse (opener/build) · 2 mostly-full ·
-  // 3 full stack (feature/crescendo/boss). Crossfade the stems (~1.5s).
+  // level 0 breather (chords+bass, NO drums, NO lead) · 1 build (+drums) ·
+  // 2 mostly-full (+lead hook) · 3 crest/boss (full + fills + counter-line).
+  // Content is gated by level in scheduleStep; these gains crossfade the layers
+  // in/out (~1.5s) so slot transitions never hard-cut mid-phrase.
   MUSIC.setIntensity = function (level) {
     wantIntensity = level;
     if (ready) applyIntensity(level, 1.5);
@@ -210,18 +234,21 @@
   function applyIntensity(level, tc) {
     if (!ready) return;
     var now = ctx.currentTime;
-    var pad = 0.16;
-    var pulse = level >= 1 ? 0.16 : 0.0;
-    var crest = level >= 3 ? 0.15 : level >= 2 ? 0.08 : 0.0;
+    var chill = curTheme && curTheme.chill;
+    var pad = 0.14;                                    // chord stabs: always present
+    var pulse = 0.20;                                  // bass: present even at breather
+    var crest = level >= 3 ? 0.19 : level >= 2 ? 0.16 : level >= 1 ? 0.13 : 0.0001;
+    if (chill) crest *= 0.7;                           // shop groove sits back
     // Boss theme thickens the ACTIVE fight; at level 0 (breather / post-boss draft
-    // freeze) it must still strip to the pad, so the override is gated to level>=1.
-    if (curTheme && curTheme.boss && level >= 1) { crest = Math.min(0.2, crest + 0.03 + bossPhase * 0.012); pulse = 0.18; }
+    // freeze) it must still strip out, so the override is gated to level>=1.
+    if (curTheme && curTheme.boss && level >= 1) crest = Math.min(0.22, crest + 0.02 + bossPhase * 0.008);
     padGain.gain.setTargetAtTime(Math.max(0.0001, pad), now, tc * 0.5);
     pulseGain.gain.setTargetAtTime(Math.max(0.0001, pulse), now, tc * 0.5);
     crestGain.gain.setTargetAtTime(Math.max(0.0001, crest), now, tc * 0.5);
   }
 
-  // boss theme escalates a layer per phase bracket
+  // boss theme escalates a lead layer per phase bracket (octave + counter-line);
+  // see scheduleStep. Also nudges the crest gain.
   MUSIC.setBossPhase = function (n) {
     bossPhase = n | 0;
     if (ready) applyIntensity(wantIntensity, 1.0);
@@ -233,15 +260,15 @@
     duck.gain.setTargetAtTime(on ? 0.25 : 1.0, ctx.currentTime, 0.08);   // ~-12dB
   };
 
-  // APOTHEOSIS: open the filter (lift) + a shimmer layer for the duration.
+  // APOTHEOSIS: open the filter (lift) + a chip sparkle layer for the duration.
   MUSIC.apotheosis = function (on) {
     apoOn = !!on;
     if (!ready) return;
     var now = ctx.currentTime;
-    var base = curTheme ? curTheme.cut : 2400;
+    var base = curTheme ? curTheme.cut : 2600;
     lp.frequency.cancelScheduledValues(now);
     lp.frequency.setTargetAtTime(on ? 8500 : base, now, on ? 0.25 : 1.2);
-    shimmerGain.gain.setTargetAtTime(on ? 0.05 : 0.0001, now, on ? 0.3 : 0.8);
+    shimmerGain.gain.setTargetAtTime(on ? 0.06 : 0.0001, now, on ? 0.3 : 0.6);
   };
 
   MUSIC.setMuted = function (m) {
@@ -273,7 +300,7 @@
     duck.gain.setTargetAtTime(1.0, now, 0.05);              // release any pause duck
     shimmerGain.gain.cancelScheduledValues(now);
     shimmerGain.gain.setTargetAtTime(0.0001, now, 0.2);     // kill apotheosis shimmer
-    var base = curTheme ? curTheme.cut : 2400;
+    var base = curTheme ? curTheme.cut : 2600;
     lp.frequency.cancelScheduledValues(now);
     lp.frequency.setTargetAtTime(base, now, 0.2);           // drop the lift filter to the theme cut
   };
@@ -291,50 +318,85 @@
       apo: apoOn, muted: muted, bpm: curTheme ? curTheme.bpm : 0,
       root: curTheme ? curTheme.root : 0, cut: curTheme ? curTheme.cut : 0,
       pad: ready ? padGain.gain.value : 0, pulse: ready ? pulseGain.gain.value : 0,
-      crest: ready ? crestGain.gain.value : 0,
+      crest: ready ? crestGain.gain.value : 0, shimmer: ready ? shimmerGain.gain.value : 0,
       lp: ready ? lp.frequency.value : 0, duck: ready ? duck.gain.value : 1,
-      arp0: arp ? arp[0] : null, arpLen: arp ? arp.length : 0
+      seed: wantSeed, scheduled: schedCount
     };
   };
+  // verify-only note tap (deterministic-composition check).
+  MUSIC.debugClear = function () { schedCount = 0; noteLog = []; };
+  MUSIC.debugNotes = function () { return noteLog.slice(0); };
+  MUSIC.debugCount = function () { return schedCount; };
 
-  // ---- voices ---------------------------------------------------------------
-  function voice(type, freq, t, dur, peak, dest) {
-    var o = ctx.createOscillator();
-    o.type = type; o.frequency.setValueAtTime(freq, t);
+  // ---- voices (all one-shot, enveloped; nothing sustains or glides) ---------
+  // A single enveloped tone. Optional detune (cents) spawns a second osc for
+  // chip "width". Frequency is set once (no glide) — the whirr-test invariant.
+  function note(type, freq, t, dur, peak, dest, detune) {
     var g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + 0.012);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + 0.006);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(dest);
-    o.start(t); o.stop(t + dur + 0.02);
-  }
-  function perc(t, freq, dur, peak, dest, type) {
-    // short pitched thump for kick; noise-ish via fast pitch drop
+    g.connect(dest);
     var o = ctx.createOscillator();
-    o.type = type || 'sine';
-    o.frequency.setValueAtTime(freq, t);
-    o.frequency.exponentialRampToValueAtTime(freq * 0.35, t + dur * 0.8);
-    var g = ctx.createGain();
-    g.gain.setValueAtTime(peak, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(dest);
-    o.start(t); o.stop(t + dur + 0.02);
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    o.connect(g); o.start(t); o.stop(t + dur + 0.02);
+    schedCount++;
+    if (detune) {
+      var o2 = ctx.createOscillator();
+      o2.type = type; o2.frequency.setValueAtTime(freq, t); o2.detune.setValueAtTime(detune, t);
+      o2.connect(g); o2.start(t); o2.stop(t + dur + 0.02);
+      schedCount++;
+    }
   }
-  var hatBuf = null;
-  function hat(t, dur, peak, dest) {
-    if (!hatBuf) {
-      var n = Math.floor(ctx.sampleRate * 0.2);
-      hatBuf = ctx.createBuffer(1, n, ctx.sampleRate);
-      var d = hatBuf.getChannelData(0);
+  // Kick: short pitched thump. The pitch drop is a PERCUSSION transient (<90ms),
+  // not a sustained voice — it is not a drone.
+  function kick(t, dest) {
+    var o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(150, t);
+    o.frequency.exponentialRampToValueAtTime(48, t + 0.07);
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.9, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+    o.connect(g); g.connect(dest);
+    o.start(t); o.stop(t + 0.16);
+    schedCount++;
+  }
+  var noiseBuf = null;
+  function noiseData() {
+    if (!noiseBuf) {
+      var n = Math.floor(ctx.sampleRate * 0.3);
+      noiseBuf = ctx.createBuffer(1, n, ctx.sampleRate);
+      var d = noiseBuf.getChannelData(0);
       for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
     }
-    var s = ctx.createBufferSource(); s.buffer = hatBuf;
-    var f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7000;
+    return noiseBuf;
+  }
+  function snare(t, dest, peak) {
+    var s = ctx.createBufferSource(); s.buffer = noiseData();
+    var f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 1600;
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(peak, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+    s.connect(f); f.connect(g); g.connect(dest);
+    s.start(t); s.stop(t + 0.13);
+    schedCount++;
+    // a little pitched body for snap
+    var o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(220, t);
+    var og = ctx.createGain(); og.gain.setValueAtTime(peak * 0.4, t);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    o.connect(og); og.connect(dest); o.start(t); o.stop(t + 0.08);
+    schedCount++;
+  }
+  function hat(t, dur, peak, dest) {
+    var s = ctx.createBufferSource(); s.buffer = noiseData();
+    var f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 8000;
     var g = ctx.createGain();
     g.gain.setValueAtTime(peak, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     s.connect(f); f.connect(g); g.connect(dest);
     s.start(t); s.stop(t + dur + 0.02);
+    schedCount++;
   }
 
   // ---- scheduler (lookahead) ------------------------------------------------
@@ -351,8 +413,7 @@
     // Catch-up clamp: while the tab is backgrounded the setInterval throttles to
     // ~1s but the AudioContext clock keeps running, so nextStepTime falls far in
     // the past. Don't fire the whole backlog bunched — drop the missed steps but
-    // advance `step` by the same count so the 16-step bar phase (chord changes,
-    // MUSIC.beat()) stays aligned to real time.
+    // advance `step` by the same count so the 16-step bar phase stays aligned.
     if (nextStepTime < cur - 0.05) {
       var missed = Math.ceil((cur - nextStepTime) / stepDur);
       step += missed;
@@ -366,37 +427,88 @@
       nextStepTime += stepDur;
     }
   }
+
+  // driving-8ths bass rhythm + octave pops (locked to the kick)
+  var BASS_OCTPOP = { 6: 1, 14: 1 };
+
   function scheduleStep(absStep, t) {
     if (!curTheme) return;
+    var th = curTheme, sc = th.scale, sn = sc.length;
     var s16 = absStep % 16;
-    // chord change every 2 bars (32 steps)
-    if (absStep % 32 === 0) { chordIdx = Math.floor(absStep / 32); updatePadChord(t, 1.0); }
-    var jit = (Math.random() - 0.5) * 0.006;   // humanization only (never notes)
-    var deg = curTheme.chords[chordIdx % curTheme.chords.length];
+    var bar = Math.floor(absStep / 16);
+    if (absStep % 32 === 0) chordIdx = Math.floor(absStep / 32);
+    var lvl = wantIntensity;
+    var chordDeg = th.chords[chordIdx % th.chords.length];
+    var jit = (Math.random() - 0.5) * 0.004;   // humanization only (never notes)
+    var swing = (s16 % 2 === 1) ? stepDur * 0.06 : 0;   // subtle, timing-only
 
-    // PULSE stem — bassline on the 8th grid.
-    if (absStep % 2 === 0) {
-      var bd = (s16 % 8 === 0) ? deg : (s16 % 8 === 4 ? deg + 2 : deg + (arp[s16] < 0 ? 0 : arp[s16] % curTheme.scale.length));
-      var bf = mtof(degToMidi(curTheme, bd, -1));
-      voice(curTheme.bass, bf, t + jit, stepDur * 1.7, 0.5, pulseGain);
+    // -- CHORD STABS (pad stem) — thin triangle triad, low gain, articulated. --
+    // Breather: one soft chord at the top of the bar. Otherwise short offbeat
+    // stabs. This REPLACES the old gliding drone entirely.
+    if (lvl <= 0) {
+      if (s16 === 0) {
+        var cd0 = degToMidi(th, chordDeg, 1), cd1 = degToMidi(th, chordDeg + 2, 1), cd2 = degToMidi(th, chordDeg + 4, 1);
+        note('triangle', mtof(cd0), t, stepDur * 6, 0.5, padGain);
+        note('triangle', mtof(cd1), t, stepDur * 6, 0.35, padGain);
+        note('triangle', mtof(cd2), t, stepDur * 6, 0.28, padGain);
+      }
+    } else if (s16 % 4 === 2) {   // offbeat stabs
+      var e0 = degToMidi(th, chordDeg, 1), e1 = degToMidi(th, chordDeg + 2, 1), e2 = degToMidi(th, chordDeg + 4, 1);
+      note('triangle', mtof(e0), t + swing, stepDur * 1.6, 0.5, padGain);
+      note('triangle', mtof(e1), t + swing, stepDur * 1.6, 0.34, padGain);
+      note('triangle', mtof(e2), t + swing, stepDur * 1.6, 0.28, padGain);
     }
 
-    // CREST stem — kick/hat + a lead arp on 16ths.
-    // kick on beats 0 & 2, backbeat hat on offbeats
-    if (s16 % 8 === 0) perc(t, 120, 0.16, 0.9, crestGain, 'sine');
-    if (s16 % 4 === 2) hat(t, 0.05, 0.35, crestGain);
-    if (s16 % 2 === 1) hat(t + jit, 0.03, 0.18, crestGain);
-    var a = arp[s16];
-    if (a >= 0) {
-      var lf = mtof(degToMidi(curTheme, deg + a, 1));
-      voice(curTheme.lead, lf, t + jit, stepDur * 1.4, 0.4, crestGain);
+    // -- BASSLINE (pulse stem) — triangle, driving, locked to the kick. --
+    // Breather thins to quarter notes; otherwise straight 8ths with octave pops.
+    var bassStep = (lvl <= 0) ? (s16 % 4 === 0) : (s16 % 2 === 0);
+    if (bassStep) {
+      var oct = (lvl > 0 && BASS_OCTPOP[s16]) ? 1 : 0;
+      var bmidi = degToMidi(th, chordDeg, th.bassOct) + 12 * oct;
+      note(th.bass, mtof(bmidi), t + jit, stepDur * (lvl <= 0 ? 3.2 : 1.7), 0.55, pulseGain);
     }
 
-    // SHIMMER (apotheosis) — high sparkle on the 16ths while lifted.
+    // -- DRUMS (crest stem) — level >= 1. --
+    if (lvl >= 1) {
+      var chill = th.chill;
+      // four-on-the-floor at level>=2, half-time kick at level 1
+      if (s16 === 0 || s16 === 8 || (lvl >= 2 && (s16 === 4 || s16 === 12))) {
+        if (!(chill && (s16 === 4 || s16 === 12))) kick(t, crestGain);
+      }
+      if (lvl >= 2 && s16 === 6) kick(t, crestGain);   // extra syncopated drive
+      // backbeat snare
+      if ((s16 === 4 || s16 === 12) && !chill) snare(t, crestGain, 0.5);
+      if (chill && s16 === 12) snare(t, crestGain, 0.3);   // shop: rim on the 3
+      // hats: offbeat 8ths, 16ths at full
+      if (s16 % 4 === 2) hat(t + swing, 0.03, chill ? 0.14 : 0.22, crestGain);
+      if (lvl >= 3 && s16 % 2 === 1) hat(t + swing, 0.02, 0.12, crestGain);
+      // fill: last bar of an 8-bar phrase — snare roll in the back half
+      if ((bar % 8) === 7 && s16 >= 12) snare(t, crestGain, 0.28 + (s16 - 12) * 0.05);
+    }
+
+    // -- LEAD HOOK (crest stem) — the authored motif, level >= 2. --
+    if (lvl >= 2) {
+      var mo = th.melody[absStep % 32];
+      if (mo >= 0) {
+        // seeded octave lift: on repeats, some notes ring an octave higher
+        var lift = (arp[s16] > 0.72 && (chordIdx % 2) === 1) ? 1 : 0;
+        var lm = degToMidi(th, mo, th.leadOct + lift);
+        note(th.lead, mtof(lm), t + swing, stepDur * 1.3, 0.42, crestGain, th.lead === 'square' ? 6 : 0);
+        noteLog.push(lm);
+        // boss counter-line: escalates a layer per phase bracket
+        if (th.boss && lvl >= 3) {
+          if (bossPhase >= 1 && s16 % 8 === 0) note(th.lead, mtof(lm + 12), t + swing, stepDur * 1.1, 0.24, crestGain);
+          if (bossPhase >= 2 && s16 % 8 === 4) note(th.lead, mtof(degToMidi(th, mo + 2, th.leadOct)), t + swing, stepDur * 1.1, 0.22, crestGain);
+          if (bossPhase >= 3) note(th.lead, mtof(lm + 12), t + swing, stepDur * 0.9, 0.18, crestGain);
+        }
+      }
+    }
+
+    // -- SHIMMER (apotheosis) — high chip sparkle on the 16ths while lifted. --
     if (apoOn && s16 % 2 === 0) {
-      var sa = arp[(s16 + 3) % 16]; if (sa < 0) sa = 0;   // rests aren't a pitch
-      var sf = mtof(degToMidi(curTheme, deg + sa, 2));
-      voice('triangle', sf, t + jit, stepDur * 1.2, 0.5, shimmerGain);
+      var mo2 = th.melody[(absStep + 4) % 32]; if (mo2 < 0) mo2 = chordDeg;
+      var sf = degToMidi(th, mo2, th.leadOct + 2);
+      note('square', mtof(sf), t + swing, stepDur * 1.1, 0.5, shimmerGain);
     }
   }
 
