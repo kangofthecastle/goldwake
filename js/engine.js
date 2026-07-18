@@ -71,14 +71,16 @@
       minSpeed: -1e9, maxSpeed: 1e9,
       radius: 8, scale: 16,
       r: 1, g: 1, b: 1, a: 1,
-      spr: 0, shape: 0,               // 0 round, 1 needle, 2 ring
+      spr: 0,
+      fam: 0, spin: 0,                // bullet-art family (0 orb..5 star) + texture-spin rate
       oriented: false,
       flash: 0, age: 0, grazed: false,
       life: 1e9,
       timeScale: 1, slowT: 0,         // bullet time-slow (tidal carry, horn shoves)
       carried: false,                 // Poseidon tidal wave
       friendly: false, srcId: -1,     // Loki faction-flip (Confuse)
-      gardenerId: -1                  // Bullet Gardener ownership
+      gardenerId: -1,                 // Bullet Gardener ownership
+      ownerId: -1                     // emitter ownership (midship cancel-to-gold on death)
     };
   }
 
@@ -123,6 +125,11 @@
       // phase-6 archetypes
       arch: '', aura: '', link: null, gen: 0, g1: '', g2: '', shieldT: 0,
       knx: 0, kny: 0, fireHold: 0,
+      // danmaku-overhaul: fire scripts + path runner (all monomorphic)
+      script: null, scriptT: 0, scriptI: 0, scriptLoop: 1, poseT: 0,
+      pathSegs: null, segI: 0, segT: 0, sx: 0, sy: 0,
+      holdX: 0, holdY: 0,
+      retreatAt: 0, didRetreat: false, seq: 0,
       onDeath: null, onUpdate: null
     };
   }
@@ -149,10 +156,13 @@
     };
   }
 
-  Engine.bullets   = new Pool(4096, makeBullet);
-  Engine.shots     = new Pool(256, makeShot);
+  // Pool capacities sized for the danmaku-overhaul worst case (a crest of
+  // arcWall + snake + accent + rain ambience + gardener gardens, over a player
+  // torrent, with layered explosions). No allocation happens in hot loops.
+  Engine.bullets   = new Pool(6144, makeBullet);
+  Engine.shots     = new Pool(384, makeShot);
   Engine.enemies   = new Pool(128, makeEnemy);
-  Engine.particles = new Pool(2048, makeParticle);
+  Engine.particles = new Pool(3072, makeParticle);
   Engine.gold      = new Pool(512, makeGold);
 
   Engine.clearAllPools = function () {

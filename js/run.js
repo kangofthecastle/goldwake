@@ -405,19 +405,40 @@
     Run.sectors = [];
     for (var si = 0; si < 3; si++) {
       var nWaves = 4 + ri(si === 2 ? 2 : 3);
-      var waves = [], lastName = null;
-      for (var w = 0; w < nWaves; w++) { var pick = pickWave(lastName, si); waves.push(pick.fn); lastName = pick.name; }
-      Run.sectors.push({ affix: AFFIX[keys[si]], waves: waves, boss: bosses[si], wavesCount: nWaves });
+      var slots = slotTemplate(nWaves);            // authored difficulty arc
+      var waves = [], names = [], lastName = null;
+      for (var w = 0; w < slots.length; w++) {
+        var pick = pickWaveRole(slots[w], si, lastName);
+        waves.push(pick.fn); names.push(pick.name); lastName = pick.name;
+      }
+      Run.sectors.push({ affix: AFFIX[keys[si]], waves: waves, boss: bosses[si], wavesCount: slots.length, slotRoles: slots, waveNames: names });
     }
   }
-  function pickWave(avoid, si) {
-    var full = Game.wavePool, pool = [], total = 0, i;
-    for (i = 0; i < full.length; i++) if ((full[i].minSector || 0) <= si) pool.push(full[i]);
+  // the sector is the composition: opener → build* → feature → breather →
+  // crescendo (→ boss). Length matches the current run length (4-6 waves).
+  function slotTemplate(n) {
+    var mids = Math.max(1, n - 3);                 // slots between opener and breather+crescendo
+    var t = ['opener'];
+    var builds = [];
+    for (var i = 0; i < mids; i++) builds.push('build');
+    builds[Math.floor(mids / 2)] = 'feature';      // one centerpiece
+    t = t.concat(builds);
+    t.push('breather');
+    t.push('crescendo');
+    return t;                                       // length === n
+  }
+  // RNG picks WHICH arrangement fills a slot (among those tagged for the role +
+  // reachable by minSector) plus mirror/phase inside the arrangement — never
+  // geometry. Falls back to any reachable wave if a role has no match.
+  function pickWaveRole(role, si, avoid) {
+    var full = Game.wavePool, pool = [], total = 0, i, w;
+    for (i = 0; i < full.length; i++) { w = full[i]; if ((w.minSector || 0) <= si && w.roles && w.roles.indexOf(role) >= 0) pool.push(w); }
+    if (pool.length === 0) { for (i = 0; i < full.length; i++) if ((full[i].minSector || 0) <= si) pool.push(full[i]); }
     for (i = 0; i < pool.length; i++) total += pool[i].weight;
     for (var tr = 0; tr < 4; tr++) {
       var r = Run.rng() * total, a = 0, chosen = pool[0];
       for (i = 0; i < pool.length; i++) { a += pool[i].weight; if (r <= a) { chosen = pool[i]; break; } }
-      if (chosen.name !== avoid) return chosen;
+      if (chosen.name !== avoid || pool.length === 1) return chosen;
     }
     return pool[0];
   }

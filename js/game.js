@@ -1451,7 +1451,7 @@
       var a = UP + angs[i];
       s.x = G.player.x + Math.cos(a) * 26; s.y = G.player.y + Math.sin(a) * 26 - 20;
       s.vx = Math.cos(a) * SHOT_SPEED; s.vy = Math.sin(a) * SHOT_SPEED;
-      s.radius = 13; s.scale = 34; s.damage = dmg; s.age = 0; s.life = 1.6;
+      s.radius = 14; s.scale = 42; s.damage = dmg; s.age = 0; s.life = 1.6;
       s.pierce = 1; s.kind = 0; s.faction = 0; s.big = false;
       var col = Patterns.hue(i / n + G.time * 0.25);         // cycling rainbow tint
       s.r = col[0]; s.g = col[1]; s.b = col[2];
@@ -1478,7 +1478,7 @@
       s.x = px + Math.cos(a) * 26; s.y = py + Math.sin(a) * 26 - 20;
       var spd = SHOT_SPEED * (guan ? 0.8 : 1);
       s.vx = Math.cos(a) * spd; s.vy = Math.sin(a) * spd;
-      s.radius = guan ? (isClone ? 22 : 30) * ww : 12; s.damage = dmg; s.age = 0; s.life = 1.6; s.scale = guan ? (isClone ? 40 : 56) * ww : 30;
+      s.radius = guan ? (isClone ? 22 : 30) * ww : 14; s.damage = dmg; s.age = 0; s.life = 1.6; s.scale = guan ? (isClone ? 40 : 56) * ww : 44;
       s.pierce = guan ? (G.mods.guanWide ? 3 : 2) : (quetz ? (G.mods.quetzPierce ? 2 : 1) : 0);
       s.kind = guan ? 6 : 0;
       s.faction = 0; s.big = false; s.cloneShot = !!isClone;
@@ -1563,6 +1563,12 @@
     e.dispX = 0; e.dispY = 0; e.dispVX = 0; e.dispVY = 0; e.impactDmg = 0; e.slamCd = 0;
     e.arch = ''; e.aura = ''; e.link = null; e.gen = 0; e.g1 = ''; e.g2 = ''; e.shieldT = 0;
     e.knx = 0; e.kny = 0; e.fireHold = 0;
+    // danmaku-overhaul script/path state — MUST reset on pooled reuse or a fresh
+    // enemy inherits stale movement (phantom retreatAt splices, poseT slows its
+    // first frames, a leftover pathSegs/script from the prior occupant runs).
+    e.script = null; e.scriptT = 0; e.scriptI = 0; e.scriptLoop = 1; e.poseT = 0;
+    e.pathSegs = null; e.segI = 0; e.segT = 0; e.sx = 0; e.sy = 0;
+    e.holdX = 0; e.holdY = 0; e.retreatAt = 0; e.didRetreat = false;
     e.onDeath = null; e.onUpdate = null;
     return e;
   }
@@ -1749,63 +1755,319 @@
     Engine.enemies.release(e);
   }
 
-  function spawnDarter(startX, curlX, exitX) {
-    var e = newEnemy(1, startX, -120, 3, GL.SPR.SHIP_POP, 74, 30, [1, 0.4, 0.55], 4, 500, false); if (!e) return;
-    e.p0x = startX; e.p0y = -120; e.p1x = curlX; e.p1y = 520; e.p2x = W - curlX; e.p2y = 1050; e.p3x = exitX; e.p3y = -160;
-    e.pathDur = 4.2; e.fireCd = 0.55; e.onUpdate = updateDarter; maybeAura(e);
-  }
-  function updateDarter(e, dt) {
-    e.t += dt; e.pathT = Math.min(1, e.t / e.pathDur);
-    e.x = bezier(e.pathT, e.p0x, e.p1x, e.p2x, e.p3x);
-    e.y = bezier(e.pathT, e.p0y, e.p1y, e.p2y, e.p3y);
-    e.rot = Math.PI;
-    if (e.pathT > 0.28 && e.pathT < 0.78) {
-      e.fireT -= dt;
-      if (e.fireT <= 0) { e.fireT = e.fireCd; Patterns.aimed(e.x, e.y, AIMX(e), AIMY(e), 340 * G.rank, { color: Patterns.CYAN, radius: 11 }); }
+  // =====================================================================
+  // PATH BOOK + FIRE SCRIPTS (danmaku overhaul)
+  // Every non-boss enemy runs an authored path (no straight-vy / bare-sine
+  // lives) and a looping beat list; formations share a script clock with a
+  // per-index phase offset — six ships firing feel like one instrument. Fire
+  // is UNAIMED authored geometry with at most a sparse aimed accent (Law 1).
+  // =====================================================================
+  var POP_COL = [1.0, 0.42, 0.5], MID_COL = [1.0, 0.5, 0.2], TURR_COL = [0.96, 0.42, 0.7];
+  var P = Patterns, DOWN = Math.PI / 2;
+  function rankSpd(base) { var m = 1 + 0.10 * (G.rank - 1); if (m > 1.5) m = 1.5; return base * m; }
+  function clampX(x, m) { m = m || 160; return x < m ? m : x > W - m ? W - m : x; }
+  function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+  function qbez(a, c, b, t) { var u = 1 - t; return u * u * a + 2 * u * t * c + t * t * b; }
+  function muzzle(e, col) { col = col || [1, 0.6, 0.3]; flash(e.x, e.y, col, 74, 0.22); ringShock(e.x, e.y, col, 18, 900, 0.26); }
+
+  // --- path runner ---
+  function initPath(e) { e.segI = 0; e.segT = 0; e.sx = e.x; e.sy = e.y; }
+  function pathTick(e, dt) {
+    var segs = e.pathSegs; if (!segs || e.segI >= segs.length) return;
+    var s = segs[e.segI];
+    var mdt = e.poseT > 0 ? dt * 0.30 : dt;      // slow into the beat, burst out of it
+    e.segT += mdt;
+    var dur = s.dur || 0.001, u = e.segT / dur; if (u > 1) u = 1;
+    var ue = (s.k === 'orbit') ? u : easeInOut(u);
+    if (s.k === 'curve') { e.x = qbez(e.sx, s.cx, s.ex, ue); e.y = qbez(e.sy, s.cy, s.ey, ue); }
+    else if (s.k === 'line' || s.k === 'exit') { e.x = e.sx + (s.ex - e.sx) * ue; e.y = e.sy + (s.ey - e.sy) * ue; }
+    else if (s.k === 'hold') { e.x = e.sx + (s.bob ? Math.sin(e.t * 1.6) * s.bob : 0); e.y = e.sy; }
+    else if (s.k === 'orbit') { var a = s.from + (s.to - s.from) * ue; e.x = s.cx + Math.cos(a) * s.rad; e.y = s.cy + Math.sin(a) * s.rad; }
+    if (u >= 1) {
+      if (s.k === 'exit') { killEnemy(e, false); return; }
+      e.segI++; e.segT = 0; e.sx = e.x; e.sy = e.y;
+      if (e.segI >= segs.length) { e.pathSegs = [{ k: 'exit', dur: 2.4, ex: e.x, ey: H + 200 }]; initPath(e); }
     }
-    if (e.pathT >= 1) killEnemy(e, false);
+  }
+  // --- fire script ---
+  function setScript(e, beats, loop, phase) {
+    e.script = beats; e.scriptLoop = loop; e.scriptT = phase || 0; e.scriptI = 0;
+    // strictly-less-than so a t:0 opening beat SURVIVES phase 0 (the common
+    // case): it fires on the first tick (scriptTick uses <=), preserving the
+    // pose slow-down + muzzle telegraph before the first volley. A formation
+    // member with phase>0 still skips beats it has already passed.
+    while (e.scriptI < beats.length && beats[e.scriptI].t < e.scriptT) e.scriptI++;
+  }
+  function scriptTick(e, dt) {
+    var sc = e.script; if (!sc) { if (e.poseT > 0) e.poseT -= dt; return; }
+    e.scriptT += dt;
+    while (e.scriptI < sc.length && sc[e.scriptI].t <= e.scriptT) { sc[e.scriptI].fn(e); e.scriptI++; }
+    if (e.scriptLoop > 0 && e.scriptT >= e.scriptLoop) { e.scriptT -= e.scriptLoop; e.scriptI = 0; }
+    if (e.poseT > 0) e.poseT -= dt;
+  }
+  // retreatReturn: fall back off-pattern at an hp threshold (never RNG), return
+  function triggerRetreat(e) {
+    var backY = Math.max(120, e.y - 260);
+    e.pathSegs.splice(e.segI, 0,
+      { k: 'line', dur: 0.5, ex: e.x, ey: backY },
+      { k: 'hold', dur: 0.5, ex: e.x, ey: backY, bob: 16 },
+      { k: 'line', dur: 0.6, ex: e.holdX || e.x, ey: e.holdY || e.y });
+    e.segT = 0; e.sx = e.x; e.sy = e.y;
+  }
+  function pathEnemyUpdate(e, dt) {
+    e.t += dt;                        // drives hold-segment bob sway (Math.sin(e.t*…))
+    if (e.retreatAt > 0 && !e.didRetreat && e.hp < e.maxhp * e.retreatAt) { e.didRetreat = true; triggerRetreat(e); }
+    pathTick(e, dt);
+    e.rot = Math.PI;
+    scriptTick(e, dt);
+  }
+
+  // --- the 8 named paths ---
+  function P_swoopHold(e, entryX, holdX, holdY, exitX) {
+    e.holdX = holdX; e.holdY = holdY;
+    e.pathSegs = [
+      { k: 'curve', dur: 1.1, cx: entryX, cy: holdY * 0.55, ex: holdX, ey: holdY },
+      { k: 'hold', dur: 1.7, ex: holdX, ey: holdY, bob: 22 },
+      { k: 'curve', dur: 1.2, cx: exitX, cy: holdY + 140, ex: exitX, ey: -180 },
+      { k: 'exit', dur: 0.2, ex: exitX, ey: -220 }
+    ];
+    initPath(e);
+  }
+  function P_sCurve(e, side, holdY) {
+    var a = side < 0 ? 180 : W - 180, b = side < 0 ? W - 180 : 180;
+    e.holdX = W / 2; e.holdY = holdY || 600;
+    e.pathSegs = [
+      { k: 'curve', dur: 1.4, cx: a, cy: 320, ex: W / 2, ey: 560 },
+      { k: 'curve', dur: 1.4, cx: b, cy: 820, ex: side < 0 ? W - 200 : 200, ey: 1040 },
+      { k: 'exit', dur: 1.5, ex: side < 0 ? 200 : W - 200, ey: H + 200 }
+    ];
+    initPath(e);
+  }
+  function P_loop(e, cx, cy, rad) {
+    e.holdX = cx; e.holdY = cy;
+    e.pathSegs = [
+      { k: 'line', dur: 0.9, ex: cx, ey: cy - rad },
+      { k: 'orbit', dur: 1.6, cx: cx, cy: cy, rad: rad, from: -DOWN, to: -DOWN + Math.PI * 2 },
+      { k: 'exit', dur: 1.2, ex: cx, ey: H + 200 }
+    ];
+    initPath(e);
+  }
+  function P_pendulum(e, xA, xB, y) {
+    e.holdX = (xA + xB) / 2; e.holdY = y;
+    e.pathSegs = [
+      { k: 'line', dur: 1.0, ex: xA, ey: y },
+      { k: 'line', dur: 1.3, ex: xB, ey: y },
+      { k: 'line', dur: 1.3, ex: xA, ey: y },
+      { k: 'line', dur: 1.3, ex: xB, ey: y },
+      { k: 'exit', dur: 1.4, ex: xB, ey: H + 200 }
+    ];
+    initPath(e);
+  }
+  function P_orbitPoint(e, cx, cy, rad, turns, from) {
+    from = from || 0; e.holdX = cx; e.holdY = cy;
+    e.pathSegs = [
+      { k: 'line', dur: 0.9, ex: cx + Math.cos(from) * rad, ey: cy + Math.sin(from) * rad },
+      { k: 'orbit', dur: 2.4 * turns, cx: cx, cy: cy, rad: rad, from: from, to: from + Math.PI * 2 * turns },
+      { k: 'exit', dur: 1.2, ex: cx, ey: H + 200 }
+    ];
+    initPath(e);
+  }
+  function P_diveBrake(e, targetX, brakeY) {
+    e.holdX = targetX; e.holdY = brakeY;
+    e.pathSegs = [
+      { k: 'line', dur: 0.55, ex: targetX, ey: brakeY },
+      { k: 'hold', dur: 0.8, ex: targetX, ey: brakeY },
+      { k: 'curve', dur: 1.0, cx: targetX, cy: brakeY - 120, ex: targetX, ey: -180 },
+      { k: 'exit', dur: 0.2, ex: targetX, ey: -220 }
+    ];
+    initPath(e);
+  }
+  function P_flankRail(e, side, depth) {
+    var edge = side < 0 ? 130 : W - 130, inX = side < 0 ? W * 0.42 : W * 0.58;
+    e.holdX = inX; e.holdY = depth;
+    e.pathSegs = [
+      { k: 'line', dur: 1.0, ex: edge, ey: depth },
+      { k: 'line', dur: 0.8, ex: inX, ey: depth },
+      { k: 'hold', dur: 1.4, ex: inX, ey: depth, bob: 14 },
+      { k: 'exit', dur: 1.5, ex: edge, ey: H + 200 }
+    ];
+    initPath(e);
+  }
+  function P_retreatReturn(e, holdX, holdY, thresh) {
+    e.holdX = holdX; e.holdY = holdY; e.retreatAt = thresh || 0.5; e.didRetreat = false;
+    e.pathSegs = [
+      { k: 'curve', dur: 1.0, cx: holdX, cy: holdY * 0.5, ex: holdX, ey: holdY },
+      { k: 'hold', dur: 2.8, ex: holdX, ey: holdY, bob: 20 },
+      { k: 'exit', dur: 1.4, ex: holdX, ey: H + 200 }
+    ];
+    initPath(e);
+  }
+
+  // --- converted popcorn / turret / midship spawners ---
+  // POPCORN: HP near-flat (dies to a breath of the torrent at any power).
+  function spawnDarter(startX, curlX, exitX) {
+    var e = newEnemy(1, startX, -120, 6, GL.SPR.SHIP_POP, 96, 30, POP_COL, 4, 500, false); if (!e) return;
+    var side = startX < W / 2 ? -1 : 1;
+    var holdX = clampX(side < 0 ? 320 : W - 320, 220);
+    var exX = (exitX != null) ? exitX : (side < 0 ? W + 180 : -180);
+    P_swoopHold(e, startX, holdX, 470, exX);
+    setScript(e, [
+      { t: 0.0, fn: function (e) { e.poseT = 0.32; muzzle(e, [1, 0.55, 0.28]); } },
+      { t: 0.38, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.05, 7, rankSpd(P.SPD.slow), { laneAt: ((e.s1 % 3) - 1) * 0.24, laneWidth: 2.6, fam: P.FAM.PELLET, tier: 'M', color: P.ORANGE }); } },
+      { t: 0.92, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.05, 7, rankSpd(P.SPD.slow), { laneAt: ((e.s1 % 3) - 1) * 0.24, laneWidth: 2.6, fam: P.FAM.PELLET, tier: 'M', color: P.ORANGE }); } }
+    ], 1.8, 0);
+    e.onUpdate = pathEnemyUpdate; maybeAura(e);
   }
   function spawnWeaver(cx, amp, phase) {
-    var e = newEnemy(2, cx, -100, 4, GL.SPR.SHIP_POP, 70, 28, [1, 0.55, 0.2], 4, 700, false); if (!e) return;
-    e.s0 = cx; e.s1 = amp; e.s2 = phase; e.vy = 175; e.fireCd = 1.1; e.onUpdate = updateWeaver; maybeAura(e);
-  }
-  function updateWeaver(e, dt) {
-    e.t += dt; e.y += e.vy * dt; e.x = e.s0 + Math.sin(e.t * 1.8 + e.s2) * e.s1; e.rot = Math.PI;
-    e.fireT -= dt;
-    if (e.fireT <= 0 && e.y > 120 && e.y < H - 500) { e.fireT = e.fireCd; Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 3, 0.34, 300 * G.rank, { color: Patterns.ORANGE, radius: 11 }); }
-    if (e.y > H + 120) killEnemy(e, false);
+    var e = newEnemy(2, cx, -100, 6, GL.SPR.SHIP_POP, 88, 28, [1, 0.5, 0.2], 4, 700, false); if (!e) return;
+    var side = cx < W / 2 ? -1 : 1;
+    P_sCurve(e, side, 560);
+    setScript(e, [
+      { t: 0.0, fn: function (e) { e.poseT = 0.26; muzzle(e, [1, 0.5, 0.2]); } },
+      { t: 0.4, fn: function (e) { P.fan(e.x, e.y, DOWN, 5, 0.9, rankSpd(P.SPD.mid), { fam: P.FAM.PELLET, tier: 'S', color: P.ORANGE }); } }
+    ], 1.1, (phase || 0) * 0.2);
+    e.onUpdate = pathEnemyUpdate; maybeAura(e);
   }
   function spawnTurret(x, targetY) {
-    var e = newEnemy(3, x, -100, 10, GL.SPR.SHIP_MID, 84, 38, [0.6, 0.4, 1.0], 7, 1500, true); if (!e) return;
-    e.s0 = targetY; e.vy = 230; e.fireCd = 1.5; e.onUpdate = updateTurret; maybeAura(e);
-  }
-  function updateTurret(e, dt) {
-    e.t += dt;
-    if (e.y < e.s0) { e.y += e.vy * dt; }
-    else {
-      e.fireT -= dt;
-      if (e.fireT <= 0) {
-        e.fireT = e.fireCd; e.s1++;
-        Patterns.ring(e.x, e.y, 14 + Math.floor(4 * G.rank), 230 * G.rank, { color: Patterns.VIOLET, radius: 12, offset: e.s1 * 0.4 });
-        if (e.s1 >= 5) { e.vy = 200; e.s0 = -9999; }
-      }
-      if (e.s0 === -9999) e.y += e.vy * dt;
-    }
-    e.rot = Math.PI;
-    if (e.y > H + 140) killEnemy(e, false);
+    var e = newEnemy(3, x, -100, 14, GL.SPR.SHIP_MID, 108, 40, TURR_COL, 7, 1500, true); if (!e) return;
+    var xA = clampX(x - 190, 180), xB = clampX(x + 190, 180);
+    P_pendulum(e, xA, xB, targetY || 360);
+    setScript(e, [
+      { t: 0.0, fn: function (e) { e.poseT = 0.4; muzzle(e, [0.96, 0.4, 0.7]); } },
+      { t: 0.5, fn: function (e) { e.s1++; P.ringGap(e.x, e.y, 16, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 2.0, offset: e.s1 * 0.5, fam: P.FAM.ORB, tier: 'M', color: P.MAGENTA }); } },
+      { t: 1.4, fn: function (e) { e.s0 += 0.5; P.wheel(e.x, e.y, e.s0, 10, rankSpd(P.SPD.mid), { gapEvery: 5, fam: P.FAM.ORB, tier: 'S', color: P.MAGENTA }); } }
+    ], 2.2, 0);
+    e.onUpdate = pathEnemyUpdate; maybeAura(e);
   }
   function spawnGunship(fromLeft) {
-    var sx = fromLeft ? -140 : W + 140;
-    var e = newEnemy(4, sx, 330, 26, GL.SPR.SHIP_GUN, 110, 52, [1, 0.5, 0.15], 12, 3000, true); if (!e) return;
-    e.vx = fromLeft ? 240 : -240; e.fireCd = 1.15; e.onUpdate = updateGunship; maybeAura(e);
+    var side = fromLeft ? -1 : 1;
+    var e = newEnemy(4, fromLeft ? -140 : W + 140, 300, 34, GL.SPR.SHIP_GUN, 130, 52, [1, 0.5, 0.15], 12, 3000, true); if (!e) return;
+    P_flankRail(e, side, 420);
+    setScript(e, [
+      { t: 0.0, fn: function (e) { e.poseT = 0.35; muzzle(e, [1, 0.5, 0.2]); } },
+      { t: 0.5, fn: function (e) { P.arcWall(e.x, e.y, DOWN, 1.3, 10, rankSpd(P.SPD.slow), { laneAt: 0, laneWidth: 3.0, fam: P.FAM.PELLET, tier: 'M', color: P.ORANGE }); } },
+      { t: 1.3, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 4, { spread: 0.14, speed: rankSpd(P.SPD.fast) }); } }
+    ], 2.0, 0);
+    e.onUpdate = pathEnemyUpdate; maybeAura(e);
   }
-  function updateGunship(e, dt) {
-    e.t += dt; e.x += e.vx * dt;
-    if (e.x < 180) { e.x = 180; e.vx = Math.abs(e.vx); }
-    if (e.x > W - 180) { e.x = W - 180; e.vx = -Math.abs(e.vx); }
-    e.rot = Math.PI; e.fireT -= dt;
-    if (e.fireT <= 0) { e.fireT = e.fireCd; Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 5 + Math.floor(2 * G.rank), 0.7, 260 * G.rank, { color: Patterns.ORANGE, radius: 12 }); }
-    if (e.t > 16) killEnemy(e, false);
+
+  // MIDSHIP: large held enemy (270px), 2-geometry fire script + sparse accent.
+  // Carries the HP budget (survives most of its arrangement on-curve); its death
+  // cancels its OWN remaining pattern to gold (explicit interruption payoff).
+  function spawnMidship(ax) {
+    var hp = 260 * (1 + 0.55 * (G.rank - 1));
+    var e = newEnemy(30, ax, -240, hp, GL.SPR.SHIP_MID, 270, 100, MID_COL, 26, 7000, true); if (!e) return;
+    e.arch = 'midship';
+    var xA = clampX(ax - 160, 220), xB = clampX(ax + 160, 220);
+    P_pendulum(e, xA, xB, 380);
+    setScript(e, [
+      { t: 0.0, fn: function (e) { e.poseT = 0.45; muzzle(e, [1, 0.5, 0.2]); } },
+      { t: 0.5, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 22, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 2.2, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: P.MAGENTA }); } },
+      { t: 1.4, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.5, 13, rankSpd(P.SPD.mid), { laneAt: ((e.s1 % 3) - 1) * 0.2, laneWidth: 3.2, fam: P.FAM.PELLET, tier: 'M', color: P.ORANGE }); } },
+      { t: 2.3, fn: function (e) { e.poseT = 0.35; muzzle(e, [1, 0.85, 0.35]); } },
+      { t: 2.7, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.2, speed: rankSpd(P.SPD.fast) }); } }
+    ], 3.4, 0);
+    e.onUpdate = pathEnemyUpdate;
+  }
+
+  // ---- overhaul spawners wiring the remaining paths + verbs (DANMAKU.md) ----
+  // LOOPER — showmanship popcorn: enters, full loop-de-loop, fires an unaimed
+  // pellet fan near the loop bottom, exits. Popcorn HP (dies to a breath). PATH: loop.
+  function spawnLooper(cx) {
+    var e = newEnemy(1, clampX(cx, 200), -120, 6, GL.SPR.SHIP_POP, 92, 30, POP_COL, 4, 600, false); if (!e) return;
+    P_loop(e, clampX(cx, 220), 460, 200);
+    setScript(e, [
+      { t: 0.0, fn: function (e) { e.poseT = 0.28; muzzle(e, [1, 0.6, 0.3]); } },
+      { t: 1.6, fn: function (e) { P.fan(e.x, e.y, DOWN, 6, 1.0, rankSpd(P.SPD.mid), { fam: P.FAM.PELLET, tier: 'S', color: P.ORANGE }); } }   // ~loop bottom; unaimed (drifting popcorn law)
+    ], 2.6, 0);
+    e.onUpdate = pathEnemyUpdate; maybeAura(e);
+  }
+  // DIVER — aggression without aiming: fast dive at the player's FORMER x, hard
+  // brake, unaimed ring burst, climb out. Popcorn HP. PATH: diveBrake.
+  function spawnDiver(formerX, brakeY) {
+    var e = newEnemy(1, clampX(formerX, 120), -120, 7, GL.SPR.SHIP_POP, 84, 28, [1, 0.45, 0.4], 4, 700, false); if (!e) return;
+    P_diveBrake(e, clampX(formerX, 120), brakeY || 520);
+    setScript(e, [
+      { t: 0.0, fn: function (e) { e.poseT = 0.22; muzzle(e, [1, 0.5, 0.3]); } },
+      { t: 0.6, fn: function (e) { e.s1++; P.ring(e.x, e.y, 10, rankSpd(P.SPD.slow), { fam: P.FAM.ORB, tier: 'S', color: P.ORANGE, offset: e.s1 * 0.31 }); } }   // unaimed burst at the brake
+    ], 1.6, 0);
+    e.onUpdate = pathEnemyUpdate; maybeAura(e);
+  }
+  // WHEEL SHIP — one spoke of a rotating wheel formation: N ships orbit a shared
+  // center (per-index start angle + script phase), each firing wheel spokes
+  // outward. PATH: orbitPoint. VERB: wheel.
+  function spawnWheelShip(cx, cy, rad, idx, n, phase) {
+    var from = TAU * idx / n - DOWN;
+    var e = newEnemy(3, cx + Math.cos(from) * rad, cy + Math.sin(from) * rad, 12, GL.SPR.SHIP_MID, 92, 34, TURR_COL, 6, 1200, true); if (!e) return;
+    P_orbitPoint(e, cx, cy, rad, 1.5, from);
+    setScript(e, [
+      { t: 0.0, fn: function (e) { e.poseT = 0.3; muzzle(e, [0.96, 0.42, 0.7]); } },
+      { t: 0.5, fn: function (e) { e.s0 += 0.4; P.wheel(e.x, e.y, e.s0, 8, rankSpd(P.SPD.mid), { gapEvery: 4, fam: P.FAM.ORB, tier: 'S', color: P.MAGENTA }); } }
+    ], 1.4, phase || 0);
+    e.onUpdate = pathEnemyUpdate; maybeAura(e);
+  }
+  // REACTOR — an elite that reacts: holds firing a gap-ring, falls back at an hp
+  // threshold, RETURNS with a denser pulse volley. PATH: retreatReturn. VERB: pulse.
+  function spawnReactor(ax) {
+    var hp = 130 * (1 + 0.5 * (G.rank - 1));
+    var e = newEnemy(3, clampX(ax, 220), -160, hp, GL.SPR.SHIP_MID, 150, 58, [1, 0.55, 0.85], 16, 3200, true); if (!e) return;
+    P_retreatReturn(e, clampX(ax, 220), 420, 0.5);
+    setScript(e, [
+      { t: 0.0, fn: function (e) { e.poseT = 0.4; muzzle(e, [1, 0.5, 0.85]); } },
+      { t: 0.5, fn: function (e) { e.s0 += 0.45; P.ringGap(e.x, e.y, 18, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 2.0, offset: e.s0, fam: P.FAM.ORB, tier: 'M', color: P.MAGENTA }); } },
+      { t: 1.4, fn: function (e) { if (e.didRetreat) P.pulse(e.x, e.y, { rings: 3, count: 16, speed: rankSpd(P.SPD.slow), speedStep: 60, offset: e.s0, colorA: P.MAGENTA, colorB: P.ORANGE }); } }   // the denser return volley
+    ], 2.2, 0);
+    e.onUpdate = pathEnemyUpdate; maybeAura(e);
+  }
+  // RIBBON — weave-through popcorn crossing the field diagonally behind the
+  // fight, firing perpendicular snake ribbons. PATH: sCurve. VERB: snake. (S2+)
+  function spawnRibbon(cx, side) {
+    var e = newEnemy(2, cx, -100, 8, GL.SPR.SHIP_POP, 84, 28, [1, 0.5, 0.25], 5, 900, false); if (!e) return;
+    P_sCurve(e, side, 520);
+    setScript(e, [
+      { t: 0.0, fn: function (e) { e.poseT = 0.24; muzzle(e, [1, 0.5, 0.25]); } },
+      { t: 0.4, fn: function (e) { e.s1++; P.snake(e.x, e.y, DOWN + side * 0.6, 7, rankSpd(P.SPD.mid), { amp: 42, freq: 0.9, phase: e.s1 * 0.5, fam: P.FAM.SHARD, tier: 'M', color: P.MAGENTA }); } }
+    ], 1.2, 0);
+    e.onUpdate = pathEnemyUpdate; maybeAura(e);
+  }
+  // FLANKER — mirrored pair hugging the side rails, firing crossing diagonal
+  // streams (syncopated by phase so the crosses breathe). PATH: flankRail. VERB:
+  // crossfire. (S2+)
+  function spawnFlanker(side, phase) {
+    var e = newEnemy(4, side < 0 ? -140 : W + 140, 340, 30, GL.SPR.SHIP_GUN, 116, 46, [1, 0.5, 0.2], 10, 2400, true); if (!e) return;
+    P_flankRail(e, side, 360);
+    setScript(e, [
+      { t: 0.0, fn: function (e) { e.poseT = 0.32; muzzle(e, [1, 0.5, 0.3]); } },
+      { t: 0.5, fn: function (e) { P.crossfire(e.x, W - e.x, e.y, 5, rankSpd(P.SPD.mid), { angle: 0.42, spacing: 34, fam: P.FAM.KUNAI, tier: 'M', color: P.MAGENTA }); } }
+    ], 1.6, phase || 0);
+    e.onUpdate = pathEnemyUpdate; maybeAura(e);
+  }
+  // RAINMAKER — parks near the top and lays a drifting top-edge rain curtain as
+  // sector ambience under the crescendo's other patterns. VERB: rain. (S2+)
+  function spawnRainmaker(ax) {
+    var e = newEnemy(3, clampX(ax, 200), -80, 40, GL.SPR.SHIP_MID, 120, 46, [1, 0.5, 0.3], 10, 1600, true); if (!e) return;
+    e.holdX = clampX(ax, 200); e.holdY = 150;
+    e.pathSegs = [
+      { k: 'line', dur: 0.9, ex: e.holdX, ey: 150 },
+      { k: 'hold', dur: 5.4, ex: e.holdX, ey: 150, bob: 30 },
+      { k: 'exit', dur: 1.2, ex: e.holdX, ey: -220 }
+    ];
+    initPath(e);
+    setScript(e, [
+      { t: 0.0, fn: function (e) { e.poseT = 0.3; muzzle(e, [1, 0.55, 0.3]); } },
+      { t: 0.6, fn: function (e) { e.s0 += 0.7; P.rain(20, { speed: rankSpd(P.SPD.slow), waves: 3, phase: e.s0, gapThresh: 0.1, fam: P.FAM.PELLET, tier: 'S', color: P.ORANGE }); } }
+    ], 1.3, 0);
+    e.onUpdate = pathEnemyUpdate;
+  }
+  // cancel an emitter's own in-flight bullets to gold (midship death payoff).
+  // Keyed by the emitter's monotonic seq — a bullet from a PRIOR enemy that held
+  // the same pool slot has a different seq and is left flying (no unearned clear).
+  function cancelOwnerBullets(seq, x, y) {
+    var n = 0;
+    Engine.bullets.forEach(function (b) {
+      if (b.ownerId === seq && !b.friendly) { if (Engine.gold.freeTop > 0) spawnGold(b.x, b.y, 1, 0.4); flash(b.x, b.y, [1, 0.85, 0.3], 20, 0.12); Engine.bullets.release(b); n++; }
+    });
+    if (n) { ringShock(x, y, [1, 0.9, 0.4], 70, 4200, 0.7); addShake(4); homeAllGold(); }
   }
 
   // ---------------------------------------------------------------------
@@ -2262,6 +2524,9 @@
         G.mult = Math.min(effMultCap(), G.mult + 0.25);
         G.vaunt.timer = Math.min(G.vaunt.duration, G.vaunt.timer + G.vaunt.duration * 0.02);
       }
+      // interruption reward: a midship's death cancels its OWN remaining pattern
+      // to gold (bullets from other emitters keep flying — no free screen-clear).
+      if (e.arch === 'midship') cancelOwnerBullets(e.seq, e.x, e.y);
     }
     if (e.onDeath) e.onDeath(e);
     Engine.enemies.release(e);
@@ -2391,9 +2656,16 @@
 
   Game.beginWave = function (fn, rank) {
     G.rank = rank; G.waveKind = 'normal'; G.waveGrace = 0.6;
+    // alternate the crest anchor between successive waves so a sector's waves
+    // don't blur together (center → left → right → …).
+    G.waveN = (G.waveN || 0) + 1;
+    var ai = G.waveN % 3;
+    G.anchorX = ai === 0 ? W * 0.5 : ai === 1 ? W * 0.28 : W * 0.72;
+    G.anchorSide = ai === 1 ? -1 : ai === 2 ? 1 : 0;
     fn(Run.rng, rank);
     G.mode = 'playing';
   };
+  Game.waveAnchor = function () { return { x: G.anchorX, side: G.anchorSide, n: G.waveN }; };
   Game.beginBoss = function (fn, rank) {
     G.rank = rank; G.waveKind = 'boss'; G.waveGrace = 0.6;
     fn(rank);
@@ -2673,83 +2945,149 @@
   };
 
   // ---- wave pool -------------------------------------------------------
+  // ---- wave pool: named, hand-tuned arrangements tagged by slot ROLE --------
+  // The sector sequencer (run.js) fills an authored slot arc — opener → build*
+  // → feature → breather → crescendo → boss — picking among arrangements tagged
+  // for the slot's role + reachable by minSector; RNG only chooses WHICH + the
+  // mirror + phase, never geometry. Anchor (left/center/right) alternates per
+  // wave via G.anchorX / G.anchorSide, set in beginWave.
   Game.wavePool = [
-    { name: 'dartsweep', weight: 10, fn: function (rng) {
-        var left = rng() < 0.5, n = 4 + (rng() * 2 | 0) + G.aff.popcornAdd;
+    // ---- OPENERS — light mirrored formation, states the motif ----
+    { name: 'openSwoop', weight: 10, minSector: 0, roles: ['opener'], fn: function (rng) {
+        var n = 3 + G.aff.popcornAdd;
         for (var i = 0; i < n; i++) (function (i) {
-          setTimerSpawn(i * 0.32, function () {
-            if (left) spawnDarter(150 + i * 34, 260, W - 150);
-            else spawnDarter(W - 150 - i * 34, W - 260, 150);
-          });
+          setTimerSpawn(i * 0.4, function () { spawnDarter(180 + i * 26, 0, W + 180); spawnDarter(W - 180 - i * 26, 0, -180); });
         })(i);
       } },
-    { name: 'weaverfield', weight: 9, fn: function (rng) {
-        var n = 5 + (rng() * 2 | 0) + G.aff.popcornAdd;
-        for (var i = 0; i < n; i++) (function (i) {
-          setTimerSpawn(i * 0.45, function () { spawnWeaver(180 + i * (720 / Math.max(1, n)), 150 + (rng() * 90 | 0), i * 0.7); });
-        })(i);
+    { name: 'openWeave', weight: 8, minSector: 0, roles: ['opener'], fn: function (rng) {
+        var n = 4 + G.aff.popcornAdd;
+        for (var i = 0; i < n; i++) (function (i) { setTimerSpawn(i * 0.5, function () { spawnWeaver(i % 2 ? 220 : W - 220, 0, i); }); })(i);
       } },
-    { name: 'turrets', weight: 6, fn: function (rng) {
-        var n = 2 + (rng() * 2 | 0);
-        for (var i = 0; i < n; i++) (function (i) {
-          setTimerSpawn(i * 0.5, function () { spawnTurret(220 + i * (640 / Math.max(1, n - 1)), 320 + (rng() * 120 | 0)); });
-        })(i);
+    // loop-de-loop popcorn opener — mirrored pairs, fire at loop bottom (PATH loop)
+    { name: 'openLoop', weight: 7, minSector: 0, roles: ['opener'], fn: function (rng) {
+        var n = 2 + G.aff.popcornAdd;
+        for (var i = 0; i < n; i++) (function (i) { setTimerSpawn(i * 0.6, function () { spawnLooper(300 + i * 70); spawnLooper(W - 300 - i * 70); }); })(i);
       } },
-    { name: 'gunships', weight: 5, fn: function (rng) {
-        spawnGunship(rng() < 0.5);
-        if (rng() < 0.6) setTimerSpawn(1.2, function () { spawnGunship(rng() < 0.5); });
-        for (var i = 0; i < 3; i++) (function (i) { setTimerSpawn(0.5 + i * 0.4, function () { spawnDarter(220 + i * 180, 300, W - 220 - i * 120); }); })(i);
+    // ---- BUILDS — standard arrangements, alternating anchors ----
+    { name: 'buildDarts', weight: 9, minSector: 0, roles: ['build'], fn: function (rng) {
+        var side = G.anchorSide || (rng() < 0.5 ? -1 : 1);
+        var sx = side < 0 ? 240 : W - 240, n = 4 + (rng() * 2 | 0) + G.aff.popcornAdd;
+        for (var i = 0; i < n; i++) (function (i) { setTimerSpawn(i * 0.34, function () { spawnDarter(clampX(sx + side * i * 20, 140), 0, side < 0 ? W + 180 : -180); }); })(i);
+        setTimerSpawn(0.6, function () { spawnWeaver(W / 2, 0, 0); });
       } },
-    { name: 'pincer', weight: 7, fn: function (rng) {
+    { name: 'buildTurrets', weight: 8, minSector: 0, roles: ['build'], fn: function (rng) {
+        var ax = G.anchorX || W / 2;
+        setTimerSpawn(0.0, function () { spawnTurret(clampX(ax - 150, 180), 340); });
+        setTimerSpawn(0.3, function () { spawnTurret(clampX(ax + 150, 180), 380); });
+        for (var i = 0; i < 4; i++) (function (i) { setTimerSpawn(0.8 + i * 0.4, function () { spawnWeaver(220 + i * 160, 0, i); }); })(i);
+      } },
+    { name: 'buildPincer', weight: 8, minSector: 0, roles: ['build'], fn: function (rng) {
         var n = 3 + (rng() * 2 | 0) + G.aff.popcornAdd;
-        for (var i = 0; i < n; i++) (function (i) {
-          setTimerSpawn(i * 0.3, function () { spawnDarter(140 + i * 30, 260, W - 140); spawnDarter(W - 140 - i * 30, W - 260, 140); });
-        })(i);
+        for (var i = 0; i < n; i++) (function (i) { setTimerSpawn(i * 0.3, function () { spawnDarter(150 + i * 24, 0, W + 160); spawnDarter(W - 150 - i * 24, 0, -160); }); })(i);
       } },
-    { name: 'turretweave', weight: 7, fn: function (rng) {
-        setTimerSpawn(0, function () { spawnTurret(W / 2, 340); });
-        var n = 4 + (rng() * 2 | 0) + G.aff.popcornAdd;
-        for (var i = 0; i < n; i++) (function (i) { setTimerSpawn(0.4 + i * 0.4, function () { spawnWeaver(200 + i * 130, 140, i); }); })(i);
+    { name: 'buildGunships', weight: 6, minSector: 0, roles: ['build', 'feature'], fn: function (rng) {
+        var mir = rng() < 0.5;
+        setTimerSpawn(0, function () { spawnGunship(mir); });
+        setTimerSpawn(0.4, function () { spawnGunship(!mir); });
+        for (var i = 0; i < 3; i++) (function (i) { setTimerSpawn(0.8 + i * 0.4, function () { spawnDarter(220 + i * 170, 0, W + 160); }); })(i);
       } },
-    // phase-6 archetype waves
-    { name: 'aegiswall', weight: 6, minSector: 0, fn: function (rng) {
-        setTimerSpawn(0, function () { spawnAegis(W * 0.35); });
-        setTimerSpawn(0.4, function () { spawnAegis(W * 0.65); });
-        for (var i = 0; i < 4; i++) (function (i) { setTimerSpawn(1.0 + i * 0.4, function () { spawnDarter(200 + i * 180, 300, W - 200 - i * 120); }); })(i);
-      } },
-    { name: 'mimicnest', weight: 5, minSector: 0, fn: function (rng) {
-        var n = 2 + (G.aff.eliteGoldMul > 1 ? 2 : 0);   // more mimics under GILDED
-        for (var i = 0; i < n; i++) (function (i) { setTimerSpawn(i * 0.6, function () { spawnMimic(160 + rng() * (W - 320), -60 - i * 40); }); })(i);
-        for (var k = 0; k < 4; k++) (function (k) { setTimerSpawn(k * 0.4, function () { spawnWeaver(220 + k * 160, 140, k); }); })(k);
-      } },
-    { name: 'splitters', weight: 6, minSector: 0, fn: function (rng) {
+    { name: 'buildSplitters', weight: 6, minSector: 0, roles: ['build'], fn: function (rng) {
         var n = 3 + (rng() * 2 | 0);
         for (var i = 0; i < n; i++) (function (i) { setTimerSpawn(i * 0.5, function () { spawnSplitter(200 + i * (680 / Math.max(1, n - 1)), -80, 0); }); })(i);
       } },
-    { name: 'weaverpairs', weight: 6, minSector: 1, fn: function (rng) {
-        setTimerSpawn(0, spawnWeaverPair);
-        if (rng() < 0.6) setTimerSpawn(2.4, spawnWeaverPair);
-      } },
-    { name: 'acolyteguard', weight: 5, minSector: 1, fn: function (rng) {
-        setTimerSpawn(0, function () { spawnGunship(rng() < 0.5); });
-        setTimerSpawn(0.3, function () { spawnTurret(W / 2, 340); });
-        setTimerSpawn(0.8, function () { spawnAcolyte(W * 0.3); });
-        setTimerSpawn(1.0, function () { spawnAcolyte(W * 0.7); });
-      } },
-    { name: 'carrierwave', weight: 5, minSector: 1, fn: function (rng) {
-        setTimerSpawn(0, function () { spawnCarrier(G.rank); });
-        for (var i = 0; i < 3; i++) (function (i) { setTimerSpawn(1.0 + i * 0.6, function () { spawnDarter(200 + i * 180, 300, W - 200); }); })(i);
-      } },
-    { name: 'moths', weight: 5, minSector: 1, fn: function (rng) {
+    { name: 'buildMoths', weight: 5, minSector: 1, roles: ['build'], fn: function (rng) {
         var n = 3 + (rng() * 2 | 0);
         for (var i = 0; i < n; i++) (function (i) { setTimerSpawn(i * 0.5, function () { spawnMoth(180 + i * 160); }); })(i);
       } },
-    { name: 'garden', weight: 5, minSector: 1, fn: function (rng) {
-        setTimerSpawn(0, function () { spawnGardener(W / 2); });
-        for (var i = 0; i < 4; i++) (function (i) { setTimerSpawn(0.8 + i * 0.5, function () { spawnWeaver(200 + i * 160, 150, i); }); })(i);
+    // dive-brake aggressors at the player's FORMER position (PATH diveBrake)
+    { name: 'buildDivers', weight: 7, minSector: 0, roles: ['build'], fn: function (rng) {
+        var n = 3 + (rng() * 2 | 0) + G.aff.popcornAdd;
+        for (var i = 0; i < n; i++) (function (i) { setTimerSpawn(i * 0.45, function () { spawnDiver(G.player.x, 460 + (i % 3) * 60); }); })(i);
       } },
-    { name: 'apostatewave', weight: 4, minSector: 2, fn: function (rng) {
+    // weave-through snake ribbons — first snakes appear in S2 (VERB snake)
+    { name: 'buildRibbons', weight: 6, minSector: 1, roles: ['build'], fn: function (rng) {
+        var n = 3 + (rng() * 2 | 0);
+        for (var i = 0; i < n; i++) (function (i) { setTimerSpawn(i * 0.5, function () { var s = (i % 2) ? 1 : -1; spawnRibbon(s < 0 ? 240 : W - 240, s); }); })(i);
+      } },
+    // mirrored flanker pair firing crossing streams — S2 combines (VERB crossfire)
+    { name: 'buildCrossfire', weight: 6, minSector: 1, roles: ['build', 'feature'], fn: function (rng) {
+        setTimerSpawn(0.0, function () { spawnFlanker(-1, 0); });
+        setTimerSpawn(0.3, function () { spawnFlanker(1, 0.8); });
+        for (var i = 0; i < 2; i++) (function (i) { setTimerSpawn(1.0 + i * 0.5, function () { spawnWeaver(W / 2, 0, i); }); })(i);
+      } },
+    // ---- FEATURES — midship / elite centerpiece ----
+    { name: 'featureMidship', weight: 9, minSector: 0, roles: ['feature'], fn: function (rng) {
+        var ax = G.anchorX || W / 2;
+        setTimerSpawn(0.2, function () { spawnMidship(clampX(ax, 260)); });
+        for (var i = 0; i < 4; i++) (function (i) { setTimerSpawn(1.0 + i * 0.5, function () { spawnDarter(200 + i * 170, 0, W + 160); }); })(i);
+      } },
+    { name: 'featureAegis', weight: 6, minSector: 0, roles: ['feature'], fn: function (rng) {
+        setTimerSpawn(0, function () { spawnAegis(W * 0.35); });
+        setTimerSpawn(0.4, function () { spawnAegis(W * 0.65); });
+        for (var i = 0; i < 3; i++) (function (i) { setTimerSpawn(1.0 + i * 0.4, function () { spawnDarter(220 + i * 170, 0, W + 160); }); })(i);
+      } },
+    { name: 'featureMimic', weight: 5, minSector: 0, roles: ['feature'], fn: function (rng) {
+        var n = 2 + (G.aff.eliteGoldMul > 1 ? 2 : 0);
+        for (var i = 0; i < n; i++) (function (i) { setTimerSpawn(i * 0.6, function () { spawnMimic(160 + rng() * (W - 320), -60 - i * 40); }); })(i);
+        for (var k = 0; k < 3; k++) (function (k) { setTimerSpawn(k * 0.5, function () { spawnWeaver(220 + k * 200, 0, k); }); })(k);
+      } },
+    { name: 'featureWeaverPairs', weight: 6, minSector: 1, roles: ['feature'], fn: function (rng) {
+        setTimerSpawn(0, spawnWeaverPair);
+        if (rng() < 0.6) setTimerSpawn(2.4, spawnWeaverPair);
+      } },
+    { name: 'featureAcolyte', weight: 5, minSector: 1, roles: ['feature'], fn: function (rng) {
+        setTimerSpawn(0, function () { spawnMidship(W / 2); });
+        setTimerSpawn(0.8, function () { spawnAcolyte(W * 0.3); });
+        setTimerSpawn(1.0, function () { spawnAcolyte(W * 0.7); });
+      } },
+    { name: 'featureGarden', weight: 5, minSector: 1, roles: ['feature'], fn: function (rng) {
+        setTimerSpawn(0, function () { spawnGardener(W / 2); });
+        for (var i = 0; i < 4; i++) (function (i) { setTimerSpawn(0.8 + i * 0.5, function () { spawnWeaver(200 + i * 160, 0, i); }); })(i);
+      } },
+    // rotating wheel formation firing spokes outward (PATH orbitPoint, VERB wheel)
+    { name: 'featureWheel', weight: 6, minSector: 0, roles: ['feature'], fn: function (rng) {
+        var cx = clampX(G.anchorX || W / 2, 320), cy = 480, rad = 240, n = 5;
+        for (var i = 0; i < n; i++) (function (i) { setTimerSpawn(i * 0.15, function () { spawnWheelShip(cx, cy, rad, i, n, i * 0.28); }); })(i);
+      } },
+    // reacting elite: retreats when shot, returns with a denser pulse volley
+    // (PATH retreatReturn, VERB pulse). S2+ — a reactive centerpiece.
+    { name: 'featureReactor', weight: 6, minSector: 1, roles: ['feature'], fn: function (rng) {
+        var ax = G.anchorX || W / 2;
+        setTimerSpawn(0.2, function () { spawnReactor(ax); });
+        for (var i = 0; i < 3; i++) (function (i) { setTimerSpawn(1.0 + i * 0.5, function () { spawnWeaver(220 + i * 200, 0, i); }); })(i);
+      } },
+    // ---- BREATHERS — short, sparse, gold-heavy; the valley ----
+    { name: 'breatherGold', weight: 7, minSector: 0, roles: ['breather'], fn: function (rng) {
+        for (var g = 0; g < 10; g++) spawnGold(150 + rng() * (W - 300), 200 + rng() * 500, 1, 0.7);
+        setTimerSpawn(0.3, function () { spawnDarter(300, 0, W + 160); });
+        setTimerSpawn(0.9, function () { spawnDarter(W - 300, 0, -160); });
+      } },
+    { name: 'breatherStragglers', weight: 5, minSector: 1, roles: ['breather'], fn: function (rng) {
+        for (var g = 0; g < 8; g++) spawnGold(180 + rng() * (W - 360), 220 + rng() * 400, 1, 0.6);
+        setTimerSpawn(0.4, function () { spawnWeaver(W / 2, 0, 0); });
+        setTimerSpawn(1.0, function () { spawnMoth(W / 2); });
+      } },
+    // ---- CRESCENDOS — densest, previews the boss's lead verb ----
+    { name: 'crescendoWall', weight: 8, minSector: 0, roles: ['crescendo'], fn: function (rng) {
+        var ax = G.anchorX || W / 2;
+        setTimerSpawn(0.0, function () { spawnMidship(clampX(ax, 260)); });
+        setTimerSpawn(0.5, function () { spawnTurret(clampX(ax - 220, 180), 320); });
+        setTimerSpawn(0.7, function () { spawnTurret(clampX(ax + 220, 180), 320); });
+        for (var i = 0; i < 4; i++) (function (i) { setTimerSpawn(1.2 + i * 0.3, function () { spawnDarter(160 + i * 30, 0, W + 160); spawnDarter(W - 160 - i * 30, 0, -160); }); })(i);
+      } },
+    { name: 'crescendoCarrier', weight: 5, minSector: 1, roles: ['crescendo'], fn: function (rng) {
+        setTimerSpawn(0, function () { spawnCarrier(G.rank); });
+        setTimerSpawn(0.6, function () { spawnMidship(W / 2); });
+      } },
+    { name: 'crescendoApostate', weight: 4, minSector: 2, roles: ['crescendo', 'feature'], fn: function (rng) {
         setTimerSpawn(0.3, function () { spawnApostate(G.rank); });
+      } },
+    // drifting rain curtain layered under a midship crest (VERB rain). S2+ ambience.
+    { name: 'crescendoRain', weight: 5, minSector: 1, roles: ['crescendo'], fn: function (rng) {
+        var ax = G.anchorX || W / 2;
+        setTimerSpawn(0.0, function () { spawnRainmaker(ax); });
+        setTimerSpawn(0.5, function () { spawnMidship(clampX(ax, 260)); });
+        for (var i = 0; i < 2; i++) (function (i) { setTimerSpawn(1.2 + i * 0.5, function () { spawnDarter(220 + i * 200, 0, W + 160); }); })(i);
       } }
   ];
   Game.bosses = { warden: spawnWarden, warden2: spawnWarden2, sovereign: spawnBoss };
@@ -2764,8 +3102,16 @@
     drawBackground();
     var m = G.mode;
     if (m !== 'title') {
+      // PASS A — additive base: everything the opaque bullet bodies draw over
+      // (explosions included, so a bullet frozen over a white blast still reads).
       drawHazards();
-      drawGold(); drawEnemies(); drawShots(); drawBullets(); drawParticles();
+      drawGold(); drawEnemies(); drawShots(); drawParticles(); drawBulletHalos();
+      // PASS B — enemy-bullet opaque bodies (premultiplied-over)
+      GL.blendPremult();
+      drawBulletBodies();
+      // PASS C — additive over the bullets: allies + the player (and its core
+      // gem) always read on top of the danmaku.
+      GL.blendAdditive();
       drawDecoy(); drawClones(); drawRavens(); drawGungnir(); drawRaBeam(); drawWraiths(); drawHammers(); drawDebris();
       drawDashGhosts();
       if (G.player.alive) drawPlayer();
@@ -2863,26 +3209,28 @@
       }
     });
   }
-  function drawBullets() {
+  // Enemy bullets draw in two passes. PASS A (additive): a dim family-colour
+  // halo UNDER the body — glow without eating the outline. PASS B (premult):
+  // the opaque glassy body whose dark #231A20 outline survives the crest.
+  function drawBulletHalos() {
     Engine.bullets.forEach(function (b) {
-      var fl = b.flash > 0 ? b.flash / 0.1 : 0;
-      var sc = 1 + 0.6 * fl;
-      var slow = b.slowT > 0 ? 0.6 : 1; // tint frozen bullets slightly
-      var br = b.r, bg = b.g * (slow < 1 ? 1 : 1), bb = b.b;
-      if (b.shape === 1) {
-        var ang = b.dir + Math.PI / 2;
-        GL.draw(GL.SPR.GLOW, b.x, b.y, b.scale * 1.6 * sc, b.scale * 3.6 * sc, ang, br, bg, bb, 0.5);
-        GL.draw(GL.SPR.NEEDLE, b.x, b.y, b.scale * 1.1 * sc, b.scale * 3.0 * sc, ang, br, bg, bb, 1);
-        GL.draw(GL.SPR.NEEDLE, b.x, b.y, b.scale * 0.5 * sc, b.scale * 2.0 * sc, ang, 1, 1, 1, 0.9 + fl);
-      } else if (b.shape === 2) {
-        GL.draw(GL.SPR.GLOW, b.x, b.y, b.scale * 3.2 * sc, b.scale * 3.2 * sc, 0, br, bg, bb, 0.5);
-        GL.draw(GL.SPR.RINGBULLET, b.x, b.y, b.scale * 2.4 * sc, b.scale * 2.4 * sc, b.age * 2, br, bg, bb, 1);
-        GL.draw(GL.SPR.RINGBULLET, b.x, b.y, b.scale * 1.4 * sc, b.scale * 1.4 * sc, 0, 1, 1, 1, 0.5 + fl);
-      } else {
-        GL.draw(GL.SPR.GLOW, b.x, b.y, b.scale * 3.6 * sc, b.scale * 3.6 * sc, 0, br, bg, bb, 0.55 + fl * 0.4);
-        GL.draw(GL.SPR.CORE, b.x, b.y, b.scale * 1.5 * sc, b.scale * 1.5 * sc, 0, 1, 1, 1, 0.95);
+      var R = b.scale, fl = b.flash > 0 ? b.flash / 0.1 : 0;
+      GL.draw(GL.SPR.GLOW, b.x, b.y, R * 2.5, R * 2.5, 0, b.r, b.g, b.b, 0.24 + fl * 0.35);
+      if (b.slowT > 0) GL.draw(GL.SPR.RING, b.x, b.y, R * 3.2, R * 3.2, 0, 0.6, 0.9, 1.0, 0.25);
+    });
+  }
+  function drawBulletBodies() {
+    Engine.bullets.forEach(function (b) {
+      var R = b.scale, fl = b.flash > 0 ? b.flash / 0.1 : 0, sc = 1 + 0.32 * fl;
+      var r = b.r, g = b.g, bl = b.b;
+      switch (b.fam) {
+        case 1: GL.draw(GL.SPR.GRING, b.x, b.y, R * 2 * sc, R * 2 * sc, b.age * b.spin, r, g, bl, 1); break;   // ring
+        case 2: GL.draw(GL.SPR.KUNAI, b.x, b.y, R * 0.95, R * 2.3, b.dir + Math.PI / 2, r, g, bl, 1); break;   // kunai
+        case 3: GL.draw(GL.SPR.SHARD, b.x, b.y, R * 1.4, R * 2.0, b.dir + Math.PI / 2, r, g, bl, 1); break;    // shard
+        case 4: GL.draw(GL.SPR.PELLET, b.x, b.y, R * 2 * sc, R * 2 * sc, 0, r, g, bl, 1); break;               // pellet
+        case 5: GL.draw(GL.SPR.STAR, b.x, b.y, R * 2, R * 2, b.age * b.spin, r, g, bl, 1); break;              // star
+        default: GL.draw(GL.SPR.ORB, b.x, b.y, R * 2 * sc, R * 2 * sc, b.age * b.spin, r, g, bl, 1);           // orb
       }
-      if (b.slowT > 0) GL.draw(GL.SPR.RING, b.x, b.y, b.scale * 4 * sc, b.scale * 4 * sc, 0, 0.6, 0.9, 1.0, 0.25);
     });
   }
   function drawParticles() {
@@ -2904,12 +3252,15 @@
     var p = G.player;
     var dim = (p.invuln > 0 && Math.floor(p.blink * 20) % 2 === 0) ? 0.35 : 1;
     var kick = p.recoil > 0 ? p.recoil * 60 : 0;
-    GL.draw(GL.SPR.GLOW, p.x, p.y + 34 + kick, 60, 90 + kick * 2, 0, 0.3, 0.8, 1.0, 0.5 * dim + (p.recoil > 0 ? 0.4 : 0));
-    GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, 74, 74, 0, 0.7, 0.95, 1.0, dim);
-    GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, 46, 46, 0, 1, 1, 1, 0.8 * dim);
-    GL.draw(GL.SPR.GLOW, p.x, p.y, 26, 26, 0, 1, 1, 1, 0.9 * dim);
-    GL.draw(GL.SPR.CORE, p.x, p.y, 10, 10, 0, 1, 1, 1, dim);
-    if (Engine.focusHeld()) GL.draw(GL.SPR.RING, p.x, p.y, 60, 60, G.time * 2, 0.6, 1, 1, G.dash.cd > 0 ? 0.4 : 0.9); // dimmer ring = dash on cooldown
+    // Ship visual ~100px (a presence). Hitbox is UNCHANGED and tiny (PLAYER_R=4)
+    // — the bright core gem below is drawn separately so the player learns what
+    // actually collides.
+    GL.draw(GL.SPR.GLOW, p.x, p.y + 42 + kick, 78, 118 + kick * 2, 0, 0.3, 0.8, 1.0, 0.5 * dim + (p.recoil > 0 ? 0.4 : 0));
+    GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, 100, 100, 0, 0.7, 0.95, 1.0, dim);
+    GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, 62, 62, 0, 1, 1, 1, 0.8 * dim);
+    GL.draw(GL.SPR.GLOW, p.x, p.y, 30, 30, 0, 1, 1, 1, 0.9 * dim);
+    GL.draw(GL.SPR.CORE, p.x, p.y, 13, 13, 0, 1, 1, 1, dim);           // the hitbox gem — read this
+    if (Engine.focusHeld()) GL.draw(GL.SPR.RING, p.x, p.y, 78, 78, G.time * 2, 0.6, 1, 1, G.dash.cd > 0 ? 0.4 : 0.9); // dimmer ring = dash on cooldown
   }
 
   // ---------------------------------------------------------------------

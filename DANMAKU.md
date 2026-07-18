@@ -5,6 +5,14 @@ The pattern-design standard. ART.md governs how the game looks; this governs how
 this document exists to kill: "a lot of bullets" fired individually at the player on
 flat cooldowns. That is a shooting gallery, not a danmaku.
 
+**Identity note.** HUBRIS borrows danmaku *craft* — pattern authorship, visual
+flair, hectic density — not the danmaku *loop*. The gameplay loop is Jamestown ×
+Hades: god-boon drafts, build synergy, the cancel-to-gold economy. Do not import
+score-chaining, rank meters, lives/spellcard bonuses, or graze-scoring metas;
+graze keeps feeding what it already feeds. When a danmaku convention conflicts
+with the roguelite loop, the loop wins — the patterns exist to make the builds
+feel incredible, not the other way around.
+
 ## The Three Laws
 
 **1. Bullets form shapes, not noise.** The default enemy volley is *unaimed authored
@@ -23,6 +31,14 @@ pattern has no rhythm.
 ring-shape orbs, 120–200 px/s — the *terrain*) with a fast light element (needles,
 380–520 px/s — the *pressure*). One speed = one dodge = boring. The player should be
 reading slow geometry while flicking away from fast accents.
+
+Speed is a full spectrum, not two constants: define named tiers (crawl ~90 / slow
+~160 / mid ~260 / fast ~420 / whip ~560 px/s, pre-`gSpeed`) selected in the verbs
+like size tiers. And use speed *dynamics* — the engine already integrates
+accel/angVel: stall-and-bloom rings (flower), bullets that launch fast and decay
+into drifting terrain, successive rings fired at stepped speeds so they interleave
+into moving lattices, chasers that accelerate down a lane. A pattern whose bullets
+all fly at one constant speed forever should be a deliberate choice, not the default.
 
 ## Pattern grammar (new Patterns verbs)
 
@@ -115,9 +131,14 @@ from popcorn to boss with almost nothing between.
 
 A boss fight is a *setlist*, not a stat bar. Every boss = **5–6 named phases**
 (spellcard style), each announced on the HUD with the boss health bar segmented per
-phase. Within a phase the boss cycles **2–3 distinct attacks** on its fire script —
+phase. Within a phase the boss runs **2–3 distinct attacks** on its fire script —
 so a full fight shows 12–15 different attacks, and no two phases share a geometry
-verb as their lead. Phase transitions are events: full bullet cancel to gold (feeds
+verb as their lead. Early phases may *cycle* their attacks; from mid-fight onward
+attacks **layer simultaneously**: a wide unaimed geometry claiming area (rings,
+walls, wheels) with an aimed attack threading through it (seeker bursts, tracking
+lances) — the ring forces you to route, the aimed shot punishes routing lazily.
+Never two aimed attacks at once (unreadable); never area-coverage alone past
+mid-fight (walkable). The mix is the fight. Phase transitions are events: full bullet cancel to gold (feeds
 the APOTHEOSIS economy), flash, name card, ~1s breath, then the new composition.
 Escalate by *complexity*, not just density: early phases single geometry, mid phases
 two-speed layers, late phases add the accent + a moving emitter; the final phase is
@@ -203,6 +224,130 @@ is a *named, hand-tuned arrangement*, playtested at 60Hz. Randomness may choose
 offsets — it must never generate geometry. No random bullet directions in new
 content; retire `P.spray` from enemy fire (god VFX may keep it). If a pattern needs
 unpredictability, author it: rotate the gap, drift the lane, alternate the mirror.
+
+## Level design: the sector is the composition
+
+The arrangement principle scales up: a sector is an authored difficulty arc, not N
+rolls on a flat wave pool. Wave slots have **roles**, and RNG fills each slot only
+from arrangements *tagged* for that role and sector — runs stay varied, the arc
+stays authored:
+
+1. **Opener** — light mirrored formation, states the sector's motif.
+2. **Build** ×2–3 — standard arrangements, alternating anchors.
+3. **Feature** — midship/elite centerpiece.
+4. **Breather** — short, sparse, gold-heavy; the valley that makes the next crest
+   read. Mandatory: density must breathe at the sector scale, not just inside waves.
+5. **Crescendo** — the sector's densest arrangement, previewing the boss's lead verb.
+6. **Boss.**
+
+Each sector leans on a distinct subset of verbs/paths/tiers so sectors feel like
+different songs: Sector 1 teaches (single geometries, wide gaps, slow tiers);
+Sector 2 combines (two-speed layers, flank paths, first snakes); Sector 3 is full
+articulation (layered compositions, speed dynamics, tightest gaps). Escalation
+across sectors = complexity first, numbers second — same law as rank.
+
+## Environments: the world under the fight
+
+Reference danmaku are never fought over a void — there is a *place* scrolling
+underneath: hull plating, station architecture, coastlines, debris weather. The
+environment is part of level construction, same as waves:
+
+- **Each sector is a place** with an environment identity (palette, architecture,
+  ambient motion) matching its pantheon/motif and its verb lean — the sector should
+  be recognizable from a background-only screenshot. Storybook painted backdrops
+  (ART.md, Codex prompts 24–26) set the identity; in-engine parallax makes it live.
+- **Parallax layers** (2–3): deep field (slow), structure layer (mid — hulls,
+  temples, colonnades drifting past), near-debris/particle weather (fast, sparse).
+  Procedural now with drop-in slots for painted layers later, same pattern as
+  sprites.
+- **The background is choreographed with the slot arc**: opener reveals the place;
+  feature waves get a set-piece (a structure or huge silhouette crossing under the
+  fight); breathers let the environment breathe too (brightest, calmest moment);
+  crescendo darkens/accelerates the layers; the boss arrives *from* the
+  environment, announced by it (shadow first, then the fight).
+- **Readability is law**: the environment loses every conflict with bullets.
+  Ground layers stay in the dim band (`#05080b` doctrine, low-saturation), never
+  additive-bright, never in the enemy warm/magenta bullet band; big set-pieces
+  dim further while a crest is live. The freeze-gate test includes the background.
+
+## Music: the level's pulse
+
+There is currently no music (sfx.js is one-shot synth SFX only). Build a procedural
+WebAudio score — same doctrine as sprites/backdrops: synth now, drop-in slots for
+authored audio later.
+
+- **Each sector has a theme** in its environment's identity (mode, tempo, timbre
+  match the pantheon/place — the sector should be recognizable eyes-closed). Title
+  and each boss get their own; boss themes escalate with phases.
+- **Layered stems, driven by the slot arc**: pad/drone base, pulse layer, full-kit
+  crest layer. Breathers strip to the pad (the calm is audible), builds add pulse,
+  crescendos and boss phases run the full stack. Transitions crossfade on wave-slot
+  boundaries, never mid-phrase hard cuts.
+- **The loop's moments get stings**: APOTHEOSIS opens the filter / lifts the key
+  for its duration (the payday should *sound* golden); boss phase transitions get
+  the name-card hit; pause ducks everything, the shop is its own quiet variant.
+- **Mix law**: gameplay SFX carry information (hits, cancels, warnings) — music
+  never masks them; keep the score mid-low band and give SFX the top. Music clock
+  is real-time WebAudio scheduling (not the fixed-step sim), paused/ducked with
+  game pause.
+- **Optional, if cheap**: expose the beat clock so wave scripts can quantize wave
+  starts/windups to bar boundaries — choreography that lands on the beat reads as
+  intentional even when nobody can say why.
+
+## Damage economy
+
+Danmaku choreography and roguelite damage scaling are in tension: an over-curve
+player can delete emitters before a pattern exists. Resolve it by role, not by
+nerfing the player:
+
+- **Popcorn is rhythm, never a wall**: dies to a breath of the torrent (≤ ~0.3s of
+  focused fire) at *any* power level. Its job is kill-cadence and formation
+  spectacle, so its HP never scales far.
+- **Midships/elites carry the HP budget**: tuned to survive roughly 60–75% of their
+  arrangement under expected on-curve DPS for that sector — the pattern gets its
+  stage time, and killing the carrier early is earned, not default.
+- **Enemy HP tracks expected player growth** (sector, rank, drafts taken), not flat
+  multipliers. Power growth should buy *pace and overkill spectacle*, not skipped
+  choreography; a far-over-curve player shreds — let them, the next sector catches it.
+- **Interruption is the reward**: killing an emitter ends its future fire but never
+  despawns bullets already in flight (no free screen-clears from popcorn kills); a
+  midship death cancels *its own* remaining pattern to gold as an explicit payoff.
+- **APOTHEOSIS is the danmaku dividend**: cancel-to-gold means the denser the
+  screen, the bigger the payday. Tune arrangements so crests are the natural
+  APOTHEOSIS moment — the economy must reward sitting in the sauce, not waiting
+  it out. Boss phase transitions (full cancel) are scheduled paydays on the same
+  curve.
+- **Bullets are the threat**: patterns kill, bodies bump. No arrangement may deal
+  unavoidable damage — the freeze-gate lane rule applies at every crest, and any
+  contact damage stays a minor, readable penalty rather than a hidden killer.
+
+Boss phase HP segments follow the same law: sized to expected sector DPS so each
+spellcard gets its stage time, with a generous timeout that advances the phase
+anyway (no stalemates) — details in the boss section, implemented in pass B.
+
+## Score as homage: the HUBRIS meter
+
+A light tribute to the genre's score culture that pays out in the loop's own
+currency, not a parallel one. Skill = flying closer to danger than you need to —
+which is the game's title.
+
+- **HUBRIS meter**: a small multiplier (×1.0 → ×2.0 in steps) on all gold earned.
+  Built by graze, point-blank kills, and formation wipes; taking a hit knocks it
+  down one step (never to zero — no chain-drop despair). It makes the skill loop
+  and the economy the same loop: the way you get rich is the way you show off.
+  APOTHEOSIS cashes its cancel-gold at the current multiplier — build hubris in
+  the crest, then cash the crest.
+- **Named skill events**, announced small with a gold sting: FORMATION WIPE (whole
+  formation before exit), PHASE SEIZED (boss phase beaten before its timeout),
+  UNTOUCHED (wave cleared hitless). Homage to spellcard captures without the
+  scorekeeping.
+- **Run tally**: end-of-run (win or death) arcade tally screen — waves, grazes,
+  wipes, phases seized, peak HUBRIS — folded into one final number persisted as
+  best-in-meta (localStorage). A high score on the title screen, because the
+  genre deserves the nod.
+- **Bounds (binding)**: no chain timers, no rank meter, nothing gated behind score,
+  HUD presence stays small (meter near the gold readout). It flavors the economy;
+  it never becomes the game.
 
 ## Rank & sector escalation
 

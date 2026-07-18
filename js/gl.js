@@ -26,7 +26,17 @@
     SHIP_POP: 9,    // popcorn darter
     SHIP_GUN: 10,   // gunship
     SHIP_MID: 11,   // warden / midboss
-    SHIP_BOSS: 12   // gilded sovereign
+    SHIP_BOSS: 12,  // gilded sovereign
+    // enemy-bullet families (opaque glassy bodies drawn in the premult pass;
+    // real silhouettes with a dark #231A20 outline that survives bloom). These
+    // cells store colour, not a white alpha mask: body is a mid-grey that tints
+    // to the family hue, highlights are white, the outline is baked near-black.
+    ORB: 13,        // glass ball: dark outline, saturated body, off-centre specular
+    GRING: 14,      // hollow thick glass rim
+    KUNAI: 15,      // oriented edged needle with a bright spine
+    SHARD: 16,      // oriented diamond / petal
+    PELLET: 17,     // small hard dot, bright rim
+    STAR: 18        // 4-point spark (slow spin)
   };
 
   var gl = null;
@@ -190,9 +200,9 @@
 
   var atlasTex = null;
   var regions = [];      // index -> [u0, v0, du, dv]
-  var ATLAS_SIZE = 512;
+  var ATLAS_SIZE = 1024;
   var CELL = 128;
-  var COLS = 4;
+  var COLS = 8;
 
   // straight-alpha ImageData -> premultiplied bytes (transparent = pure black),
   // required because the renderer blends ONE,ONE and the shader samples rgb.
@@ -440,6 +450,90 @@
       ctx.fillStyle = 'rgba(255,255,255,0.95)';
       hexPath(ctx, r * 0.18);
       ctx.fill();
+    });
+
+    // ---- enemy-bullet family cells (coloured, drawn in the premult pass) -----
+    // Body grey tints to the family hue; white marks stay hot; #231A20 outline
+    // stays dark under any tint so the silhouette reads over the brightest crest.
+    var INK = '#231A20';
+    var TAUL = Math.PI * 2;
+
+    // ORB — glass ball: graded body, dark rim, off-centre specular.
+    draw(GL.SPR.ORB, function (ctx, r) {
+      var br = r * 0.9;
+      var g = ctx.createRadialGradient(-br * 0.28, -br * 0.30, br * 0.08, 0, 0, br);
+      g.addColorStop(0.0, 'rgba(255,255,255,1)');
+      g.addColorStop(0.34, 'rgba(226,226,226,1)');
+      g.addColorStop(0.80, 'rgba(158,158,158,1)');
+      g.addColorStop(1.0, 'rgba(120,120,120,1)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, br, 0, TAUL); ctx.fill();
+      ctx.strokeStyle = INK; ctx.lineWidth = r * 0.15; ctx.beginPath(); ctx.arc(0, 0, br - r * 0.06, 0, TAUL); ctx.stroke();
+      var sg = ctx.createRadialGradient(-br * 0.30, -br * 0.34, 0, -br * 0.30, -br * 0.34, br * 0.36);
+      sg.addColorStop(0, 'rgba(255,255,255,1)'); sg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(-br * 0.30, -br * 0.34, br * 0.36, 0, TAUL); ctx.fill();
+    });
+
+    // GRING — hollow thick glass rim (zoning bullet).
+    draw(GL.SPR.GRING, function (ctx, r) {
+      var ro = r * 0.9, ri = r * 0.5;
+      ctx.strokeStyle = INK; ctx.lineWidth = r * 0.12;
+      ctx.beginPath(); ctx.arc(0, 0, ro - r * 0.02, 0, TAUL); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, ri, 0, TAUL); ctx.stroke();
+      var rw = (ro + ri) / 2;
+      ctx.strokeStyle = 'rgba(180,180,180,1)'; ctx.lineWidth = (ro - ri) * 0.72;
+      ctx.beginPath(); ctx.arc(0, 0, rw, 0, TAUL); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = (ro - ri) * 0.30; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(0, 0, rw, -Math.PI * 0.85, -Math.PI * 0.35); ctx.stroke();
+      ctx.lineCap = 'butt';
+    });
+
+    // KUNAI — oriented edged needle (cell nose UP), bright spine.
+    draw(GL.SPR.KUNAI, function (ctx, r) {
+      ctx.fillStyle = 'rgba(150,150,150,1)';
+      ctx.beginPath();
+      ctx.moveTo(0, -r * 0.95); ctx.lineTo(r * 0.26, r * 0.35); ctx.lineTo(0, r * 0.9); ctx.lineTo(-r * 0.26, r * 0.35);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = INK; ctx.lineWidth = r * 0.12; ctx.lineJoin = 'round'; ctx.stroke();
+      var g = ctx.createLinearGradient(0, -r, 0, r);
+      g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.55, 'rgba(255,255,255,0.85)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g; ctx.fillRect(-r * 0.07, -r * 0.9, r * 0.14, r * 1.7);
+    });
+
+    // SHARD — oriented diamond / petal (cell nose UP).
+    draw(GL.SPR.SHARD, function (ctx, r) {
+      var g = ctx.createLinearGradient(-r * 0.5, 0, r * 0.5, 0);
+      g.addColorStop(0, 'rgba(140,140,140,1)'); g.addColorStop(0.5, 'rgba(220,220,220,1)'); g.addColorStop(1, 'rgba(140,140,140,1)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(0, -r * 0.92); ctx.lineTo(r * 0.5, 0); ctx.lineTo(0, r * 0.92); ctx.lineTo(-r * 0.5, 0);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = INK; ctx.lineWidth = r * 0.12; ctx.lineJoin = 'round'; ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.beginPath(); ctx.moveTo(0, -r * 0.62); ctx.lineTo(r * 0.14, -r * 0.1); ctx.lineTo(0, r * 0.2); ctx.lineTo(-r * 0.14, -r * 0.1); ctx.closePath(); ctx.fill();
+    });
+
+    // PELLET — small hard dot with a bright rim (popcorn filler).
+    draw(GL.SPR.PELLET, function (ctx, r) {
+      var br = r * 0.78;
+      ctx.fillStyle = 'rgba(170,170,170,1)'; ctx.beginPath(); ctx.arc(0, 0, br, 0, TAUL); ctx.fill();
+      ctx.strokeStyle = INK; ctx.lineWidth = r * 0.14; ctx.beginPath(); ctx.arc(0, 0, br - r * 0.05, 0, TAUL); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = r * 0.14; ctx.beginPath(); ctx.arc(0, 0, br * 0.62, 0, TAUL); ctx.stroke();
+      radial(ctx, br * 0.5, [[0, 'rgba(255,255,255,1)'], [1, 'rgba(255,255,255,0)']]);
+    });
+
+    // STAR — 4-point spark (slow spin), dark-edged with a hot core.
+    draw(GL.SPR.STAR, function (ctx, r) {
+      ctx.fillStyle = 'rgba(210,210,210,1)';
+      ctx.beginPath();
+      for (var a = 0; a < 8; a++) {
+        var ang = a * Math.PI / 4 - Math.PI / 2;
+        var rr = (a % 2 === 0) ? r * 0.92 : r * 0.32;
+        var px = Math.cos(ang) * rr, py = Math.sin(ang) * rr;
+        if (a === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = INK; ctx.lineWidth = r * 0.10; ctx.lineJoin = 'round'; ctx.stroke();
+      radial(ctx, r * 0.5, [[0, 'rgba(255,255,255,1)'], [0.6, 'rgba(255,255,255,0.9)'], [1, 'rgba(255,255,255,0)']]);
     });
 
     function roundRectPath(ctx, x, y, w, h, rr) {
@@ -767,6 +861,15 @@
   }
 
   GL.stats = function () { return { instances: instCount, drawCalls: drawCallCount }; };
+
+  // ---- blend-pass control (enemy-bullet opaque pass) ------------------------
+  // The scene draws additively (ONE,ONE). Enemy bullets draw in their own pass
+  // with premultiplied-over blending (ONE, ONE_MINUS_SRC_ALPHA) so their dark
+  // #231A20 outlines occlude the glow behind them and survive the bloom crest.
+  // Each call flushes the pending batch, then switches blend for what follows.
+  GL.flush = function () { flushSprites(); };
+  GL.blendPremult = function () { flushSprites(); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); };
+  GL.blendAdditive = function () { flushSprites(); gl.blendFunc(gl.ONE, gl.ONE); };
 
   // ---- init -----------------------------------------------------------------
 

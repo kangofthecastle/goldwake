@@ -68,6 +68,21 @@ into sprays on death) · **NIGHT MARKET** (shop prices −30%). Each sector card
 offers an optional **LABOR** — accept for +1 extra affix and +40% enemy HP, and
 clearing that boss pays **3 guaranteed-epic boons + 300 gold**.
 
+**How enemies fight.** Enemies are danmaku actors, not a shooting gallery. Every
+non-boss runs an **authored path** from a small path book (swoop-and-hold, S-curves,
+loops, pendulums, orbits, dive-brakes, flank-rails, hp-triggered retreats) — nothing
+drifts on a straight drop — and a looping **fire script** of timed beats (pose →
+windup flash → volley → rest). The default volley is *unaimed authored geometry*
+(rings with a gap, arc-walls with a safe lane, snaking ribbons, spoke-wheels); aimed
+fire is a rare, telegraphed accent. Squadrons spawn as **mirrored formations** sharing
+one script clock with per-index phase offsets, so a whole flight fires like one
+instrument. A new **MIDSHIP** tier — large held ships running a two-geometry script —
+bridges popcorn and boss; kill one early and its own in-flight pattern cancels to gold.
+Waves are hand-tuned **arrangements** filling an authored per-sector arc (opener →
+builds → feature → breather → crescendo → boss), with the crest anchor alternating
+left/center/right; RNG only picks which arrangement, its mirror, and phase — never the
+geometry itself.
+
 **Enemy variety:** beyond popcorn/gunships, watch for **AEGIS SHIELDBEARERS**
 (front shield — displace them to break it), **WEAVER PAIRS** (bullet-curtain tether),
 **GILDED MIMICS** (disguised as gold — greed bait), **SPLITTERS**, **CHORUS
@@ -198,7 +213,7 @@ tags — each hangs one namespace on `window`.
 | `js/sfx.js` | `window.SFX` | WebAudio-synthesized SFX (no files). Master → lowpass → compressor; lazy context resumed on first gesture. |
 | `js/gl.js` | `window.GL` | WebGL2 renderer. Procedural sprite atlas, instanced additive quad batcher, threshold + separable-gaussian **bloom** at ½/¼ res, chromatic-offset composite (the Apotheosis pulse). |
 | `js/engine.js` | `window.Engine` | Fixed-timestep loop (60 Hz, dt clamped), keyboard input, preallocated **object pools** (4096 bullets / 256 shots / 128 enemies / 2048 particles / 512 gold), circle collision. |
-| `js/patterns.js` | `window.Patterns` | Danmaku emitter toolkit (aimed / fan / ring / spiral / whip / flower / spray), plus global affix scalars (`setGlobal` for DENSE VEIL etc.). |
+| `js/patterns.js` | `window.Patterns` | Danmaku emitter toolkit — legacy (aimed / fan / ring / spiral / whip / flower / spray) plus the **authored-geometry verbs** (`ringGap`, `pulse`, `arcWall`, `snake`, `crossfire`, `wheel`, `rain`, `burstAimed`), six bullet **families** (orb / ring / kunai / shard / pellet / star) with **size + speed tiers** (`o.fam` / `o.tier`), and global affix scalars (`setGlobal` for DENSE VEIL etc.). |
 | `js/run.js` | `window.Run` | **Roguelite structure**: seeded PRNG (mulberry32) + run generation, sector affixes, the **god-boon** draft + shop card UI and composition rules, the god metadata (`Run.GODS`), title / end screens, the localStorage meta layer, and the run-flow state machine. Drives Game; no combat sim. |
 | `js/game.js` | `window.Game` | **Combat / stage layer**: player, the **SPECIAL** weapon + charge meter, enemies, bosses, bullets, the **god-boon effects + enemy status system** (chain/knockback/crit/charm/burn/stun), Apotheosis, scoring, FX, the wave pool, hazards, and all in-combat HUD. Exposes the `Game.*` API that `run.js` calls (incl. `applyBoon`). |
 
@@ -270,3 +285,9 @@ frozen field stays visible behind the neon card UI. **Pause** (P or Esc) freezes
   that pulses during Apotheosis plus a gentle tonemap so highlights roll off.
 - Player fire is cool cyan/white, enemy fire warm/magenta, UI neon cyan + gold —
   the screen reads at a glance even when it's full of bullets.
+- Enemy bullets are **not** additive glow blobs: they draw in their own
+  **premultiplied-over** pass (a dim family-colour halo sits under an opaque glassy
+  body with a baked near-black `#231A20` outline), so every bullet silhouette
+  survives the brightest bloom crest — freeze a frame over a white explosion and the
+  shapes still read. Bullet visuals scale ~1.6× while hitboxes stay tiny; the widened
+  gap is the graze feel.
