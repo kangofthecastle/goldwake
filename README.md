@@ -12,12 +12,23 @@ playfield, a 2D canvas for the HUD/menus, and WebAudio for everything you hear.
 **Double-click `index.html`.** It runs straight from `file://` in any recent
 Chrome, Edge, or Firefox — no local server needed.
 
-- Designed for a **portrait monitor**. Press **F11** for fullscreen; the 1080×1920
-  playfield scales to fill a portrait screen and letterboxes with black pillars on
-  a landscape one.
+- Designed for a **portrait monitor**. Press **F11** (Windows) or **⌃⌘F** (macOS)
+  for fullscreen; the 1080×1920 playfield scales to fill a portrait screen and
+  letterboxes with black pillars on a landscape one.
 - If you see a "needs WebGL2" message, update your browser or enable hardware
   acceleration.
 - Sound starts on your first keypress (browser autoplay policy). Press **M** to mute.
+
+### Custom sprite art
+
+Drop authored PNGs (per `art/PROMPTS.md` §8; transparent ground, player ship
+nose-up, enemies facing down) into `art/sprites/` under their slot names —
+`ship.png`, `enemy-pop.png`, `enemy-gun.png`, `enemy-mid.png`, `enemy-boss.png` —
+and they replace the procedural sprites on next load, with the procedural atlas
+as silent fallback. Over `http://` (and usually Firefox `file://`) that's all;
+for **Chrome via `file://`** run `art/embed-sprites.sh` once to embed the PNGs
+as data URIs in `js/sprites-data.js`. Bullets, telegraphs and FX are not
+overridable — they stay procedural by doctrine.
 
 ## Controls
 
