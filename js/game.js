@@ -96,7 +96,7 @@
       time: 0,
       player: {
         x: W / 2, y: H - 300, alive: true, invuln: 2.0, blink: 0,
-        fireT: 0, respawnT: 0, dead: false, drones: [], recoil: 0, hammerT: 0
+        fireT: 0, respawnT: 0, dead: false, drones: [], recoil: 0, hammerT: 0, edictT: 0
       },
       vaunt: { gauge: (opts.gaugePct || 0) * GAUGE_MAX, active: false, timer: 0, duration: VAUNT_DUR, killCount: 0, mercy: 0, ready: (opts.gaugePct || 0) >= 1 },
       // special weapon
@@ -118,7 +118,9 @@
         odinRaven: false, odinMark: false, odinRavenMark: false, odinGungnir: false,
         wukongClones: false, wukongStaff: false, wukongSpecial: false, wukongChance: false,
         quetzBig: false, quetzGold: false, quetzCircle: false, quetzPierce: false,
-        thorBelt: false, thorFast: false, thorGauntlet: false, thorSkymark: false
+        thorBelt: false, thorFast: false, thorGauntlet: false, thorSkymark: false,
+        guanWide: false, guanOath: false, guanWake: false, guanSpoils: false,
+        jadeOften: false, jadeStun: false, jadeSlow: false, jadeTribute: false
       },
       duos: {
         frozenStorm: false, eclipse: false, worldSerpent: false, deathSentence: false,
@@ -126,7 +128,8 @@
         bloodAndFire: false, typhoonPillar: false, allfathersWrath: false, featheredHeart: false,
         stormfathers: false,
         ragnarok: false, wildHunt: false, fifthSunDawn: false, havocInHeaven: false,
-        frozenTide: false, eternalDevotion: false, stormSurge: false, silentWinter: false
+        frozenTide: false, eternalDevotion: false, stormSurge: false, silentWinter: false,
+        swornBrothers: false, saintOfWar: false, twoThrones: false, godsOfWar: false, peachBanquet: false
       },
       frenzy: { stacks: 0, decayT: 0 },
       thorBuff: 0,
@@ -141,6 +144,10 @@
       debris: [],
       slowFireT: 0,
       hermes: { speed: 0, focus: 0, recharge: 0, graze: 0 },
+      charms: {},
+      charmElite: 1, critBonus: 0, charmShop: 0, noSpill: false, rerollHalf: false, keepMult: false, vauntBonusMul: 1,
+      // ghost dodge (Shift tap-and-release dash; a held Shift is pure focus)
+      dash: { cd: 0, active: 0, dirx: 0, diry: 0, ghosts: [], shiftT: 0, pend: false, pendx: 0, pendy: 0, wasFocus: false },
       // scaling
       stats: { atkDmg: opts.baseDmg || 1, atkRate: 1, spDmg: 1, spRecharge: 1 },
       // retained generics
@@ -367,7 +374,7 @@
   }
   function endVaunt() {
     var v = G.vaunt; v.active = false;
-    var payout = v.killCount * G.mult * VAUNT_BASE;
+    var payout = v.killCount * G.mult * VAUNT_BASE * G.vauntBonusMul;   // IMPERIAL SEAL charm boosts payout
     if (payout > 0) {
       addScore(payout);
       addPopup(W / 2, H * 0.42, 'VAUNT BONUS  +' + commas(Math.floor(payout)), UI_GOLD, 46);
@@ -425,6 +432,8 @@
     else if (g === 'wukong') staffSlam();
     else if (g === 'quetz') skySerpent();
     else if (g === 'thor') giantsBane();
+    else if (g === 'guanyu') redHare();
+    else if (g === 'jade') mandateCurtain();
     else lanceVolley();
     // wukongSpecial fork: living clones echo a small lance volley
     if (G.mods.wukongSpecial) {
@@ -435,13 +444,25 @@
     }
   }
 
+  // The one birthplace of every player-side shot: resets the per-mode fields
+  // (homing / weave / crescent / clone) so a recycled pool slot can never leak
+  // a previous shot's behavior into a new one.
+  function allocShot() {
+    var s = Engine.shots.alloc(); if (!s) return null;
+    s.homing = false; s.turn = 0;
+    s.weave = 0; s.phase = 0;
+    s.cloneShot = false; s.crescent = false;
+    s.markHit = false; s.forceCrit = 0;
+    return s;
+  }
+
   function lanceShot(x, kind, dmg, col) {
-    var s = Engine.shots.alloc(); if (!s) return;
+    var s = allocShot(); if (!s) return;
     s.x = x; s.y = G.player.y - 30; s.vx = 0; s.vy = -1700;
     s.radius = 28; s.scale = 62; s.damage = dmg; s.age = 0; s.life = 0.85;
     s.r = col[0]; s.g = col[1]; s.b = col[2];
-    s.pierce = 999; s.homing = false; s.turn = 0; s.kind = kind;
-    s.faction = 1; s.big = true; s.markHit = false; s.forceCrit = 0;
+    s.pierce = 999; s.kind = kind;
+    s.faction = 1; s.big = true;
     flash(x, G.player.y - 40, col, 120, 0.18);
   }
   function lanceVolley() {
@@ -457,7 +478,7 @@
     lanceShot(G.player.x + 40, 3, d * 0.7, [0.7, 0.9, 1.0]);
   }
   function huntArrow() {
-    var s = Engine.shots.alloc(); if (!s) return;
+    var s = allocShot(); if (!s) return;
     s.x = G.player.x; s.y = G.player.y - 30; s.vx = 0; s.vy = -2000;
     s.radius = 34; s.scale = 80; s.damage = LANCE_DMG * 2.2 * G.stats.spDmg * G.specialR;
     s.age = 0; s.life = 0.8; s.r = 0.7; s.g = 1.0; s.b = 0.3;
@@ -465,11 +486,11 @@
     flash(s.x, s.y, [0.7, 1, 0.3], 150, 0.2);
   }
   function charmMissile() {
-    var s = Engine.shots.alloc(); if (!s) return;
+    var s = allocShot(); if (!s) return;
     s.x = G.player.x; s.y = G.player.y - 30; s.vx = 0; s.vy = -1200;
     s.radius = 24; s.scale = 56; s.damage = LANCE_DMG * 1.2 * G.stats.spDmg;
     s.age = 0; s.life = 1.4; s.r = 1.0; s.g = 0.45; s.b = 0.85;
-    s.pierce = 0; s.kind = 5; s.faction = 1; s.big = true; s.markHit = false; s.forceCrit = 0;
+    s.pierce = 0; s.kind = 5; s.faction = 1; s.big = true;
     flash(s.x, s.y, [1, 0.5, 0.85], 120, 0.2);
   }
   function tidalWave() {
@@ -603,6 +624,46 @@
         if (cdx * cdx + cdy * cdy < hz.r * hz.r) G.slowFireT = 0.4;
         if (hz.timer <= 0) hz.active = false;
       }
+      else if (hz.type === 'redhare') {     // GUAN YU rider — one heavy hit per foe, hurls non-bosses
+        hz.y += hz.vy * dt;
+        if (!hz.trail) hz.trail = [];
+        Engine.enemies.forEach(function (e) {
+          if (e.dying || e.charmed) return;
+          if (Math.abs(e.x - hz.x) < hz.halfW + e.radius * 0.5 && Math.abs(e.y - hz.y) < 100) {
+            if (hz.trail.indexOf(e) < 0) {
+              hz.trail.push(e);
+              killGoldMul = G.mods.guanSpoils ? 1.5 : 1;
+              damageEnemy(e, hz.dmg, false);
+              killGoldMul = 1;
+              if (!e.boss) { pushDisp(e, hz.x, e.y, 520); e.impactDmg = hz.dmg * 0.5; }
+              spark(e.x, e.y, [1, 0.45, 0.3], 8, 400, 30);
+            }
+          }
+        });
+        spark(hz.x + (Math.random() - 0.5) * hz.halfW, hz.y + 40, [1, 0.5, 0.3], 2, 200, 22);
+        if (hz.y < -120 || hz.timer <= 0) hz.active = false;
+      }
+      else if (hz.type === 'redwake') {     // GUAN YU wake — lingering burning lane
+        hz.tick -= dt;
+        if (hz.tick <= 0) {
+          hz.tick = 0.15;
+          Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; if (Math.abs(e.x - hz.x) < hz.halfW + e.radius * 0.5) { damageEnemy(e, hz.dmg, false); applyBurn(e, 14 * G.specialR, 1.0); } });
+          spark(hz.x + (Math.random() - 0.5) * hz.halfW * 1.4, 200 + Math.random() * (H - 400), [1, 0.5, 0.2], 2, 180, 20);
+        }
+        if (hz.timer <= 0) hz.active = false;
+      }
+      else if (hz.type === 'mandate') {     // JADE EMPEROR curtain — heavy pass, Weakens survivors
+        hz.y += hz.vy * dt;
+        Engine.enemies.forEach(function (e) {
+          if (e.dying || e.charmed) return;
+          if (Math.abs(e.y - hz.y) < hz.r) {
+            damageEnemy(e, hz.dmg * dt * 3, false);
+            if (!e.dying) { e.weak = true; e.weakT = 5; }
+            if (G.duos.twoThrones && Math.random() < dt * 4 && !e.dying) chainLightning(e, hz.dmg * 2, false); // TWO THRONES
+          }
+        });
+        if (hz.y > H + hz.r + 40 || hz.timer <= -1) hz.active = false;
+      }
       if (hz.timer <= 0 && hz.type === 'wave') hz.active = false;
     }
   }
@@ -656,6 +717,27 @@
       else if (hz.type === 'chillzone') {
         GL.draw(GL.SPR.GLOW, hz.x, hz.y, hz.r * 2.0, hz.r * 2.0, hz.rot, 0.5, 0.85, 1.0, 0.22);
         GL.draw(GL.SPR.RING, hz.x, hz.y, hz.r * 1.9, hz.r * 1.9, hz.rot, 0.6, 0.9, 1.0, 0.4);
+      }
+      else if (hz.type === 'redhare') {
+        var laneY = (hz.y + H) / 2, laneH = Math.max(0, H - hz.y);
+        GL.draw(GL.SPR.GLOW, hz.x, laneY, hz.halfW * 2.6, laneH, 0, 1, 0.42, 0.28, 0.24);
+        GL.draw(GL.SPR.CORE, hz.x, laneY, hz.halfW * 0.8, laneH, 0, 1, 0.55, 0.32, 0.35);
+        GL.draw(GL.SPR.GLOW, hz.x, hz.y, hz.halfW * 2.6, hz.halfW * 2.6, 0, 1, 0.5, 0.3, 0.75);
+        GL.draw(GL.SPR.SHIP_MID, hz.x, hz.y, hz.halfW * 1.7, hz.halfW * 1.7, hz.rot, 1, 0.5, 0.3, 0.95);
+        GL.draw(GL.SPR.CORE, hz.x, hz.y, hz.halfW * 0.55, hz.halfW * 0.55, 0, 1, 0.9, 0.7, 0.9);
+      }
+      else if (hz.type === 'redwake') {
+        var wa = 0.4 + 0.6 * Math.min(1, hz.timer / hz.dur);
+        GL.draw(GL.SPR.GLOW, hz.x, H / 2, hz.halfW * 2.4, H, 0, 1, 0.4, 0.15, 0.22 * wa);
+        GL.draw(GL.SPR.CORE, hz.x, H / 2, hz.halfW * 0.7, H, 0, 1, 0.55, 0.22, 0.35 * wa);
+      }
+      else if (hz.type === 'mandate') {
+        var ma = 0.7 + 0.3 * Math.sin(G.time * 12);
+        for (var mmx = 60; mmx < W; mmx += 80) {
+          GL.draw(GL.SPR.GLOW, mmx, hz.y, 130, hz.r * 1.5, 0, 0.72, 0.58, 1.0, 0.22 * ma);
+          GL.draw(GL.SPR.CORE, mmx, hz.y, 60, 22, 0, 0.85, 0.72, 1.0, 0.7);
+        }
+        GL.draw(GL.SPR.RING, W / 2, hz.y, W * 0.94, hz.r * 1.2, 0, 0.82, 0.62, 1.0, 0.3);
       }
     }
   }
@@ -878,6 +960,30 @@
     var hz = allocHazard(); if (!hz) return;
     hz.type = 'serpent'; hz.timer = 2.5 * (G.mods.quetzBig ? 1.3 : 1); hz.dur = hz.timer; hz.r = 16; hz.trail = []; hz.hue = 0; hz.x = W / 2; hz.y = 150;
   }
+  // GUAN YU — Red Hare Charge (spectral rider carves a lane bottom → top)
+  function redHare() {
+    var hz = allocHazard(); if (!hz) return;
+    hz.type = 'redhare'; hz.x = G.player.x; hz.y = H + 80; hz.halfW = 75;
+    hz.vy = -(H + 200) / 0.8;                    // full sweep in ~0.8s
+    hz.timer = 1.0; hz.dur = 1.0; hz.trail = [];
+    hz.dmg = LANCE_DMG * 2.6 * G.stats.spDmg * G.specialR;   // single pass ≈ staffSlam ballpark
+    if (G.mods.guanWake) {
+      var wk = allocHazard();
+      if (wk) { wk.type = 'redwake'; wk.x = G.player.x; wk.halfW = 75; wk.timer = 1.5; wk.dur = 1.5; wk.tick = 0; wk.dmg = LANCE_DMG * 0.5 * G.stats.spDmg * G.specialR; }
+    }
+    ringShock(G.player.x, H - 120, [1, 0.4, 0.3], 60, 2600, 0.5);
+    addShake(6);
+  }
+  // JADE EMPEROR — Mandate of Heaven (full-width judgment curtain descends)
+  function mandateCurtain() {
+    var hz = allocHazard(); if (!hz) return;
+    var slow = G.mods.jadeSlow;
+    hz.type = 'mandate'; hz.x = W / 2; hz.y = -200; hz.r = 150;
+    hz.vy = (H + 420) / (slow ? 2.8 : 2.0);      // downward traversal ~2s (2.8s slower)
+    hz.timer = slow ? 3.4 : 2.6; hz.dur = hz.timer; hz.tick = 0;
+    hz.dmg = LANCE_DMG * 0.9 * G.stats.spDmg * G.specialR * (slow ? 1.5 : 1);   // ≈ tidalWave ballpark
+    G.flashAll = Math.max(G.flashAll, 0.16); addShake(4);
+  }
 
   // ---------------------------------------------------------------------
   // ARES — Bloodlust (frenzy) + Phobos & Deimos (Terror wraiths)
@@ -1092,9 +1198,41 @@
     }
     var mv = Engine.readMove();
     var focus = Engine.focusHeld();
+    // Ghost dodge — tap-vs-hold discrimination, dash fires on RELEASE:
+    // Focus engages on press exactly as before. If Shift is released in under
+    // 0.15s AND a direction was held at press time, the dash fires (using the
+    // direction sampled at press). Held past 0.15s = pure focus, never a dash.
+    if (G.dash.cd > 0) G.dash.cd -= dt;
+    if (focus && !G.dash.wasFocus) {                    // Shift press edge
+      G.dash.shiftT = 0;
+      if (mv.x !== 0 || mv.y !== 0) {
+        var pl = Math.hypot(mv.x, mv.y) || 1;
+        G.dash.pend = true; G.dash.pendx = mv.x / pl; G.dash.pendy = mv.y / pl;
+      } else G.dash.pend = false;
+    } else if (focus) {
+      G.dash.shiftT += dt;                              // fixed-step hold timer
+    }
+    if (!focus && G.dash.wasFocus) {                    // Shift release edge
+      if (G.dash.shiftT < 0.15 && G.dash.pend && G.dash.cd <= 0 && G.dash.active <= 0) {
+        G.dash.dirx = G.dash.pendx; G.dash.diry = G.dash.pendy;
+        G.dash.active = 0.14; G.dash.cd = 0.9;          // ~160px over 0.14s, 0.9s cooldown
+        p.invuln = Math.max(p.invuln, 0.35);            // reuse the vaunt-shield i-frame path
+        spark(p.x, p.y, [0.5, 0.95, 1.0], 8, 300, 24);
+        SFX.graze();
+      }
+      G.dash.pend = false;
+    }
+    G.dash.wasFocus = focus;
     var sp = (focus ? PLAYER_FOCUS * (1 + G.hermes.focus) : PLAYER_SPEED * (1 + G.hermes.speed));
     var len = Math.hypot(mv.x, mv.y) || 1;
     p.x += (mv.x / len) * sp * dt; p.y += (mv.y / len) * sp * dt;
+    if (G.dash.active > 0) {
+      G.dash.active -= dt;
+      var DASH_SPEED = 160 / 0.14;
+      p.x += G.dash.dirx * DASH_SPEED * dt; p.y += G.dash.diry * DASH_SPEED * dt;
+      G.dash.ghosts.push({ x: p.x, y: p.y, age: 0 });
+    }
+    for (var gi = G.dash.ghosts.length - 1; gi >= 0; gi--) { G.dash.ghosts[gi].age += dt; if (G.dash.ghosts[gi].age > 0.28) G.dash.ghosts.splice(gi, 1); }
     var m = 40;
     if (p.x < m) p.x = m; if (p.x > W - m) p.x = W - m;
     if (p.y < m) p.y = m; if (p.y > H - m) p.y = H - m;
@@ -1106,7 +1244,11 @@
       else { G.ra.active = false; G.ra.target = null; G.ra.ramp = 0; }
     } else {
       p.fireT -= dt;
-      if (Engine.fireHeld() && p.fireT <= 0) { p.fireT = FIRE_CD / (G.stats.atkRate * frenzyRate() * (G.slowFireT > 0 ? 0.8 : 1)); fireShots(focus); SFX.shot(); }
+      if (Engine.fireHeld() && p.fireT <= 0) {
+        var cad = (G.attackGod === 'guanyu') ? 1.7 : 1;   // crescents: slower, heavier cadence
+        p.fireT = FIRE_CD * cad / (G.stats.atkRate * frenzyRate() * (G.slowFireT > 0 ? 0.8 : 1));
+        fireShots(focus); SFX.shot();
+      }
     }
     if (G.thorBuff > 0) G.thorBuff -= dt;
     if (G.slowFireT > 0) G.slowFireT -= dt;
@@ -1118,6 +1260,24 @@
         throwHammer(false, 5 * G.stats.atkDmg * G.attackR * (G.mods.thorBelt ? 1.4 : 1), 300 * (G.mods.thorBelt ? 1.5 : 1));
       }
     }
+    // Jade Emperor: issue a homing imperial edict every ~3s of firing (1.5s w/ jadeOften)
+    if (G.attackGod === 'jade') {
+      p.edictT -= dt;
+      if (Engine.fireHeld() && p.edictT <= 0) { p.edictT = G.mods.jadeOften ? 1.5 : 3.0; fireEdict(); }
+    }
+  }
+  function fireEdict() {
+    var s = allocShot(); if (!s) return;
+    var target = nearestEnemy(G.player.x, G.player.y - 40);
+    var a = target ? Math.atan2(target.y - (G.player.y - 30), target.x - G.player.x) : UP;
+    var sp = 920;
+    s.x = G.player.x; s.y = G.player.y - 30;
+    s.vx = Math.cos(a) * sp; s.vy = Math.sin(a) * sp;
+    s.radius = 20; s.scale = 46; s.damage = 6.0 * G.stats.atkDmg * G.attackR; s.age = 0; s.life = 2.4;
+    s.r = 0.79; s.g = 0.6; s.b = 1.0;
+    s.pierce = 0; s.homing = true; s.turn = 7.0; s.kind = 7;   // kind 7 = imperial edict
+    s.faction = 0; s.big = false;
+    flash(s.x, s.y, [0.8, 0.6, 1], 100, 0.2);
   }
 
   function streamAngles(n, spread) {
@@ -1129,29 +1289,52 @@
   }
   function fireShots(focus) { fireStreams(G.player.x, G.player.y, focus, 1, false); }
   function fireStreams(px, py, focus, dmgScale, isClone) {
+    // Guan Yu crescents: the player fires them, and clones fire mini ones under SWORN BROTHERS.
+    var guan = (G.attackGod === 'guanyu') || (isClone && G.duos.swornBrothers);
     var n = focus ? 4 : 3;
     if (G.attackGod === 'thor') n = Math.max(1, n - 1);   // Mjolnir: thinned normal stream
+    if (guan) n = focus ? 3 : 2;                          // fewer, broader blades
     var spread = focus ? 0.16 : 0.30;
     var quetz = (G.attackGod === 'quetz');
     if (quetz) spread += 0.16;               // Feathered Winds: wider coverage
+    if (guan) spread = focus ? 0.20 : 0.34;
     var dmg = (focus ? 1.0 : 1.05) * SHOT_DMG * G.stats.atkDmg * dmgScale * (G.thorBuff > 0 ? 1.3 : 1);
+    if (guan) dmg *= 1.7 * G.attackR * (isClone ? 0.55 : 1) * ((G.mods.guanOath && focus) ? 1.3 : 1);
+    var ww = (guan && G.mods.guanWide) ? 1.3 : 1;         // wider crescents
     var angs = streamAngles(n, spread);
     for (var i = 0; i < angs.length; i++) {
-      var s = Engine.shots.alloc(); if (!s) break;
+      var s = allocShot(); if (!s) break;
       var a = UP + angs[i];
       s.x = px + Math.cos(a) * 26; s.y = py + Math.sin(a) * 26 - 20;
-      s.vx = Math.cos(a) * SHOT_SPEED; s.vy = Math.sin(a) * SHOT_SPEED;
-      s.radius = 12; s.damage = dmg; s.age = 0; s.life = 1.6; s.scale = 30;
-      s.pierce = quetz ? (G.mods.quetzPierce ? 2 : 1) : 0; s.homing = false; s.turn = 0; s.kind = 0;
-      s.faction = 0; s.big = false; s.markHit = false; s.forceCrit = 0; s.cloneShot = !!isClone;
-      if (quetz) { s.weave = 1; s.phase = i * 1.3 + Math.random() * 6.28; s.r = 0.4; s.g = 1.0; s.b = 0.7; }
-      else { s.weave = 0; var fr = G.frenzy.stacks / 10; s.r = 0.6 + 0.4 * fr; s.g = 1.0 - 0.7 * fr; s.b = 1.0 - 0.85 * fr; }
+      var spd = SHOT_SPEED * (guan ? 0.8 : 1);
+      s.vx = Math.cos(a) * spd; s.vy = Math.sin(a) * spd;
+      s.radius = guan ? (isClone ? 22 : 30) * ww : 12; s.damage = dmg; s.age = 0; s.life = 1.6; s.scale = guan ? (isClone ? 40 : 56) * ww : 30;
+      s.pierce = guan ? (G.mods.guanWide ? 3 : 2) : (quetz ? (G.mods.quetzPierce ? 2 : 1) : 0);
+      s.kind = guan ? 6 : 0;
+      s.faction = 0; s.big = false; s.cloneShot = !!isClone;
+      s.crescent = guan;
+      if (guan) { s.r = 0.30; s.g = 0.95; s.b = 0.55; }
+      else if (quetz) { s.weave = 1; s.phase = i * 1.3 + Math.random() * 6.28; s.r = 0.4; s.g = 1.0; s.b = 0.7; }
+      else { var fr = G.frenzy.stacks / 10; s.r = 0.6 + 0.4 * fr; s.g = 1.0 - 0.7 * fr; s.b = 1.0 - 0.85 * fr; }
     }
   }
 
   function updateShots(dt) {
     Engine.shots.forEach(function (s) {
       s.age += dt;
+      if (s.homing && s.turn > 0) {                       // Jade edict homing
+        var t = nearestEnemy(s.x, s.y);
+        if (t) {
+          var desired = Math.atan2(t.y - s.y, t.x - s.x);
+          var cur = Math.atan2(s.vy, s.vx);
+          var d = desired - cur;
+          while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU;
+          var mx = s.turn * dt; if (d > mx) d = mx; if (d < -mx) d = -mx;
+          var na = cur + d, spd = Math.hypot(s.vx, s.vy);
+          s.vx = Math.cos(na) * spd; s.vy = Math.sin(na) * spd;
+          if (Math.random() < 0.5) spark(s.x, s.y, [0.8, 0.6, 1], 1, 90, 14);
+        }
+      }
       s.x += s.vx * dt; s.y += s.vy * dt;
       if (s.weave) s.x += Math.sin(s.age * 16 + s.phase) * 340 * dt; // serpentine
       if (s.y < -80 || s.y > H + 60 || s.age > s.life || s.x < -80 || s.x > W + 80) Engine.shots.release(s);
@@ -1163,7 +1346,8 @@
     if (!p.alive || p.invuln > 0 || G.vaunt.active || G.vaunt.mercy > 0) return;
     p.alive = false; p.dead = true; p.respawnT = 1.4;
     G.lives--;
-    G.mult = 1; G.multDecayT = 0; G.vaunt.gauge = Math.max(0, G.vaunt.gauge * 0.3);
+    if (!G.keepMult) { G.mult = 1; G.multDecayT = 0; }   // OATH TABLET charm: multiplier survives death
+    G.vaunt.gauge = Math.max(0, G.vaunt.gauge * 0.3);
     SFX.death();
     for (var i = 0; i < 3; i++) ringShock(p.x, p.y, [1, 0.5, 0.4], 40 + i * 30, 2200, 0.6);
     spark(p.x, p.y, [1, 0.7, 0.4], 40, 520, 40);
@@ -1174,7 +1358,7 @@
       var dx = b.x - p.x, dy = b.y - p.y;
       if (dx * dx + dy * dy < clearR * clearR) { flash(b.x, b.y, [1, 0.7, 0.4], 18, 0.1); Engine.bullets.release(b); }
     });
-    var spill = Math.floor(G.wallet * 0.25);
+    var spill = G.noSpill ? 0 : Math.floor(G.wallet * 0.25);   // HEART SCARAB charm: no spill
     if (spill > 0) {
       G.wallet -= spill;
       var nn = 14;
@@ -1380,11 +1564,11 @@
       e.fireHold -= dt;
       if (e.fireHold <= 0) {
         e.fireHold = G.duos.loveAndWar ? 0.175 : 0.35;   // LOVE AND WAR: charmed allies fire twice as fast
-        var s = Engine.shots.alloc();
+        var s = allocShot();
         if (s) {
           s.x = e.x; s.y = e.y; s.vx = (dx / d) * 900; s.vy = (dy / d) * 900;
           s.radius = 12; s.scale = 26; s.damage = e.ghost ? 0.6 : 1.4; s.age = 0; s.life = 1.2;
-          s.r = 1; s.g = 0.5; s.b = 0.85; s.pierce = 0; s.kind = 2; s.faction = 2; s.big = false; s.markHit = false; s.forceCrit = 0;
+          s.r = 1; s.g = 0.5; s.b = 0.85; s.pierce = 0; s.kind = 2; s.faction = 2; s.big = false;
         }
       }
     } else { e.y -= 60 * dt; if (e.charmT > 0.4) e.charmT = 0.4; } // no targets left — wind down so waves can clear
@@ -1685,7 +1869,7 @@
 
   // THE APOSTATE — elite wielding two gods you didn't pick (enemy-side variants)
   function unpickedGods() {
-    var all = ['zeus', 'poseidon', 'artemis', 'aphrodite', 'ares', 'demeter', 'ra', 'anubis', 'loki', 'odin', 'wukong', 'quetz', 'thor'];
+    var all = ['zeus', 'poseidon', 'artemis', 'aphrodite', 'ares', 'demeter', 'ra', 'anubis', 'loki', 'odin', 'wukong', 'quetz', 'thor', 'guanyu', 'jade'];
     var out = []; for (var i = 0; i < all.length; i++) if (all[i] !== G.attackGod && all[i] !== G.specialGod) out.push(all[i]);
     return out;
   }
@@ -1724,6 +1908,8 @@
       case 'wukong': apostateClones(e); break;
       case 'quetz': Patterns.whip(e.x, e.y, Math.PI / 2, 14, 240 * G.rank, { color: Patterns.LIME, swing: 1.2, curl: 1.6, radius: 11 }); break;
       case 'thor': Patterns.bullet(e.x, e.y, aim - 0.3, 210 * G.rank, { color: Patterns.CYAN, radius: 18, angVel: 0.9, life: 6 }); break;
+      case 'guanyu': Patterns.whip(e.x, e.y, aim, 12, 280 * G.rank, { color: [0.3, 0.95, 0.55], swing: 1.4, curl: 1.5, radius: 14 }); break;
+      case 'jade': Patterns.aimed(e.x, e.y, px, py, 200 * G.rank, { color: Patterns.VIOLET, angVel: 1.1, radius: 14 }); Patterns.fan(e.x, e.y, aim, 5, 0.8, 170 * G.rank, { color: Patterns.VIOLET, radius: 12 }); break;
       default: Patterns.ring(e.x, e.y, 16, 200 * G.rank, { color: Patterns.MAGENTA, radius: 12 });
     }
   }
@@ -1883,6 +2069,8 @@
     if (e.weak) m *= 1.10;
     if (e.terrorT > 0) m *= 1.20;                 // Ares Terror
     if (e.shakenT > 0) m *= 1.10;                 // Ares Shaken (boss)
+    if (e.stunT > 0 && G.mods.jadeStun) m *= 1.25; // Jade: Stunned foes take +25%
+    if ((e.boss || e.elite) && G.charmElite > 1) m *= G.charmElite; // EAGLE FEATHER charm
     dmg *= m;
     if (isCrit) dmg *= (G.mods.artemisMulti ? 4 : 3);
     if (G.communion === 'KEMET' && hasStatus(e)) dmg *= 1.1;   // Rite of Two Suns
@@ -1903,8 +2091,9 @@
     if (reward) {
       addScore(e.score * G.mult);
       addCharge(SP_KILL);
-      var gN = e.gold * (e.elite ? G.aff.eliteGoldMul : 1) * killGoldMul;
+      var gN = e.gold * (e.elite ? G.aff.eliteGoldMul : 1) * killGoldMul * ((G.mods.jadeTribute && e.weak) ? 1.3 : 1);
       spawnGold(e.x, e.y, Math.round(gN), 1);
+      if (G.duos.peachBanquet && hasHazard('mandate')) addGauge(4);      // PEACH BANQUET: peaches feed the gauge
       if (G.attackGod === 'wukong' && Math.random() < (G.mods.wukongChance ? 0.35 : 0.20)) spawnClone();  // Body Beyond Body
       if (G.mods.raSpread && e.burnT > 0) spreadBurn(e);
       if (G.attackGod === 'ares') addFrenzy();                              // Bloodlust
@@ -1962,6 +2151,7 @@
         b.grazed = true; G.graze++;
         addGauge(GRAZE_GAUGE * (1 + G.hermes.graze));
         addScore(GRAZE_SCORE * G.mult);
+        if (G.communion === 'CELESTIAL COURT') addCharge(0.01);   // Harmony of Heaven: grazes feed special charge
         spark(px + dx * 0.4, py + dy * 0.4, [0.6, 0.95, 1], 3, 220, 18);
         SFX.graze();
       }
@@ -1975,8 +2165,10 @@
     }
     var isCrit = false;
     if (s.faction === 0 && G.attackGod === 'artemis' && Math.random() < artemisCritChance()) isCrit = true;
+    if (s.faction === 0 && !isCrit && G.critBonus > 0 && Math.random() < G.critBonus) isCrit = true; // SILVER FLETCHING charm
     if (s.forceCrit) isCrit = true;
     if (G.duos.huntersEye && s.faction === 0 && e.marked) isCrit = true;   // HUNTER'S EYE: marked always crit
+    if (s.crescent && G.duos.godsOfWar && e.terrorT > 0) isCrit = true;    // GODS OF WAR: crescents crit the Terrified
     // Anubis: bosses take +10% (or +20% with mod) below 30% HP
     if (s.faction === 0 && G.attackGod === 'anubis' && e.boss && e.hp < 0.3 * e.maxhp) dmg *= (G.mods.anubisBossDmg ? 1.2 : 1.1);
     if (s.kind === 5) { // charm missile
@@ -1984,8 +2176,19 @@
       else { charmEnemy(e); flash(e.x, e.y, [1, 0.5, 0.85], 60, 0.2); }
       return;
     }
+    if (s.kind === 7) { // Jade imperial edict — Stun the condemned
+      damageEnemy(e, dmg, isCrit);
+      if (!e.boss && !e.dying) { e.stunT = Math.max(e.stunT, 0.9); flash(e.x, e.y, [0.8, 0.6, 1], 70, 0.2); }
+      return;
+    }
     if (s.markHit) { e.marked = true; e.markT = 6; }
+    var wasTerror = e.terrorT > 0;
     damageEnemy(e, dmg, isCrit);
+    if (s.crescent) {
+      s.damage *= 1.18;                                                   // crescent gains power per foe cleaved
+      if (G.duos.saintOfWar && !e.dying) { e.weak = true; e.weakT = 4; }  // SAINT OF WAR: cleaves Weaken
+      if (G.duos.godsOfWar && e.dying && wasTerror) addFrenzy();          // GODS OF WAR: terrified crescent-kills feed frenzy
+    }
     if (isCrit && s.faction === 0 && G.mods.artemisRefund) addCharge(0.1);
     if (s.cloneShot && G.duos.havocInHeaven && !e.dying) chainLightning(e, dmg * 0.5, false); // HAVOC IN HEAVEN (no re-chain)
     if (s.faction === 0) applyAttackGod(e, s, dmg);
@@ -2137,9 +2340,7 @@
       case 'levelS': G.specialR = b.mag; break;  // pom: raise special tier
       case 'duo': Game.applyDuo(b.id); break;
       case 'mod': applyMod(b.id, mag); break;
-      case 'hermes':
-        G.hermes.speed += 0.12 * mag; G.hermes.focus += 0.15 * mag;
-        G.hermes.recharge += 0.25 * mag; G.hermes.graze += 0.5 * mag; break;
+      case 'charm': applyCharm(b.id, mag); break;
       case 'scale': applyScale(b.id, mag); break;
       case 'generic': applyGeneric(b.id, mag); break;
     }
@@ -2150,7 +2351,7 @@
     var prev = G.communion;
     G.communion = null;
     var A = G.attackGod && Run.GODS[G.attackGod], S = G.specialGod && Run.GODS[G.specialGod];
-    var names = { OLYMPUS: 'Accord of Olympus', ASGARD: 'Twilight Oath', KEMET: 'Rite of Two Suns' };
+    var names = { OLYMPUS: 'Accord of Olympus', ASGARD: 'Twilight Oath', KEMET: 'Rite of Two Suns', 'CELESTIAL COURT': 'Harmony of Heaven' };
     // only pantheons with a defined bonus commune (solo pantheons can't)
     if (A && S && A.pantheon === S.pantheon && names[A.pantheon]) G.communion = A.pantheon;
     if (G.communion && G.communion !== prev) {
@@ -2215,9 +2416,40 @@
       case 'thorFast': M.thorFast = true; break;
       case 'thorGauntlet': M.thorGauntlet = true; break;
       case 'thorSkymark': M.thorSkymark = true; break;
+      case 'guanWide': M.guanWide = true; break;
+      case 'guanOath': M.guanOath = true; break;
+      case 'guanWake': M.guanWake = true; break;
+      case 'guanSpoils': M.guanSpoils = true; break;
+      case 'jadeOften': M.jadeOften = true; break;
+      case 'jadeStun': M.jadeStun = true; break;
+      case 'jadeSlow': M.jadeSlow = true; break;
+      case 'jadeTribute': M.jadeTribute = true; break;
     }
   }
   Game.applyDuo = function (id) { G.duos[id] = true; };
+  // passive god CHARMS — collected through the run, one per god, ungated
+  function applyCharm(id, mag) {
+    G.charms[id] = true;
+    switch (id) {
+      case 'charmZeus': G.charmElite += 0.12 * mag; break;                              // +dmg to elites & bosses
+      case 'charmPoseidon': G.up.magnet += 0.5 * mag; break;                            // +magnet radius
+      case 'charmArtemis': G.critBonus += 0.06 * mag; break;                            // +crit chance (all attacks)
+      case 'charmAphrodite': G.charmShop += 0.15 * mag; break;                          // shop discount
+      case 'charmAres': G.stats.atkDmg += 0.10 * mag; break;                            // +attack damage
+      case 'charmDemeter': G.up.goldWorth += 0.20 * mag; break;                         // +gold value
+      case 'charmRa': G.stats.spRecharge += 0.20 * mag; break;                          // +special recharge
+      case 'charmAnubis': G.noSpill = true; break;                                      // death spills no gold
+      case 'charmLoki': G.hermes.graze += 0.35 * mag; break;                            // +graze gauge gain
+      case 'charmOdin': G.rerollHalf = true; break;                                     // rerolls half price
+      case 'charmThor': G.stats.spDmg += 0.15 * mag; break;                             // +special damage
+      case 'charmWukong': G.hermes.speed += 0.12 * mag; G.hermes.focus += 0.15 * mag; break; // +move / focus speed
+      case 'charmQuetz': G.up.vdur += 1.2 * mag; break;                                 // +vaunt duration
+      case 'charmGuanyu': G.keepMult = true; break;                                     // multiplier survives death
+      case 'charmJade': G.vauntBonusMul += 0.30 * mag; break;                           // +vaunt bonus payout
+    }
+  }
+  Game.rerollHalf = function () { return !!(G && G.rerollHalf); };
+  Game.shopDiscount = function () { return G ? G.charmShop : 0; };
   function applyScale(id, mag) {
     switch (id) {
       case 'atkdmg': G.stats.atkDmg += 0.15 * mag; break;
@@ -2255,7 +2487,7 @@
     if (G.up.vdur) out.push('VAUNT +' + G.up.vdur.toFixed(1) + 's');
     if (G.up.multCap > 5) out.push('CAP x' + G.up.multCap);
     if (G.up.hitboxMul < 1) out.push('PINPOINT');
-    if (G.hermes.speed) out.push('HERMES');
+    if (Run.CHARMS) { for (var ck in G.charms) { if (G.charms[ck] && Run.CHARMS[ck]) out.push('◈ ' + Run.CHARMS[ck].name); } }
     return out;
   };
 
@@ -2354,6 +2586,7 @@
       drawHazards();
       drawGold(); drawEnemies(); drawShots(); drawBullets(); drawParticles();
       drawDecoy(); drawClones(); drawRavens(); drawGungnir(); drawRaBeam(); drawWraiths(); drawHammers(); drawDebris();
+      drawDashGhosts();
       if (G.player.alive) drawPlayer();
       if (G.flashAll > 0) GL.draw(GL.SPR.GLOW, W / 2, H / 2, W * 2, H * 2, 0, 0.5, 0.7, 1.0, G.flashAll * 0.5);
     }
@@ -2428,6 +2661,16 @@
   function drawShots() {
     Engine.shots.forEach(function (s) {
       var ang = Math.atan2(s.vy, s.vx) + Math.PI / 2;
+      if (s.crescent) {
+        // broad crescent blade — wide across its travel; brightens as it cleaves
+        var cw = s.scale, perp = ang + Math.PI / 2;
+        var pow = Math.min(1, (s.damage - 1) * 0.12);
+        GL.draw(GL.SPR.GLOW, s.x, s.y, cw * 1.1, cw * 2.4, perp, s.r, s.g, s.b, 0.5 + 0.35 * pow);
+        GL.draw(GL.SPR.STREAK, s.x, s.y, cw * 0.7, cw * 2.0, perp, s.r, s.g, s.b, 0.95);
+        GL.draw(GL.SPR.STREAK, s.x, s.y, cw * 0.4, cw * 1.3, perp, 1, 1, 1, 0.85);
+        GL.draw(GL.SPR.CORE, s.x, s.y, cw * 0.34, cw * 0.34, 0, 1, 1, 1, 0.8);
+        return;
+      }
       if (s.big) {
         GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 1.4, s.scale * 3.2, ang, s.r, s.g, s.b, 0.6);
         GL.draw(GL.SPR.STREAK, s.x, s.y, s.scale * 0.9, s.scale * 3.0, ang, s.r, s.g, s.b, 0.95);
@@ -2469,6 +2712,14 @@
       GL.draw(p.spr, p.x, p.y, p.size, p.size, p.rot, p.r, p.g, p.b, a);
     });
   }
+  function drawDashGhosts() {
+    var arr = G.dash.ghosts;
+    for (var i = 0; i < arr.length; i++) {
+      var gh = arr[i], a = Math.max(0, 1 - gh.age / 0.28) * 0.5;
+      GL.draw(GL.SPR.SHIP_PLAYER, gh.x, gh.y, 74, 74, 0, 0.5, 0.9, 1.0, a);
+      GL.draw(GL.SPR.GLOW, gh.x, gh.y, 42, 42, 0, 0.4, 0.85, 1.0, a * 0.6);
+    }
+  }
   function drawPlayer() {
     var p = G.player;
     var dim = (p.invuln > 0 && Math.floor(p.blink * 20) % 2 === 0) ? 0.35 : 1;
@@ -2478,7 +2729,7 @@
     GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, 46, 46, 0, 1, 1, 1, 0.8 * dim);
     GL.draw(GL.SPR.GLOW, p.x, p.y, 26, 26, 0, 1, 1, 1, 0.9 * dim);
     GL.draw(GL.SPR.CORE, p.x, p.y, 10, 10, 0, 1, 1, 1, dim);
-    if (Engine.focusHeld()) GL.draw(GL.SPR.RING, p.x, p.y, 60, 60, G.time * 2, 0.6, 1, 1, 0.9);
+    if (Engine.focusHeld()) GL.draw(GL.SPR.RING, p.x, p.y, 60, 60, G.time * 2, 0.6, 1, 1, G.dash.cd > 0 ? 0.4 : 0.9); // dimmer ring = dash on cooldown
   }
 
   // ---------------------------------------------------------------------

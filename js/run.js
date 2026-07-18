@@ -96,6 +96,12 @@
     wukong:    { name: 'WUKONG', epithet: 'the Monkey King', pantheon: 'CELESTIAL COURT', css: '#ff6a3d', color: [1.0, 0.42, 0.24],
                  attack: 'Kills may spawn a hair-clone that mirrors your fire.',
                  special: 'Ruyi Jingu Bang: a colossal staff slams the column above you.' },
+    guanyu:    { name: 'GUAN YU', epithet: 'Saint of War', pantheon: 'CELESTIAL COURT', css: '#3be089', color: [0.23, 0.88, 0.54],
+                 attack: 'Shots become crescent blades that cleave, gaining power per foe pierced.',
+                 special: 'Red Hare Charge: a spectral rider carves a lane, hurling foes aside.' },
+    jade:      { name: 'JADE EMPEROR', epithet: 'Sovereign of Heaven', pantheon: 'CELESTIAL COURT', css: '#c99aff', color: [0.79, 0.60, 1.0],
+                 attack: 'Attacks issue homing imperial edicts that Stun the condemned.',
+                 special: 'Mandate of Heaven: a judgment curtain descends, Weakening all it touches.' },
     quetz:     { name: 'QUETZALCOATL', epithet: 'the Plumed Serpent', pantheon: 'FIFTH SUN', css: '#5affc0', color: [0.35, 1.0, 0.75],
                  attack: 'Shots weave serpentine, +1 pierce, wider coverage.',
                  special: 'Sky Serpent sweeps the field, eating bullets into your vaunt gauge.' },
@@ -104,10 +110,29 @@
                  special: "Giant's Bane: a colossal hammer crushes the toughest foe." }
   };
   Run.GODS = GODS;
-  var GOD_KEYS = ['zeus', 'poseidon', 'artemis', 'aphrodite', 'ares', 'demeter', 'ra', 'anubis', 'loki', 'odin', 'wukong', 'quetz', 'thor'];
+  var GOD_KEYS = ['zeus', 'poseidon', 'artemis', 'aphrodite', 'ares', 'demeter', 'ra', 'anubis', 'loki', 'odin', 'wukong', 'quetz', 'thor', 'guanyu', 'jade'];
 
-  var HERMES = { name: 'HERMES', epithet: 'the Swift', css: '#ffd766',
-    desc: '+12% speed, +15% focus, +25% special recharge, +50% graze gauge' };
+  // passive god CHARMS — collected through a run, one per god, NOT gated on owning
+  // that god: this is how gods you didn't pick still touch your run.
+  var CHARMS = {
+    charmZeus:      { god: 'zeus',      name: 'EAGLE FEATHER',    desc: '+12% damage to elites and bosses' },
+    charmPoseidon:  { god: 'poseidon',  name: 'PEARL OF THE DEEP', desc: '+50% magnet radius' },
+    charmArtemis:   { god: 'artemis',   name: 'SILVER FLETCHING', desc: '+6% crit chance' },
+    charmAphrodite: { god: 'aphrodite', name: 'DOVE TOKEN',       desc: 'shop prices -15%' },
+    charmAres:      { god: 'ares',      name: 'SPEAR SPLINTER',   desc: '+10% attack damage' },
+    charmDemeter:   { god: 'demeter',   name: 'GOLDEN SHEAF',     desc: '+20% gold value' },
+    charmRa:        { god: 'ra',        name: 'SUNSTONE',         desc: '+20% special recharge' },
+    charmAnubis:    { god: 'anubis',    name: 'HEART SCARAB',     desc: 'death spills no gold' },
+    charmLoki:      { god: 'loki',      name: 'TANGLED THREAD',   desc: '+35% graze gauge gain' },
+    charmOdin:      { god: 'odin',      name: 'RAVEN QUILL',      desc: 'shop rerolls cost half' },
+    charmThor:      { god: 'thor',      name: 'HAMMER SHARD',     desc: '+15% special damage' },
+    charmWukong:    { god: 'wukong',    name: 'GOLDEN HAIR',      desc: '+12% move speed, +15% focus speed' },
+    charmQuetz:     { god: 'quetz',     name: 'PLUMED CREST',     desc: '+1.2s vaunt duration' },
+    charmGuanyu:    { god: 'guanyu',    name: 'OATH TABLET',      desc: 'your multiplier survives death' },
+    charmJade:      { god: 'jade',      name: 'IMPERIAL SEAL',    desc: 'vaunt bonus pays +30%' }
+  };
+  Run.CHARMS = CHARMS;
+  var CHARM_KEYS = ['charmZeus', 'charmPoseidon', 'charmArtemis', 'charmAphrodite', 'charmAres', 'charmDemeter', 'charmRa', 'charmAnubis', 'charmLoki', 'charmOdin', 'charmThor', 'charmWukong', 'charmQuetz', 'charmGuanyu', 'charmJade'];
 
   // per-god mod cards: [id, desc, slotReq]  (slotReq: attack / special / any)
   var MODS = {
@@ -123,7 +148,9 @@
     odin: [['odinRaven', 'ravens dive more & hit harder', 'attack'], ['odinMark', 'Gungnir marks last; bonus x1.4', 'special'], ['odinRavenMark', 'ravens Mark on hit', 'attack'], ['odinGungnir', 'Gungnir +50% damage & longer', 'special']],
     wukong: [['wukongClones', 'clones last 7s, cap 3', 'attack'], ['wukongStaff', 'staff wider; survivors Stunned', 'special'], ['wukongSpecial', 'clones echo your special at 25%', 'special'], ['wukongChance', 'clone spawn 20% → 35%', 'attack']],
     quetz: [['quetzBig', 'serpent larger & slower', 'special'], ['quetzGold', 'eaten bullets also pay gold', 'special'], ['quetzCircle', 'serpent circles you at the end', 'special'], ['quetzPierce', '+1 more pierce', 'attack']],
-    thor: [['thorBelt', 'Megingjörð: +40% dmg, +50% knockback', 'any'], ['thorFast', 'throw cycle 1.4s → 0.9s', 'attack'], ['thorGauntlet', 'Járngreipr: catch grants +30% stream 2s', 'any'], ['thorSkymark', 'hammer hovers spinning at apex', 'attack']]
+    thor: [['thorBelt', 'Megingjörð: +40% dmg, +50% knockback', 'any'], ['thorFast', 'throw cycle 1.4s → 0.9s', 'attack'], ['thorGauntlet', 'Járngreipr: catch grants +30% stream 2s', 'any'], ['thorSkymark', 'hammer hovers spinning at apex', 'attack']],
+    guanyu: [['guanWide', 'crescents wider; +1 pierce', 'attack'], ['guanOath', 'Peach-Garden Oath: +30% attack damage while Focused', 'attack'], ['guanWake', 'the Red Hare leaves a burning wake', 'special'], ['guanSpoils', 'foes slain by the charge pay +50% gold', 'special']],
+    jade: [['jadeOften', 'edicts issue twice as often', 'attack'], ['jadeStun', 'Stunned foes take +25% damage', 'any'], ['jadeSlow', 'the Mandate descends slower and hits harder', 'special'], ['jadeTribute', 'Weakened foes pay +30% gold on death', 'any']]
   };
   // mods that are one-shot (skip once owned); zeusChain / artemisCrit stack
   var BOOL_MODS = { zeusCrit: 1, zeusFork: 1, zeusField: 1, poseidonBig: 1, poseidonDrag: 1, poseidonSplash: 1, poseidonForce: 1,
@@ -132,7 +159,8 @@
     raRamp: 1, raSpread: 1, raSplit: 1, raBurn: 1, anubisThresh: 1, anubisRefund: 1, anubisShard: 1, anubisBossDmg: 1,
     lokiLong: 1, lokiBoom: 1, lokiVaunt: 1, lokiChance: 1, odinRaven: 1, odinMark: 1, odinRavenMark: 1, odinGungnir: 1,
     wukongClones: 1, wukongStaff: 1, wukongSpecial: 1, wukongChance: 1, quetzBig: 1, quetzGold: 1, quetzCircle: 1, quetzPierce: 1,
-    thorBelt: 1, thorFast: 1, thorGauntlet: 1, thorSkymark: 1 };
+    thorBelt: 1, thorFast: 1, thorGauntlet: 1, thorSkymark: 1,
+    guanWide: 1, guanOath: 1, guanWake: 1, guanSpoils: 1, jadeOften: 1, jadeStun: 1, jadeSlow: 1, jadeTribute: 1 };
 
   // ---- transform level ladder (pom-style upgrades) --------------------
   var LADDER = [1.0, 1.5, 2.25, 2.9, 3.5];
@@ -161,7 +189,12 @@
     frozenTide: { name: 'FROZEN TIDE', gods: ['poseidon', 'demeter'], desc: 'the tide freezes into a shield wall' },
     eternalDevotion: { name: 'ETERNAL DEVOTION', gods: ['anubis', 'aphrodite'], desc: 'the executed rise as charmed ghosts' },
     stormSurge: { name: 'STORM SURGE', gods: ['thor', 'poseidon'], desc: 'hammer impacts emit tidal waves' },
-    silentWinter: { name: 'SILENT WINTER', gods: ['artemis', 'demeter'], desc: 'crits shatter chilled foes instantly' }
+    silentWinter: { name: 'SILENT WINTER', gods: ['artemis', 'demeter'], desc: 'crits shatter chilled foes instantly' },
+    swornBrothers: { name: 'SWORN BROTHERS', gods: ['guanyu', 'wukong'], desc: 'clones swing crescent blades that pierce' },
+    saintOfWar: { name: 'SAINT OF WAR', gods: ['guanyu', 'jade'], desc: 'crescents Weaken every foe they cleave' },
+    twoThrones: { name: 'TWO THRONES', gods: ['zeus', 'jade'], desc: 'the Mandate curtain cracks chain lightning' },
+    godsOfWar: { name: 'GODS OF WAR', gods: ['ares', 'guanyu'], desc: 'crescents always crit the Terrified; such kills feed frenzy' },
+    peachBanquet: { name: 'PEACH BANQUET', gods: ['wukong', 'jade'], desc: 'kills under the Mandate drop peaches that feed the vaunt gauge' }
   };
   Run.DUOS = DUOS;
 
@@ -187,7 +220,7 @@
   function tMod(g, id, desc) { var G = GODS[g]; return { kind: 'mod', god: g, id: id, name: G.name, epithet: G.epithet, desc: desc, css: G.css }; }
   function tScale(id, name, desc) { return { kind: 'scale', id: id, name: name, epithet: 'battle upgrade', desc: desc, css: COL_CYAN }; }
   function tGeneric(id, name, desc) { return { kind: 'generic', id: id, name: name, epithet: 'battle upgrade', desc: desc, css: COL_CYAN }; }
-  function tHermes() { return { kind: 'hermes', god: 'hermes', name: HERMES.name, epithet: HERMES.epithet, desc: HERMES.desc, css: HERMES.css }; }
+  function tCharm(id) { var c = CHARMS[id], G = GODS[c.god]; return { kind: 'charm', id: id, god: c.god, name: c.name, epithet: 'charm of ' + G.name, desc: c.desc, css: G.css }; }
   function tLevel(slot, god) {
     var G = GODS[god], cur = slot === 'attack' ? Game.st().attackR : Game.st().specialR, nm = nextMag(cur);
     return { kind: slot === 'attack' ? 'levelA' : 'levelS', god: god, slot: slot, mag: nm, level: true,
@@ -208,8 +241,10 @@
     if (b.kind === 'transformA' || b.kind === 'transformS') base += 120;
     var st = Game.st();
     var disc = st.aff ? st.aff.shopDiscount : 0;
-    return Math.max(20, Math.round(base * (1 - disc)));
+    var charmDisc = Game.shopDiscount ? Game.shopDiscount() : 0;   // DOVE TOKEN charm (multiplicative)
+    return Math.max(20, Math.round(base * (1 - disc) * (1 - charmDisc)));
   }
+  function rerollPrice() { return Math.max(10, Math.round(Run.rerollCost * (Game.rerollHalf && Game.rerollHalf() ? 0.5 : 1))); } // RAVEN QUILL charm
   function finalizeBoon(t, shop) {
     var b = { kind: t.kind, god: t.god, id: t.id, slot: t.slot, swap: !!t.swap, name: t.name, epithet: t.epithet, desc: t.desc, css: t.css, duo: !!t.duo, mag: t.mag };
     var rar = rollRarity(shop);
@@ -287,8 +322,10 @@
       if (gc[0] === 'life' && st.lives >= 6) return;
       push(tGeneric(gc[0], gc[1], gc[2]), 3);
     });
-    // hermes
-    push(tHermes(), 4);
+    // passive charms (ungated; one per god per run) — the whole charm family
+    // shares Hermes' old blessing mass (~5 total, declining as they're owned)
+    var charmW = 5 / CHARM_KEYS.length;
+    CHARM_KEYS.forEach(function (id) { if (!st.charms[id]) push(tCharm(id), charmW); });
     return out;
   }
 
@@ -501,7 +538,7 @@
   }
   function shopEntries() {
     var list = Run.shopItems.slice();
-    list.push({ kind: 'reroll', price: Run.rerollCost });
+    list.push({ kind: 'reroll', price: rerollPrice() });
     list.push({ kind: 'life', price: 700, sold: false });
     list.push({ kind: 'leave' });
     return list;
@@ -517,7 +554,7 @@
     var entries = shopEntries(), e = entries[Run.shopSel];
     if (!e) return;
     if (e.kind === 'leave') { afterShop(); return; }
-    if (e.kind === 'reroll') { if (Game.spendGold(Run.rerollCost)) { rollShop(); Run.rerollCost += 40; SFX.graze(); } return; }
+    if (e.kind === 'reroll') { if (Game.spendGold(rerollPrice())) { rollShop(); Run.rerollCost += 40; SFX.graze(); } return; }
     if (e.kind === 'life') { if (Game.st().lives < 6 && Game.spendGold(700)) { Game.st().lives++; e.sold = true; SFX.powerup(); } return; }
     if (e.kind === 'up' && !e.sold) { if (Game.spendGold(e.price)) { Game.applyBoon(e.boon); e.sold = true; pickupSfx(e.boon); } }
   }
@@ -590,7 +627,7 @@
     var s = b.kind === 'transformA' ? 'ATTACK BOON' : b.kind === 'transformS' ? 'SPECIAL BOON'
       : b.kind === 'levelA' ? 'LEVEL UP · ATK' : b.kind === 'levelS' ? 'LEVEL UP · SPC'
       : b.kind === 'duo' ? '✦ DUO ✦'
-      : b.kind === 'mod' ? 'GOD BOON' : b.kind === 'hermes' ? 'BLESSING' : 'UPGRADE';
+      : b.kind === 'mod' ? 'GOD BOON' : b.kind === 'charm' ? 'CHARM' : 'UPGRADE';
     return b.swap ? 'SWAP · ' + s : s;
   }
   function pickupSfx(b) { if (b && b.duo) SFX.vauntBonus(); else SFX.powerup(); }
@@ -625,6 +662,7 @@
     ctx.fillStyle = COL_DIM; ctx.font = '500 30px Consolas, monospace';
     var cy = H * 0.375, lines = [
       'WASD / Arrows  move          Shift  focus',
+      'Shift-tap + direction  ghost dodge (i-frames)',
       'Z / Space  attack            X  SPECIAL',
       'C  VAUNT                     P  pause',
       'Left/Right + Z  choose boons  (or click)',
@@ -722,7 +760,7 @@
     ctx.font = '700 ' + nf + 'px Consolas, monospace';
     spaced(ctx, b.name, x + w / 2, y + h * 0.30, b.name.length > 9 ? 1 : 3);
     // pantheon tag line
-    var pan = (b.god && GODS[b.god]) ? GODS[b.god].pantheon : (b.kind === 'hermes' ? 'OLYMPUS' : '');
+    var pan = (b.god && GODS[b.god]) ? GODS[b.god].pantheon : '';
     if (pan) { ctx.fillStyle = sold ? '#3d545c' : b.css; ctx.font = '600 20px Consolas, monospace'; ctx.fillText('· ' + pan + ' ·', x + w / 2, y + h * 0.30 + 34); }
     // epithet
     ctx.fillStyle = sold ? '#3d545c' : COL_DIM; ctx.font = 'italic 500 23px Consolas, monospace';
@@ -771,7 +809,7 @@
     }
     var by = y0 + ch + 54, bw = 300, bh = 96, bgap = 30, bx0 = (W - totalW) / 2;
     var btns = [
-      { label: 'REROLL', sub: commas(Run.rerollCost) + ' g', sel: Run.shopSel === Run.shopItems.length, act: Run.shopItems.length },
+      { label: 'REROLL', sub: commas(rerollPrice()) + ' g', sel: Run.shopSel === Run.shopItems.length, act: Run.shopItems.length },
       { label: 'EXTRA LIFE', sub: '700 g', sel: Run.shopSel === Run.shopItems.length + 1, act: Run.shopItems.length + 1 },
       { label: 'LEAVE  →', sub: 'next sector', sel: Run.shopSel === Run.shopItems.length + 2, act: Run.shopItems.length + 2 }
     ];

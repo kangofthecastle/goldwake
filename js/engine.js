@@ -91,7 +91,8 @@
       pierce: 0, homing: false, turn: 0, kind: 0,
       faction: 0, big: false, markHit: false, forceCrit: 0,
       weave: 0, phase: 0,                // Quetzalcoatl serpentine shots
-      cloneShot: false                   // Wukong clone (HAVOC IN HEAVEN)
+      cloneShot: false,                  // Wukong clone (HAVOC IN HEAVEN)
+      crescent: false                    // Guan Yu cleaving crescent blade
     };
   }
 

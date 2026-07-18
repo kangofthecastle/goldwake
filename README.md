@@ -25,6 +25,7 @@ Chrome, Edge, or Firefox — no local server needed.
 | --- | --- |
 | **WASD / Arrows** | Move |
 | **Shift** (hold) | Focus — slow, precise, tighter fire, shows hitbox ring |
+| **Shift** (tap) + direction | **Ghost dodge** — a short dash with brief i-frames (~0.9s cooldown) |
 | **Z / Space** (hold) | Attack  ·  also **confirm** in menus / drafts / shops |
 | **X** | **SPECIAL** weapon (spends a charge)  ·  also **leave shop / back** in menus |
 | **C** | **VAUNT** (when the gauge is full) |
@@ -34,7 +35,7 @@ Chrome, Edge, or Firefox — no local server needed.
 | **Esc** | Abandon to title (from a run); title from the end screens |
 | **M** | Mute / unmute |
 
-Three offensive tools, distinct roles: **Attack** (Z) is your constant fire — deliberately modest on its own. **Special** (X) is a burst/panic tool on a 3-charge meter (the purple pips beside the vaunt bar) that refills over time and faster on kills; its base form is the **Lance Volley** (fat piercing energy lances). **Vaunt** (C) is the defensive/scoring bullet-cancel. The power spike comes from **god boons**, below.
+Three offensive tools, distinct roles: **Attack** (Z) is your constant fire — deliberately modest on its own. **Special** (X) is a burst/panic tool on a 3-charge meter (the purple pips beside the vaunt bar) that refills over time and faster on kills; its base form is the **Lance Volley** (fat piercing energy lances). **Vaunt** (C) is the defensive/scoring bullet-cancel. On defense there's also the **Ghost dodge** — tap **Shift** while holding a direction to dash a short hop with brief invulnerability (grazing still counts mid-dash), on a ~0.9s cooldown. The power spike comes from **god boons**, below.
 
 ## The run
 
@@ -68,7 +69,8 @@ FRENZIED.
 **Pantheon Communion:** run an attack god + special god from the same pantheon for a
 set bonus — **Accord of Olympus** (+1 mult cap, +2s vaunt), **Twilight Oath** (ASGARD:
 a life lost auto-fires your special free), **Rite of Two Suns** (KEMET: +10% damage to
-status-afflicted foes, +15% gold).
+status-afflicted foes, +15% gold), **Harmony of Heaven** (CELESTIAL COURT: grazing a
+bullet also feeds your special charge).
 
 ### The Vaunt loop (core combat)
 
@@ -86,7 +88,7 @@ re-collectable shards (~4s) and resets your multiplier.
 
 Modeled on *Hades*. You have two slots — **attack** and **special**. The **first**
 boon in a slot *transforms* the mechanic itself; later cards only scale it.
-**Twelve** transform gods across four pantheons, each with an attack transform, a
+**Fifteen** transform gods across four pantheons, each with an attack transform, a
 special transform, and two mod cards:
 
 - **OLYMPUS** — **ZEUS** (chain lightning / storm bolt), **POSEIDON** (knockback +
@@ -104,15 +106,24 @@ special transform, and two mod cards:
   never-miss piercing spear), **THOR** (**Mjölnir** returning kinetic hammer /
   **Giant's Bane** colossal crush — pure force, never lightning).
 - **CELESTIAL COURT** — **WUKONG** (kills spawn **hair-clones** that copy your fire /
-  Ruyi Jingu Bang staff pillar that can **Stun**).
+  Ruyi Jingu Bang staff pillar that can **Stun**), **GUAN YU** (shots become cleaving
+  **crescent blades** that gain power per foe pierced / **Red Hare Charge** — a spectral
+  rider carves a lane and hurls foes aside), **JADE EMPEROR** (attacks issue homing
+  imperial **edicts** that **Stun** / **Mandate of Heaven** — a judgment curtain descends
+  from the top, Weakening all it touches).
 - **FIFTH SUN** — **QUETZALCOATL** (serpentine +pierce shots / Sky Serpent that eats
   bullets into your **vaunt gauge**).
-- **HERMES** (passive blessing) — speed, focus, special recharge, graze gauge.
+**Charms** (passive, one per god) — collected through the run in drafts and shops,
+each **CHARM** is tied to a god but **needs no god slot**: it's how the fifteen gods you
+*didn't* pick still touch your run. Each is acquirable once (e.g. EAGLE FEATHER +damage
+to elites/bosses, SUNSTONE +special recharge, OATH TABLET keeps your multiplier through
+death, IMPERIAL SEAL +vaunt bonus). Numeric charms scale with rarity; a few surface per run.
 
 Each god has **four** mod cards (at least one a build-fork), each transform
-**levels up** along a ★–★★★★★ tier ladder via own-god pom cards, and 12 gods × pairs
-unlock **21 DUO boons** (rainbow one-shot cards; e.g. STORMFATHERS, RAGNARÖK,
-FROZEN STORM, ECLIPSE, DEATH SENTENCE, ETERNAL DEVOTION).
+**levels up** along a ★–★★★★★ tier ladder via own-god pom cards, and 15 gods × pairs
+unlock **26 DUO boons** (rainbow one-shot cards; e.g. STORMFATHERS, RAGNARÖK,
+FROZEN STORM, ECLIPSE, DEATH SENTENCE, ETERNAL DEVOTION, SWORN BROTHERS, SAINT OF WAR,
+TWO THRONES, GODS OF WAR, PEACH BANQUET).
 
 Statuses: **Marked/Weak** (bonus damage taken), **Charm** (fights for you),
 **Terror/Shaken** (Ares — flee + take more), **Chill** (slow → shatter), **Burn**
