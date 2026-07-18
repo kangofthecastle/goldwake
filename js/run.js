@@ -19,17 +19,9 @@
   var CAREER_GOLD_UNLOCK = 40000;
 
   // ---------------------------------------------------------------------
-  // seeded PRNG — mulberry32
+  // seeded PRNG — shared Engine.mulberry32 (single source; see engine.js)
   // ---------------------------------------------------------------------
-  function mulberry32(a) {
-    return function () {
-      a |= 0; a = (a + 0x6D2B79F5) | 0;
-      var t = Math.imul(a ^ (a >>> 15), 1 | a);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
-  Run.rng = mulberry32(1);
+  Run.rng = Engine.mulberry32(1);
   Run.seed = 1;
   function ri(n) { return Math.floor(Run.rng() * n); }
 
@@ -404,10 +396,12 @@
   Run.newSeed = function () { return (Math.random() * 4294967296) >>> 0; };
   Run.startRun = function (seed) {
     Run.seed = seed >>> 0;
-    Run.rng = mulberry32(Run.seed);
+    Run.rng = Engine.mulberry32(Run.seed);
+    if (window.MUSIC) MUSIC.resetTransient();   // clear apotheosis lift / pause duck leaked from a prior run (R-restart)
     Run.loop = 0;
     buildSectors();
     Run.sectorIdx = 0; Run.waveIdx = 0; Run.draftIndex = -1;
+    if (window.MUSIC) MUSIC.setSeed(Run.seed);   // deterministic score per run seed
     var un = Run.unlocks();
     Game.resetRun({ lives: 3 + (un.startLife ? 1 : 0), gaugePct: un.startGauge ? 0.25 : 0, baseDmg: un.baseDamage ? 1.1 : 1.0 });
     enterSector(0);
@@ -470,6 +464,8 @@
   function enterSector(si) {
     var sec = Run.sectors[si];
     Game.setAffix(sec.affix);
+    Game.setSector(si);                              // reconfigure the environment for this sector
+    if (window.MUSIC) MUSIC.setSector(si);           // per-sector theme
     Run.waveIdx = 0; Run.cardTimer = 2.6;
     Run.labor = { offered: true, decided: false, accepted: false };
     Run.draftThen = 'wave';
@@ -503,13 +499,14 @@
       return;
     }
     Run.cardTimer -= dt;
-    if (Run.cardTimer <= 0) { var sec = Run.sectors[Run.sectorIdx]; Game.beginWave(sec.waves[0], rankFor(Run.sectorIdx, 0, sec.wavesCount, false)); }
+    if (Run.cardTimer <= 0) { var sec = Run.sectors[Run.sectorIdx]; Game.beginWave(sec.waves[0], rankFor(Run.sectorIdx, 0, sec.wavesCount, false), sec.slotRoles[0]); }
   };
   Run.onCleared = function (kind) {
     if (kind === 'wave') {
       Run.draftIndex++;
       rollDraft(Run.draftIndex);
       if (Run.draftOffers.length === 0) { afterDraft(); return; }
+      if (window.MUSIC) MUSIC.setIntensity(0);   // draft freezes combat — strip to the pad
       Game.setMode('draft');
     } else {
       // LABOR FULFILLED: bonus epic draft + gold before the usual shop/finish
@@ -518,6 +515,7 @@
         Game.st().wallet += 300;
         rollEpicDraft();
         Run.draftThen = 'afterboss';
+        if (window.MUSIC) MUSIC.setIntensity(0);   // draft freezes combat — strip to the pad (parity with the normal draft branch)
         Game.setMode('draft');
         return;
       }
@@ -525,7 +523,7 @@
     }
   };
   function proceedAfterBoss() {
-    if (Run.sectorIdx < 2) { Run.meta.bestSector = Math.max(Run.meta.bestSector, Run.sectorIdx + 1); Run.saveMeta(); rollShop(); Game.setMode('shop'); }
+    if (Run.sectorIdx < 2) { Run.meta.bestSector = Math.max(Run.meta.bestSector, Run.sectorIdx + 1); Run.saveMeta(); rollShop(); if (window.MUSIC) MUSIC.setTheme('shop'); Game.setMode('shop'); }
     else finalizeRun(true);
   }
   function rollEpicDraft() {
@@ -539,8 +537,8 @@
     if (Run.draftThen === 'afterboss') { Run.draftThen = 'wave'; proceedAfterBoss(); return; }
     var sec = Run.sectors[Run.sectorIdx];
     Run.waveIdx++;
-    if (Run.waveIdx < sec.waves.length) Game.beginWave(sec.waves[Run.waveIdx], rankFor(Run.sectorIdx, Run.waveIdx, sec.wavesCount, false));
-    else Game.beginBoss(sec.boss, rankFor(Run.sectorIdx, sec.wavesCount, sec.wavesCount, true));
+    if (Run.waveIdx < sec.waves.length) Game.beginWave(sec.waves[Run.waveIdx], rankFor(Run.sectorIdx, Run.waveIdx, sec.wavesCount, false), sec.slotRoles[Run.waveIdx]);
+    else { if (window.MUSIC) MUSIC.setBossTheme(Run.sectorIdx); Game.beginBoss(sec.boss, rankFor(Run.sectorIdx, sec.wavesCount, sec.wavesCount, true)); }
   }
   function afterShop() { Run.sectorIdx++; enterSector(Run.sectorIdx); }
   function finalizeRun(win) {
@@ -548,6 +546,7 @@
     if (win) Run.meta.completedRun = true;
     Run.reportScore(Game.st().score); recordPeakHubris(); Run.saveMeta();
     Run.endT0 = perfNow();
+    if (window.MUSIC) { MUSIC.stop(); MUSIC.resetTransient(); }   // victory: resolve + stop; release any lift/duck
     Game.setMode('complete');
   }
   Run.onGameOver = function () {
@@ -555,9 +554,10 @@
     Run.meta.bestSector = Math.max(Run.meta.bestSector, Run.sectorIdx);
     recordPeakHubris(); Run.saveMeta();
     Run.endT0 = perfNow();
+    if (window.MUSIC) { MUSIC.stop(); MUSIC.resetTransient(); }   // death: resolve + stop; release any lift/duck
     Game.setMode('over');
   };
-  Run.toTitle = function () { Run.reportScore(Game.st().score); Run.saveMeta(); Game.setMode('title'); };
+  Run.toTitle = function () { Run.reportScore(Game.st().score); Run.saveMeta(); if (window.MUSIC) { MUSIC.resetTransient(); MUSIC.setTheme('title'); } Game.setMode('title'); };
 
   // ---------------------------------------------------------------------
   // draft

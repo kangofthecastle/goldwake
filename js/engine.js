@@ -10,6 +10,20 @@
   Engine.W = W;
   Engine.H = H;
 
+  // ---- seeded PRNG (mulberry32) ---------------------------------------------
+  // Single source shared by Run (run seed), MUSIC (per-composition arps), and
+  // Game (background field). One algorithm so a given seed maps to a byte-
+  // identical sequence everywhere. Consumers only call it at runtime (after all
+  // scripts have parsed), so a later-loading file may still reference it.
+  Engine.mulberry32 = function (a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+
   // ---- object pool ----------------------------------------------------------
   // Free-list pool over a preallocated homogeneous array (no per-frame GC).
 

@@ -46,6 +46,11 @@
 
   SFX.resume = function () { if (ctx && ctx.state === 'suspended') ctx.resume(); };
 
+  // Shared AudioContext accessor for MUSIC — ensures the context exists (same
+  // lazy/unlock path as SFX) and returns it, so the score never spawns a second
+  // context and unlocks on the same first gesture. Null if WebAudio is absent.
+  SFX.context = function () { SFX.ensure(); return ctx; };
+
   SFX.toggleMute = function () {
     muted = !muted;
     if (master) master.gain.value = muted ? 0.0 : 0.5;

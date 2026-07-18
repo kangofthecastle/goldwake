@@ -645,6 +645,117 @@
     }
   }
 
+  // ---- drop-in painted backdrop layers --------------------------------------
+  // Same doctrine as the sprite overrides: procedural parallax ships now (drawn
+  // by game.js with GL.draw), and painted layers drop in later. A layer PNG is
+  // probed at art/backdrops/<sector>-<layer>.png (deep|structure|debris) or
+  // supplied via window.BACKDROPS[slot] (data: URI, same-origin everywhere).
+  // Under Chromium file:// the probe is skipped (an opaque-origin image would
+  // throw on texImage2D) — registry only, exactly like the sprite loader.
+  var VS_BACKDROP =
+'#version 300 es\n' +
+'layout(location=0) in vec2 a_quad;\n' +
+'uniform vec4 u_rect;\n' +            // cx, cy, w, h (playfield px)
+'uniform vec2 u_playfield;\n' +
+'uniform vec2 u_scroll;\n' +          // uv offset (parallax)
+'out vec2 v_uv;\n' +
+'void main(){\n' +
+'  vec2 world = u_rect.xy + a_quad * u_rect.zw;\n' +
+'  vec2 clip = world / u_playfield * 2.0 - 1.0;\n' +
+'  clip.y = -clip.y;\n' +
+'  gl_Position = vec4(clip, 0.0, 1.0);\n' +
+'  v_uv = (a_quad + 0.5) + u_scroll;\n' +
+'}\n';
+  var FS_BACKDROP =
+'#version 300 es\n' +
+'precision highp float;\n' +
+'in vec2 v_uv;\n' +
+'uniform sampler2D u_tex;\n' +
+'uniform vec4 u_tint;\n' +
+'out vec4 frag;\n' +
+'void main(){\n' +
+'  vec4 t = texture(u_tex, fract(v_uv));\n' +
+'  frag = vec4(t.rgb * u_tint.rgb, t.a) * u_tint.a;\n' +   // premultiplied-over
+'}\n';
+
+  var progBackdrop = null, uBackdrop = null, backdropVAO = null;
+  var backdrops = {};   // slot -> { tex, ready, w, h }
+
+  function buildBackdropGL() {
+    progBackdrop = link(VS_BACKDROP, FS_BACKDROP);
+    if (!progBackdrop) return;
+    uBackdrop = uniforms(progBackdrop, ['u_rect', 'u_playfield', 'u_scroll', 'u_tex', 'u_tint']);
+    backdropVAO = gl.createVertexArray();
+    gl.bindVertexArray(backdropVAO);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadVBO);   // reuse the unit quad
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0);
+    gl.vertexAttribDivisor(0, 0);
+    gl.bindVertexArray(null);
+  }
+
+  function makeImageTexture(img) {
+    var tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    // texImage2D of a cross-origin image throws (Chrome file:// probe) — caller
+    // guards the probe channel so this only runs on same-origin data: URIs there.
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    return tex;
+  }
+
+  function loadBackdrops() {
+    var registry = (typeof window !== 'undefined' && window.BACKDROPS) || {};
+    var isChromium = /Chrome\/|Chromium\/|HeadlessChrome/.test(navigator.userAgent);
+    var canProbe = !(location.protocol === 'file:' && isChromium);
+    var sectors = ['s1', 's2', 's3'], layers = ['deep', 'structure', 'debris'];
+    for (var si = 0; si < sectors.length; si++) {
+      for (var li = 0; li < layers.length; li++) {
+        (function (slot) {
+          var src = registry[slot] ? registry[slot]
+            : (canProbe ? 'art/backdrops/' + slot + '.png' : null);
+          if (!src) return;
+          var img = new Image();
+          img.onload = function () {
+            try { backdrops[slot] = { tex: makeImageTexture(img), ready: true, w: img.width, h: img.height }; }
+            catch (e) { /* tainted / bad image: procedural layer stays */ }
+          };
+          img.onerror = function () { /* no art for this slot */ };
+          img.src = src;
+        })(sectors[si] + '-' + layers[li]);
+      }
+    }
+  }
+
+  GL.backdropReady = function (slot) { var b = backdrops[slot]; return !!(b && b.ready); };
+
+  // Draw a painted backdrop layer as a full-field textured quad (parallax via
+  // scrollY in uv units). Self-contained blend: flushes the additive batch,
+  // draws premultiplied-over, then restores additive so the caller's next
+  // GL.draw picks up where it left off.
+  GL.drawBackdrop = function (slot, cx, cy, w, h, r, g, b, a, scrollY) {
+    var bd = backdrops[slot];
+    if (!bd || !bd.ready || !progBackdrop) return;
+    flushSprites();
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.useProgram(progBackdrop);
+    gl.bindVertexArray(backdropVAO);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, bd.tex);
+    gl.uniform1i(uBackdrop.u_tex, 0);
+    gl.uniform2f(uBackdrop.u_playfield, GL.W, GL.H);
+    gl.uniform4f(uBackdrop.u_rect, cx, cy, w, h);
+    gl.uniform2f(uBackdrop.u_scroll, 0, scrollY || 0);
+    gl.uniform4f(uBackdrop.u_tint, r, g, b, a);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.bindVertexArray(null);
+    gl.blendFunc(gl.ONE, gl.ONE);   // restore additive base pass
+  };
+
   // ---- instanced batcher ----------------------------------------------------
 
   var STRIDE = 13;                 // floats per instance
@@ -901,6 +1012,8 @@
     buildAtlas();
     loadOverrides();   // async; the game renders the procedural cells until (and unless) art lands
     buildBatcher();
+    buildBackdropGL();
+    loadBackdrops();   // async; painted parallax layers drop in, else procedural
     GL.resize();
 
     gl.disable(gl.DEPTH_TEST);

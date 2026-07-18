@@ -71,7 +71,7 @@
     }
     hud = hudCanvas.getContext('2d');
     Run.init(hudCanvas);
-    Engine.onFirstGesture(function () { SFX.ensure(); });
+    Engine.onFirstGesture(function () { SFX.ensure(); if (window.MUSIC) { MUSIC.init(); MUSIC.setTheme('title'); } });
     window.addEventListener('resize', onResize);
     onResize();
     G = makeState({});
@@ -189,41 +189,207 @@
   Game.setMode = function (m) { G.mode = m; };
 
   // ---------------------------------------------------------------------
-  // background
-  // ---------------------------------------------------------------------
-  function makeBackground() {
-    var stars = [];
-    var layers = [
-      { n: 70, sp: 26, sz: 3.0, a: 0.35 },
-      { n: 60, sp: 55, sz: 4.5, a: 0.55 },
-      { n: 45, sp: 95, sz: 6.5, a: 0.85 }
-    ];
-    for (var l = 0; l < layers.length; l++) {
-      var L = layers[l];
-      for (var i = 0; i < L.n; i++) {
-        stars.push({ x: Math.random() * W, y: Math.random() * H, sp: L.sp, sz: L.sz * (0.6 + Math.random() * 0.8), a: L.a * (0.5 + Math.random() * 0.5), tw: Math.random() * TAU });
+  // environments — the world under the fight (DANMAKU.md "Environments").
+  // Three procedural parallax layers per sector: deep field (slow stars +
+  // nebula tint), a structure layer (large drifting silhouettes in the sector's
+  // pantheon architecture), and near-debris weather (fast sparse motes/embers).
+  // All layers draw in the ADDITIVE base pass as LOW-saturation, LOW-alpha marks
+  // so they never leave the #05080b dim band, never read as enemy warm/magenta,
+  // and never additive-bright — an additive dim shape over pure black reads as a
+  // dark silhouette, not a glow. The background dims further as live bullet
+  // count rises (readability law) and is choreographed with the slot arc.
+  // Painted layers drop in later via GL.drawBackdrop (slot s{n}-{layer}).
+  //
+  // Palettes pull from ART.md sector/pantheon tables, held dim:
+  //  S1 TALOS      — bronze colonnades / temple fragments (CELESTIAL-adjacent).
+  //  S2 AMMIT      — KEMET tomb architecture / colossal statuary (lapis+gold).
+  //  S3 SOVEREIGN  — gilded palace lattice (gold + imperial violet).
+  var SECTOR_ENV = [
+    { slot: 's1',
+      star: [0.42, 0.34, 0.24], starN: 70,
+      neb: [[0.13, 0.085, 0.045], [0.05, 0.085, 0.10]],
+      structCol: [0.115, 0.078, 0.040], structKind: 'colonnade',
+      debrisCol: [0.16, 0.10, 0.05], debrisKind: 'ember' },
+    { slot: 's2',
+      star: [0.28, 0.30, 0.42], starN: 62,
+      neb: [[0.045, 0.055, 0.125], [0.11, 0.088, 0.045]],
+      structCol: [0.100, 0.086, 0.046], structKind: 'tomb',
+      debrisCol: [0.13, 0.115, 0.075], debrisKind: 'dust' },
+    { slot: 's3',
+      star: [0.40, 0.34, 0.30], starN: 66,
+      neb: [[0.095, 0.055, 0.120], [0.125, 0.100, 0.052]],
+      structCol: [0.125, 0.102, 0.055], structKind: 'lattice',
+      debrisCol: [0.17, 0.135, 0.070], debrisKind: 'gild' }
+  ];
+
+  var bgRng = Engine.mulberry32;   // shared seeded PRNG (single source; see engine.js)
+
+  // Build the sub-parts of one structure unit ONCE (no per-frame alloc). Parts
+  // are drawn relative to the unit origin. kind selects the architecture.
+  function buildStructParts(kind, seed, scale) {
+    var rng = bgRng(seed), parts = [], i;
+    scale = scale || 1;
+    if (kind === 'colonnade') {
+      var cols = 4 + (rng() * 3 | 0), span = (520 + rng() * 260) * scale, colH = (360 + rng() * 200) * scale;
+      var x0 = -span / 2, gap = span / (cols - 1);
+      for (i = 0; i < cols; i++) {
+        var cx = x0 + gap * i;
+        parts.push({ spr: GL.SPR.STREAK, dx: cx, dy: 0, sx: 46 * scale, sy: colH, rot: 0, a: 0.9 });
+        parts.push({ spr: GL.SPR.CORE, dx: cx, dy: -colH * 0.5, sx: 60 * scale, sy: 34 * scale, rot: 0, a: 0.7 }); // capital
       }
+      parts.push({ spr: GL.SPR.STREAK, dx: 0, dy: -colH * 0.5 - 26 * scale, sx: span * 1.06, sy: 40 * scale, rot: Math.PI / 2, a: 0.8 }); // architrave
+      parts.push({ spr: GL.SPR.STREAK, dx: 0, dy: colH * 0.5, sx: span * 1.1, sy: 46 * scale, rot: Math.PI / 2, a: 0.7 });                // stylobate
+    } else if (kind === 'tomb') {
+      var mw = (560 + rng() * 260) * scale, mh = (520 + rng() * 240) * scale;
+      parts.push({ spr: GL.SPR.GLOW, dx: 0, dy: 0, sx: mw, sy: mh, rot: 0, a: 0.55 });                       // colossal mass
+      parts.push({ spr: GL.SPR.GOLD, dx: 0, dy: -mh * 0.42, sx: mw * 0.55, sy: mh * 0.5, rot: 0, a: 0.7 });   // pediment / crown
+      parts.push({ spr: GL.SPR.STREAK, dx: -mw * 0.24, dy: mh * 0.05, sx: 70 * scale, sy: mh * 0.8, rot: 0, a: 0.75 }); // pillar
+      parts.push({ spr: GL.SPR.STREAK, dx: mw * 0.24, dy: mh * 0.05, sx: 70 * scale, sy: mh * 0.8, rot: 0, a: 0.75 });  // pillar
+      parts.push({ spr: GL.SPR.CORE, dx: 0, dy: -mh * 0.08, sx: mw * 0.30, sy: mw * 0.30, rot: 0, a: 0.6 });  // statue head
+      parts.push({ spr: GL.SPR.STREAK, dx: 0, dy: mh * 0.44, sx: mw * 1.05, sy: 54 * scale, rot: Math.PI / 2, a: 0.7 }); // base band
+    } else { // lattice — gilded palace grid
+      var gw = (620 + rng() * 220) * scale, gh = (520 + rng() * 200) * scale, nx = 5, ny = 5;
+      for (i = 0; i < nx; i++) for (var j = 0; j < ny; j++) {
+        var px = -gw / 2 + gw * i / (nx - 1), py = -gh / 2 + gh * j / (ny - 1);
+        parts.push({ spr: GL.SPR.CORE, dx: px, dy: py, sx: 30 * scale, sy: 30 * scale, rot: 0, a: 0.8 });
+      }
+      // diagonal lattice struts
+      for (i = 0; i < nx - 1; i++) {
+        var lx = -gw / 2 + gw * (i + 0.5) / (nx - 1);
+        parts.push({ spr: GL.SPR.STREAK, dx: lx, dy: 0, sx: 20 * scale, sy: gh * 1.02, rot: Math.PI / 6, a: 0.5 });
+        parts.push({ spr: GL.SPR.STREAK, dx: lx, dy: 0, sx: 20 * scale, sy: gh * 1.02, rot: -Math.PI / 6, a: 0.5 });
+      }
+      parts.push({ spr: GL.SPR.RING, dx: 0, dy: 0, sx: gw * 0.5, sy: gh * 0.5, rot: 0, a: 0.6 });   // imperial seal
+    }
+    return parts;
+  }
+
+  function makeBackground(sector) {
+    sector = sector || 0;
+    var env = SECTOR_ENV[sector] || SECTOR_ENV[0];
+    var seed = 0x9E37 ^ (sector * 2654435761);
+    var rng = bgRng(seed);
+    var stars = [], i;
+    var bands = [{ sp: 22, sz: 2.6, a: 0.30 }, { sp: 46, sz: 3.8, a: 0.42 }, { sp: 80, sz: 5.2, a: 0.6 }];
+    for (var l = 0; l < bands.length; l++) {
+      var B = bands[l], per = Math.round(env.starN / bands.length);
+      for (i = 0; i < per; i++) stars.push({ x: rng() * W, y: rng() * H, sp: B.sp, sz: B.sz * (0.6 + rng() * 0.8), a: B.a * (0.5 + rng() * 0.5), tw: rng() * TAU });
     }
     var nebula = [
-      { x: W * 0.3, y: H * 0.35, r: 900, col: [0.55, 0.1, 0.6], a: 0.05, dx: 7, dy: 12 },
-      { x: W * 0.72, y: H * 0.7, r: 1100, col: [0.05, 0.5, 0.55], a: 0.045, dx: -6, dy: 9 }
+      { x: W * 0.32, y: H * 0.34, r: 940, col: env.neb[0], a: 1.0, dx: 6, dy: 10 },
+      { x: W * 0.70, y: H * 0.72, r: 1120, col: env.neb[1], a: 1.0, dx: -5, dy: 8 }
     ];
-    return { stars: stars, nebula: nebula };
+    // structure units spaced down the field; each carries prebuilt parts.
+    var units = [], nUnits = 4;
+    for (i = 0; i < nUnits; i++) {
+      units.push({ x: (0.25 + rng() * 0.5) * W, y: (i / nUnits) * (H + 700) - 350, parts: buildStructParts(env.structKind, seed + i * 131, 1.0) });
+    }
+    // near-debris weather (fast, sparse)
+    var debris = [];
+    for (i = 0; i < 26; i++) debris.push({ x: rng() * W, y: rng() * H, vx: (rng() - 0.5) * 30, vy: 120 + rng() * 160, sz: 4 + rng() * 7, a: 0.3 + rng() * 0.5, tw: rng() * TAU });
+    return {
+      sector: sector, env: env, stars: stars, nebula: nebula, units: units, debris: debris,
+      // choreography state (eased toward targets)
+      structAlpha: 0, structTarget: 1, bright: 1, brightTarget: 1, scrollMul: 1, scrollTarget: 1,
+      role: 'opener', dimFactor: 1,
+      setpiece: { active: false, x: 0, y: 0, vy: 0, alpha: 0, parts: null },
+      bossShadow: { active: false, y: 0, t: 0, alpha: 0 }
+    };
   }
+
+  // Readability law: the background loses every conflict with bullets. As live
+  // enemy-bullet count crosses thresholds, scale layer alpha down (cheap).
+  function bgDimFor(n) {
+    if (n <= 30) return 1;
+    if (n >= 120) return 0.32;
+    return 1 - (n - 30) / 90 * 0.68;
+  }
+  Game.bgDimFor = bgDimFor;
+
+  // Choreograph the background with the wave-slot arc. Called from beginWave/
+  // beginBoss with the role already known there.
+  function setBgRole(role) {
+    var b = G.bg; if (!b) return;
+    b.role = role;
+    b.structTarget = 1;
+    if (role === 'opener') { b.structAlpha = Math.min(b.structAlpha, 0.05); b.structTarget = 1; b.brightTarget = 1.0; b.scrollTarget = 1.0; }
+    else if (role === 'build') { b.brightTarget = 1.0; b.scrollTarget = 1.0; }
+    else if (role === 'feature') { b.brightTarget = 0.92; b.scrollTarget = 1.0; triggerSetpiece(); }
+    else if (role === 'breather') { b.brightTarget = 1.28; b.scrollTarget = 0.65; }        // brightest, calmest
+    else if (role === 'crescendo') { b.brightTarget = 0.68; b.scrollTarget = 1.7; }         // darken + accelerate
+    else if (role === 'boss') { b.brightTarget = 0.16; b.scrollTarget = 1.3; triggerBossShadow(); }  // dim to near-black; boss arrives FROM the environment
+  }
+  function triggerSetpiece() {
+    var b = G.bg, sp = b.setpiece;
+    sp.active = true; sp.x = W * (0.32 + Math.random() * 0.36); sp.y = -640; sp.vy = 60; sp.alpha = 0;
+    sp.parts = buildStructParts(b.env.structKind, (Math.random() * 1e9) | 0, 2.05); // one big set-piece crossing under the fight
+  }
+  function triggerBossShadow() {
+    var b = G.bg, s = b.bossShadow;
+    s.active = true; s.y = -520; s.t = 0; s.alpha = 0;   // a huge shadow precedes the boss's descent
+  }
+
   function updateBackground(dt) {
     var b = G.bg, i;
+    // ease choreography
+    var k = Math.min(1, dt * 1.6);
+    b.structAlpha += (b.structTarget - b.structAlpha) * (b.role === 'opener' ? Math.min(1, dt * 0.7) : k);
+    b.bright += (b.brightTarget - b.bright) * k;
+    b.scrollMul += (b.scrollTarget - b.scrollMul) * k;
+    // readability dim from live bullet count
+    var target = bgDimFor(Engine.bullets.count());
+    b.dimFactor += (target - b.dimFactor) * Math.min(1, dt * 4);
+    var sm = b.scrollMul;
     for (i = 0; i < b.stars.length; i++) {
       var s = b.stars[i];
-      s.y += s.sp * dt; s.tw += dt * 3;
+      s.y += s.sp * sm * dt; s.tw += dt * 3;
       if (s.y > H + 10) { s.y = -10; s.x = Math.random() * W; }
     }
     for (i = 0; i < b.nebula.length; i++) {
       var n = b.nebula[i];
-      n.x += n.dx * dt; n.y += n.dy * dt;
-      if (n.x < -200) n.x = W + 200; if (n.x > W + 200) n.x = -200;
-      if (n.y < -200) n.y = H + 200; if (n.y > H + 200) n.y = -200;
+      n.x += n.dx * sm * dt; n.y += n.dy * sm * dt;
+      if (n.x < -300) n.x = W + 300; if (n.x > W + 300) n.x = -300;
+      if (n.y < -300) n.y = H + 300; if (n.y > H + 300) n.y = -300;
+    }
+    for (i = 0; i < b.units.length; i++) {
+      var u = b.units[i];
+      u.y += 40 * sm * dt;
+      if (u.y > H + 420) { u.y -= (H + 700); u.x = (0.25 + Math.random() * 0.5) * W; }
+    }
+    for (i = 0; i < b.debris.length; i++) {
+      var d = b.debris[i];
+      d.x += d.vx * dt; d.y += d.vy * sm * dt; d.tw += dt * 4;
+      if (d.y > H + 12) { d.y = -12; d.x = Math.random() * W; }
+    }
+    var sp = b.setpiece;
+    if (sp.active) {
+      sp.y += sp.vy * dt; sp.alpha += (1 - sp.alpha) * Math.min(1, dt * 1.2);
+      if (sp.y > H + 700) sp.active = false;
+    }
+    var bs = b.bossShadow;
+    if (bs.active) {
+      bs.t += dt; bs.y += 150 * dt;
+      bs.alpha = G.boss && G.boss.arrived ? Math.max(0, bs.alpha - dt * 0.8) : Math.min(1, bs.alpha + dt * 1.3);
+      if (G.boss && G.boss.arrived && bs.alpha <= 0.01) bs.active = false;
     }
   }
+
+  // Reconfigure the environment for a sector (called before its waves). Resets
+  // the structure reveal so the opener eases it in.
+  Game.setSector = function (idx) {
+    idx = idx || 0;
+    if (G) G.bg = makeBackground(idx);
+  };
+  Game.envState = function () {
+    var b = G && G.bg; if (!b) return null;
+    return {
+      sector: b.sector, slot: b.env.slot, role: b.role,
+      structAlpha: b.structAlpha, bright: b.bright, scrollMul: b.scrollMul, dimFactor: b.dimFactor,
+      structCol: b.env.structCol.slice(), starCol: b.env.star.slice(),
+      units: b.units.length, setpiece: b.setpiece.active, bossShadow: b.bossShadow.active, bossShadowY: b.bossShadow.y,
+      bulletCount: Engine.bullets.count()
+    };
+  };
 
   // ---------------------------------------------------------------------
   // popups / announce / fx
@@ -408,6 +574,7 @@
     G.chromaTarget = 0.02; G.bloomTarget = 1.9;
     announce('APOTHEOSIS', '', 1.2);
     SFX.vaunt();
+    if (window.MUSIC) MUSIC.apotheosis(true);   // open the filter / lift the key — the payday sounds golden
     apotheosisRider();          // god-flavor kicker keyed on the ATTACK god
   }
 
@@ -563,6 +730,7 @@
   }
   function endVaunt() {
     var v = G.vaunt; v.active = false;
+    if (window.MUSIC) MUSIC.apotheosis(false);   // close the lift when the gauge drains
     var payout = v.killCount * G.mult * VAUNT_BASE * G.vauntBonusMul;   // IMPERIAL SEAL charm boosts payout
     if (payout > 0) {
       var _payGain = addScore(payout);
@@ -2506,6 +2674,7 @@
       e.breathT = 0.55;                    // phase I: a brief pose after the arrival
     }
     announce(ph.name, ROMAN[i] || ('' + (i + 1)), 1.9);
+    if (window.MUSIC) MUSIC.setBossPhase(i);       // boss theme escalates a layer per phase
   }
   function bossActivateScript(e, phases, cfg) {
     var ph = phases[e.phase];
@@ -3017,8 +3186,14 @@
     }
   }
 
-  Game.beginWave = function (fn, rank) {
+  // role: the slot-arc role known at spawn (opener/build/feature/breather/
+  // crescendo) — drives the background choreography and the music stem stack.
+  var ROLE_INTENSITY = { opener: 1, build: 1, feature: 3, breather: 0, crescendo: 3, boss: 3 };
+  Game.beginWave = function (fn, rank, role) {
     G.rank = rank; G.waveKind = 'normal'; G.waveGrace = 0.6;
+    G.waveRole = role || 'build';
+    setBgRole(G.waveRole);
+    if (window.MUSIC) MUSIC.setIntensity(ROLE_INTENSITY[G.waveRole] != null ? ROLE_INTENSITY[G.waveRole] : 1);
     resetForms(); curFormId = beginForm(); G.waveHits = 0;
     G.skillEvtT = null; G.skillEvtSlot = 0;   // fresh skill-popup stack per wave
     // alternate the crest anchor between successive waves so a sector's waves
@@ -3033,6 +3208,8 @@
   Game.waveAnchor = function () { return { x: G.anchorX, side: G.anchorSide, n: G.waveN }; };
   Game.beginBoss = function (fn, rank) {
     G.rank = rank; G.waveKind = 'boss'; G.waveGrace = 0.6;
+    G.waveRole = 'boss';
+    setBgRole('boss');                              // dim to near-black; boss shadow precedes
     resetForms(); curFormId = 0; G.waveHits = 0;   // boss/escorts are not a squadron
     G.skillEvtT = null; G.skillEvtSlot = 0;        // fresh skill-popup stack (PHASE SEIZED)
     fn(rank);
@@ -3115,7 +3292,9 @@
   // ---------------------------------------------------------------------
   function update(dt) {
     var m = G.mode;
-    if (Engine.pressed('KeyM')) { var mu = SFX.toggleMute(); addPopup(W / 2, 120, mu ? 'MUTED' : 'SOUND ON', UI_CYAN, 30); }
+    // M toggles the whole mix (SFX + music) — reuses the existing mute surface.
+    // Consumes only KeyM; other keys' edges are untouched.
+    if (Engine.pressed('KeyM')) { var mu = SFX.toggleMute(); if (window.MUSIC) MUSIC.setMuted(mu); addPopup(W / 2, 120, mu ? 'MUTED' : 'SOUND ON', UI_CYAN, 30); }
     if (Engine.pressed('KeyR')) { Run.startRun(Run.newSeed()); return; }
     // Engine.pressed CONSUMES the edge — check the mode FIRST so that in other
     // modes ('over'/'complete'/'sector') the Escape press survives for the Run
@@ -3124,10 +3303,10 @@
     // X abandons to title. In draft/shop, Esc deliberately does nothing.
     if (m === 'playing' || m === 'clearing') {
       if (G.paused) {
-        if (Engine.pressed('KeyX')) { G.paused = false; Run.toTitle(); return; }
-        if (Engine.pressed('KeyZ') || Engine.pressed('Space') || Engine.pressed('KeyP') || Engine.pressed('Escape')) G.paused = false;
+        if (Engine.pressed('KeyX')) { G.paused = false; if (window.MUSIC) MUSIC.duck(false); Run.toTitle(); return; }
+        if (Engine.pressed('KeyZ') || Engine.pressed('Space') || Engine.pressed('KeyP') || Engine.pressed('Escape')) { G.paused = false; if (window.MUSIC) MUSIC.duck(false); }
       } else if (Engine.pressed('Escape') || Engine.pressed('KeyP')) {
-        G.paused = true;
+        G.paused = true; if (window.MUSIC) MUSIC.duck(true);   // pause ducks the score (not suspend)
       }
     }
 
@@ -3502,10 +3681,50 @@
   }
 
   function drawBackground() {
-    var b = G.bg, i;
-    for (i = 0; i < b.nebula.length; i++) { var n = b.nebula[i]; GL.draw(GL.SPR.GLOW, n.x, n.y, n.r, n.r, 0, n.col[0], n.col[1], n.col[2], n.a); }
-    for (i = 0; i < b.stars.length; i++) { var s = b.stars[i]; var tw = 0.7 + 0.3 * Math.sin(s.tw); GL.draw(GL.SPR.CORE, s.x, s.y, s.sz, s.sz, 0, 0.7, 0.85, 1.0, s.a * tw); }
+    var b = G.bg, i, dim = b.dimFactor, bright = b.bright;
+    var deepA = dim * Math.min(1.15, bright);         // deep field follows brightness + dim law
+    var structBase = dim * bright * b.structAlpha;    // structure layer reveal + dim
+    var sc = b.env.structCol, st = b.env.star;
+    // DEEP FIELD — nebula tint then stars. Painted layer overrides if present.
+    if (GL.backdropReady(b.env.slot + '-deep')) {
+      GL.drawBackdrop(b.env.slot + '-deep', W / 2, H / 2, W, H, 1, 1, 1, deepA, (G.time * 0.006) % 1);
+    } else {
+      for (i = 0; i < b.nebula.length; i++) { var n = b.nebula[i]; GL.draw(GL.SPR.GLOW, n.x, n.y, n.r, n.r, 0, n.col[0], n.col[1], n.col[2], deepA); }
+      for (i = 0; i < b.stars.length; i++) { var s = b.stars[i]; var tw = 0.7 + 0.3 * Math.sin(s.tw); GL.draw(GL.SPR.CORE, s.x, s.y, s.sz, s.sz, 0, st[0], st[1], st[2], s.a * tw * deepA); }
+    }
+    // BOSS SHADOW — huge dim looming mass that precedes the boss (arrives FROM
+    // the environment). Drawn even as the layers dim to near-black for the fight.
+    var bs = b.bossShadow;
+    if (bs.active && bs.alpha > 0.01) {
+      GL.draw(GL.SPR.GLOW, W / 2, bs.y, W * 1.5, H * 0.7, 0, 0.06, 0.04, 0.09, 0.5 * bs.alpha * dim);
+      GL.draw(GL.SPR.RING, W / 2, bs.y, W * 0.9, W * 0.9, G.time * 0.4, 0.10, 0.07, 0.13, 0.45 * bs.alpha * dim);
+    }
+    // STRUCTURE LAYER — drifting architecture silhouettes (painted override or
+    // procedural units).
+    if (GL.backdropReady(b.env.slot + '-structure')) {
+      GL.drawBackdrop(b.env.slot + '-structure', W / 2, H / 2, W, H, 1, 1, 1, structBase, (G.time * 0.012) % 1);
+    } else if (structBase > 0.01) {
+      for (i = 0; i < b.units.length; i++) drawStructUnit(b.units[i], sc, structBase);
+    }
+    // SET-PIECE — one big silhouette crossing under the fight on a feature wave;
+    // dims further while a crest is live (dimFactor already low then).
+    var sp = b.setpiece;
+    if (sp.active && sp.parts) drawStructUnitAt(sp.x, sp.y, sp.parts, sc, structBase * 1.1 * sp.alpha);
+    // NEAR-DEBRIS WEATHER — fast sparse motes/embers (painted override or procedural).
+    var dc = b.env.debrisCol, debA = deepA * 0.9;
+    if (GL.backdropReady(b.env.slot + '-debris')) {
+      GL.drawBackdrop(b.env.slot + '-debris', W / 2, H / 2, W, H, 1, 1, 1, debA, (G.time * 0.03) % 1);
+    } else {
+      for (i = 0; i < b.debris.length; i++) { var d = b.debris[i]; var dt2 = 0.6 + 0.4 * Math.sin(d.tw); GL.draw(GL.SPR.SPARK, d.x, d.y, d.sz, d.sz, d.tw, dc[0], dc[1], dc[2], d.a * dt2 * debA); }
+    }
   }
+  function drawStructUnitAt(ox, oy, parts, col, alpha) {
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i];
+      GL.draw(p.spr, ox + p.dx, oy + p.dy, p.sx, p.sy, p.rot, col[0], col[1], col[2], p.a * alpha);
+    }
+  }
+  function drawStructUnit(u, col, alpha) { drawStructUnitAt(u.x, u.y, u.parts, col, alpha); }
   function drawGold() {
     Engine.gold.forEach(function (g) {
       var fade = g.age > g.life - 1.5 ? Math.max(0, (g.life - g.age) / 1.5) : 1;

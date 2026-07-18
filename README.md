@@ -18,7 +18,8 @@ Chrome, Edge, or Firefox — no local server needed.
   letterboxes with black pillars on a landscape one.
 - If you see a "needs WebGL2" message, update your browser or enable hardware
   acceleration.
-- Sound starts on your first keypress (browser autoplay policy). Press **M** to mute.
+- Sound (SFX **and** the procedural music score) starts on your first keypress
+  (browser autoplay policy). Press **M** to mute everything.
 
 ### Custom sprite art
 
@@ -44,7 +45,7 @@ overridable — they stay procedural by doctrine.
 | **Left / Right** | Move the selection in drafts and shops (or click) |
 | **P / Esc** | Pause in combat (on the pause screen: Z/P/Esc resume, X abandons to title); Esc also backs out of end screens |
 | **R** | Restart the run (fresh seed) |
-| **M** | Mute / unmute |
+| **M** | Mute / unmute (music **and** SFX) |
 
 Three offensive tools, distinct roles: **Attack** (Z) is your constant fire — deliberately modest on its own. **Special** (X) is a burst/panic tool on a 3-charge meter (the purple pips beside the apotheosis bar) that refills over time and faster on kills; its base form is the **Lance Volley** (fat piercing energy lances). **Apotheosis** (C) is the defensive/scoring bullet-cancel — and with an attack god equipped, its activation fires that god's **rider** (below). On defense there's also the **Ghost dodge** — tap **Shift** while holding a direction to dash a short hop with brief invulnerability (grazing still counts mid-dash), on a ~0.9s cooldown. The power spike comes from **god boons**, below.
 
@@ -82,6 +83,33 @@ Waves are hand-tuned **arrangements** filling an authored per-sector arc (opener
 builds → feature → breather → crescendo → boss), with the crest anchor alternating
 left/center/right; RNG only picks which arrangement, its mirror, and phase — never the
 geometry itself.
+
+**The world under the fight.** Each sector scrolls over a procedural **parallax
+environment** matched to its pantheon — a deep field (stars + nebula tint), a
+structure layer of large drifting silhouettes (Sector 1 bronze colonnades for
+TALOS, Sector 2 KEMET tomb architecture and colossal statuary for AMMIT, Sector 3
+a gilded palace lattice for the SOVEREIGN), and fast sparse near-debris weather.
+The grounds stay in the near-black **dim band** (low-saturation, never additive-bright,
+never in the enemy bullet band) and the whole backdrop **dims further as the bullet
+count climbs** — readability always beats scenery. The background is choreographed
+with the slot arc: the opener eases the structure in, a **feature** wave sends one big
+set-piece crossing under the fight, the **breather** is the brightest/calmest moment,
+the **crescendo** darkens and accelerates the layers, and the boss arrives *from* the
+environment — a huge shadow descends ahead of it, then the layers dim to near-black for
+the fight. Painted layers drop in later the same way sprites do (`art/backdrops/<sector>-<layer>.png`
+or a `window.BACKDROPS` registry), with the procedural layers as silent fallback.
+
+**The level's pulse.** A procedural WebAudio **score** (`js/music.js`) plays under the
+fight — layered stems (pad drone, pulse bass/arp, full-kit crest) on a real-time
+lookahead scheduler, with a distinct **theme per sector** (S1 bronze/processional,
+S2 KEMET low-and-dark, S3 gilded/regal), a calm title theme, and an escalating boss
+theme per sector. The stem stack follows the same slot arc as the waves — breathers
+strip to the pad, builds add the pulse, crescendos and boss phases run the full stack,
+crossfading on wave boundaries. The whole composition is **seeded off the run seed**, so
+the same run always sounds the same. APOTHEOSIS opens a filter and lifts a shimmer layer
+(the payday sounds golden), pausing ducks the score, and the shop gets its own quiet pad
+variant. The music sits mid-low and **under** the SFX, which always carry the gameplay
+information; **M** mutes both.
 
 **Enemy variety:** beyond popcorn/gunships, watch for **AEGIS SHIELDBEARERS**
 (front shield — displace them to break it), **WEAVER PAIRS** (bullet-curtain tether),
@@ -211,6 +239,7 @@ tags — each hangs one namespace on `window`.
 | --- | --- | --- |
 | `index.html` | — | Black fullscreen page; WebGL canvas + overlaid 2D HUD canvas; scripts in order. |
 | `js/sfx.js` | `window.SFX` | WebAudio-synthesized SFX (no files). Master → lowpass → compressor; lazy context resumed on first gesture. |
+| `js/music.js` | `window.MUSIC` | Procedural WebAudio **score**: layered stems (pad / pulse / crest) on a real-time lookahead scheduler, per-sector + title + per-boss themes seeded off the run seed, driven by the wave-slot arc (`setIntensity`), boss phases (`setBossPhase`), APOTHEOSIS filter-lift, pause duck, and shop pad variant. Shares SFX's AudioContext; sits mid-low and under the SFX. |
 | `js/gl.js` | `window.GL` | WebGL2 renderer. Procedural sprite atlas, instanced additive quad batcher, threshold + separable-gaussian **bloom** at ½/¼ res, chromatic-offset composite (the Apotheosis pulse). |
 | `js/engine.js` | `window.Engine` | Fixed-timestep loop (60 Hz, dt clamped), keyboard input, preallocated **object pools** (4096 bullets / 256 shots / 128 enemies / 2048 particles / 512 gold), circle collision. |
 | `js/patterns.js` | `window.Patterns` | Danmaku emitter toolkit — legacy (aimed / fan / ring / spiral / whip / flower / spray) plus the **authored-geometry verbs** (`ringGap`, `pulse`, `arcWall`, `snake`, `crossfire`, `wheel`, `rain`, `burstAimed`), six bullet **families** (orb / ring / kunai / shard / pellet / star) with **size + speed tiers** (`o.fam` / `o.tier`), and global affix scalars (`setGlobal` for DENSE VEIL etc.). |
