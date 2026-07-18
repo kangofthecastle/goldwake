@@ -30,8 +30,20 @@
   var lp = null;
   var comp = null;
   var reverb = null;   // shared procedural room (convolver) -> reverbRet -> master
+  var killBus = null;  // shared DRY tanh saturator for the kill family (pop/small
+                       // explosion) -> killTrim -> master. Rapid pops SUM through
+                       // one saturator so a formation wipe soft-clips into a
+                       // drum-roll crackle instead of digitally clipping to mush.
   var muted = false;
   var ready = false;
+
+  // Kill-sound STYLE, switchable live via SFX.setKillStyle('A'|'B'|'C'). Defines
+  // the whole kill family (pop / small explosion / boom / big-death) coherently.
+  //   A "arcade crunch" (default) — dense noise burst + sub tick + click, saturated
+  //   B "firework"                — noise crack + a spray of descending debris pings
+  //   C "meaty thump"             — rounder bandpassed knock ~700Hz, minimal top end
+  var killStyle = 'A';
+  var lastPopRate = 0;   // last per-play pitch/rate factor used by a pop (verify)
 
   // shared tanh saturation curve (context-independent Float32Array; one alloc).
   // A gentle drive fattens the impact family and soft-clips summed layers so a
@@ -85,6 +97,15 @@
       ret.gain.value = 0.9;   // return trim; per-sound send does the real scaling
       reverb.connect(ret); ret.connect(master);
     } catch (e) { reverb = null; }
+
+    // shared dry saturation bus for the kill family. killBus (tanh, small-signal
+    // gain ~2) -> killTrim 0.5 (so a single pop is level-identical to the old dry
+    // path) -> master. The saturator only bites once several pops STACK, gluing
+    // the sum. Dry (no reverb send) so chain-kill density stays legible.
+    killBus = ctx.createWaveShaper();
+    killBus.curve = CURVE; killBus.oversample = '2x';
+    var killTrim = ctx.createGain(); killTrim.gain.value = 0.5;
+    killBus.connect(killTrim); killTrim.connect(master);
 
     ready = true;
     renderAll();   // async offline render of the rich patches (non-blocking)
@@ -181,76 +202,236 @@
   // SAME builder serves the OfflineAudioContext render (into a buffer) and the
   // live-synth fallback (into a live hub), so the two can never drift.
 
+  // midship boom = the kill family's heavy tier: the popcorn DNA scaled up, so it
+  // reads as "the same explosion, bigger". Dispatched on killStyle; each variant
+  // is rendered to a buffer at boot (re-rendered on a live style switch) and also
+  // serves as its own live fallback. All keep the boom's reverb send + weight and
+  // sit under the 600ms tail budget.
   function buildBoom(c, dest, t, nb) {
+    if (killStyle === 'B') return buildBoomB(c, dest, t, nb);
+    if (killStyle === 'C') return buildBoomC(c, dest, t, nb);
+    return buildBoomA(c, dest, t, nb);
+  }
+
+  // A "arcade crunch": big sub + a 2ms click + a dense noise burst that a lowpass
+  // rakes 5000->250Hz, mid knock, driven hard into the saturator (crunchy).
+  function buildBoomA(c, dest, t, nb) {
     var out = sat(c); out.connect(dest);
-    var dur = 0.42;
-    // kick-style sub 150 -> 40Hz (the chest thump)
+    var dur = 0.4;
     var sub = c.createOscillator(); sub.type = 'sine';
-    sub.frequency.setValueAtTime(150, t);
-    sub.frequency.exponentialRampToValueAtTime(40, t + 0.12);
+    sub.frequency.setValueAtTime(160, t);
+    sub.frequency.exponentialRampToValueAtTime(42, t + 0.13);
     var sg = c.createGain();
     sg.gain.setValueAtTime(0.0001, t);
-    sg.gain.exponentialRampToValueAtTime(0.55, t + 0.006);
+    sg.gain.exponentialRampToValueAtTime(0.6, t + 0.006);
     sg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     sub.connect(sg); sg.connect(out); sub.start(t); sub.stop(t + dur + 0.02);
-    // mid tonal knock (the "hull" pitch identity)
+    // click transient (the crunch attack)
+    var cs = c.createBufferSource(); cs.buffer = nb; cs.loop = true;
+    var cf = c.createBiquadFilter(); cf.type = 'highpass'; cf.frequency.setValueAtTime(3000, t);
+    var cg = c.createGain();
+    cg.gain.setValueAtTime(0.4, t);
+    cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.007);
+    cs.connect(cf); cf.connect(cg); cg.connect(out); cs.start(t); cs.stop(t + 0.02);
+    // dense crunchy noise burst, lowpass raked down
+    var ns = c.createBufferSource(); ns.buffer = nb; ns.loop = true;
+    var nf = c.createBiquadFilter(); nf.type = 'lowpass'; nf.Q.value = 0.7;
+    nf.frequency.setValueAtTime(5000, t);
+    nf.frequency.exponentialRampToValueAtTime(250, t + dur * 0.8);
+    var ng = c.createGain();
+    ng.gain.setValueAtTime(0.46, t);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    ns.connect(nf); nf.connect(ng); ng.connect(out); ns.start(t); ns.stop(t + dur + 0.02);
+    // mid knock (hull pitch identity)
     var kn = c.createOscillator(); kn.type = 'triangle';
     kn.frequency.setValueAtTime(300, t);
     kn.frequency.exponentialRampToValueAtTime(90, t + 0.09);
     var kg = c.createGain();
     kg.gain.setValueAtTime(0.0001, t);
-    kg.gain.exponentialRampToValueAtTime(0.2, t + 0.004);
+    kg.gain.exponentialRampToValueAtTime(0.22, t + 0.004);
     kg.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
     kn.connect(kg); kg.connect(out); kn.start(t); kn.stop(t + 0.15);
-    // shaped noise crack — lowpass sweeping down with the envelope
-    var ns = c.createBufferSource(); ns.buffer = nb; ns.loop = true;
-    var nf = c.createBiquadFilter(); nf.type = 'lowpass';
-    nf.frequency.setValueAtTime(3000, t);
-    nf.frequency.exponentialRampToValueAtTime(180, t + dur);
-    var ng = c.createGain();
-    ng.gain.setValueAtTime(0.34, t);
-    ng.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    ns.connect(nf); nf.connect(ng); ng.connect(out); ns.start(t); ns.stop(t + dur + 0.02);
   }
 
-  function buildExplosionBig(c, dest, t, nb) {
+  // B "firework": a deeper bandpassed crack + a shower of descending debris pings
+  // over a sub.
+  function buildBoomB(c, dest, t, nb) {
     var out = sat(c); out.connect(dest);
-    var dur = 0.62;
+    var dur = 0.42;
+    var sub = c.createOscillator(); sub.type = 'sine';
+    sub.frequency.setValueAtTime(150, t);
+    sub.frequency.exponentialRampToValueAtTime(40, t + 0.14);
+    var sg = c.createGain();
+    sg.gain.setValueAtTime(0.0001, t);
+    sg.gain.exponentialRampToValueAtTime(0.55, t + 0.006);
+    sg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    sub.connect(sg); sg.connect(out); sub.start(t); sub.stop(t + dur + 0.02);
+    // deep crack
+    var ns = c.createBufferSource(); ns.buffer = nb; ns.loop = true;
+    var nf = c.createBiquadFilter(); nf.type = 'bandpass'; nf.Q.value = 0.9;
+    nf.frequency.setValueAtTime(1900, t);
+    nf.frequency.exponentialRampToValueAtTime(500, t + 0.12);
+    var ng = c.createGain();
+    ng.gain.setValueAtTime(0.44, t);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+    ns.connect(nf); nf.connect(ng); ng.connect(out); ns.start(t); ns.stop(t + 0.16);
+    // debris shower — descending pings, staggered
+    var deb = [1400, 1050, 820, 620, 480];
+    for (var i = 0; i < deb.length; i++) {
+      var dt = t + 0.05 + i * 0.06;
+      var f = deb[i] * (0.92 + Math.random() * 0.16);
+      var o = c.createOscillator(); o.type = 'triangle';
+      o.frequency.setValueAtTime(f, dt);
+      o.frequency.exponentialRampToValueAtTime(f * 0.6, dt + 0.06);
+      var g = c.createGain();
+      g.gain.setValueAtTime(0.0001, dt);
+      g.gain.exponentialRampToValueAtTime(0.05, dt + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, dt + 0.08);
+      o.connect(g); g.connect(out); o.start(dt); o.stop(dt + 0.1);
+    }
+  }
+
+  // C "meaty thump": a big rounded sub whump + a low bandpassed noise bloom that
+  // eases in, minimal top end.
+  function buildBoomC(c, dest, t, nb) {
+    var out = sat(c); out.connect(dest);
+    var dur = 0.45;
+    var sub = c.createOscillator(); sub.type = 'sine';
+    sub.frequency.setValueAtTime(150, t);
+    sub.frequency.exponentialRampToValueAtTime(40, t + 0.18);
+    var sg = c.createGain();
+    sg.gain.setValueAtTime(0.0001, t);
+    sg.gain.exponentialRampToValueAtTime(0.62, t + 0.008);
+    sg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    sub.connect(sg); sg.connect(out); sub.start(t); sub.stop(t + dur + 0.02);
+    // rounded low noise bloom (eases in, no top end)
+    var ns = c.createBufferSource(); ns.buffer = nb; ns.loop = true;
+    var nf = c.createBiquadFilter(); nf.type = 'bandpass'; nf.Q.value = 0.8;
+    nf.frequency.setValueAtTime(520, t);
+    nf.frequency.exponentialRampToValueAtTime(180, t + dur);
+    var ng = c.createGain();
+    ng.gain.setValueAtTime(0.0001, t);
+    ng.gain.exponentialRampToValueAtTime(0.42, t + 0.02);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    ns.connect(nf); nf.connect(ng); ng.connect(out); ns.start(t); ns.stop(t + dur + 0.02);
+    // low knock body
+    var kn = c.createOscillator(); kn.type = 'triangle';
+    kn.frequency.setValueAtTime(200, t);
+    kn.frequency.exponentialRampToValueAtTime(70, t + 0.1);
+    var kg = c.createGain();
+    kg.gain.setValueAtTime(0.0001, t);
+    kg.gain.exponentialRampToValueAtTime(0.2, t + 0.006);
+    kg.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    kn.connect(kg); kg.connect(out); kn.start(t); kn.stop(t + 0.18);
+  }
+
+  // boss big-death = the style's DNA scaled further up (longer, louder, more
+  // debris/bloom). Dispatched on killStyle; buffered, under the 1.2s big budget.
+  function buildExplosionBig(c, dest, t, nb) {
+    if (killStyle === 'B') return buildExplosionBigB(c, dest, t, nb);
+    if (killStyle === 'C') return buildExplosionBigC(c, dest, t, nb);
+    return buildExplosionBigA(c, dest, t, nb);
+  }
+
+  function buildExplosionBigA(c, dest, t, nb) {
+    var out = sat(c); out.connect(dest);
+    var dur = 0.7;
     var sub = c.createOscillator(); sub.type = 'sine';
     sub.frequency.setValueAtTime(220, t);
     sub.frequency.exponentialRampToValueAtTime(40, t + dur * 0.85);
     var sg = c.createGain();
-    sg.gain.setValueAtTime(0.5, t);
+    sg.gain.setValueAtTime(0.55, t);
     sg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     sub.connect(sg); sg.connect(out); sub.start(t); sub.stop(t + dur + 0.02);
+    // click transient
+    var cs = c.createBufferSource(); cs.buffer = nb; cs.loop = true;
+    var cf = c.createBiquadFilter(); cf.type = 'highpass'; cf.frequency.setValueAtTime(3000, t);
+    var cg = c.createGain();
+    cg.gain.setValueAtTime(0.45, t);
+    cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.008);
+    cs.connect(cf); cf.connect(cg); cg.connect(out); cs.start(t); cs.stop(t + 0.02);
+    // huge crunchy noise body raked 6000->200
+    var ns = c.createBufferSource(); ns.buffer = nb; ns.loop = true;
+    var nf = c.createBiquadFilter(); nf.type = 'lowpass'; nf.Q.value = 0.7;
+    nf.frequency.setValueAtTime(6000, t);
+    nf.frequency.exponentialRampToValueAtTime(200, t + dur);
+    var ng = c.createGain();
+    ng.gain.setValueAtTime(0.55, t);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    ns.connect(nf); nf.connect(ng); ng.connect(out); ns.start(t); ns.stop(t + dur + 0.02);
     var kn = c.createOscillator(); kn.type = 'triangle';
     kn.frequency.setValueAtTime(320, t);
     kn.frequency.exponentialRampToValueAtTime(70, t + 0.1);
     var kg = c.createGain();
     kg.gain.setValueAtTime(0.0001, t);
-    kg.gain.exponentialRampToValueAtTime(0.2, t + 0.004);
+    kg.gain.exponentialRampToValueAtTime(0.22, t + 0.004);
     kg.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
     kn.connect(kg); kg.connect(out); kn.start(t); kn.stop(t + 0.16);
-    // long noise tail with a downward filter sweep
+  }
+
+  function buildExplosionBigB(c, dest, t, nb) {
+    var out = sat(c); out.connect(dest);
+    var dur = 0.7;
+    var sub = c.createOscillator(); sub.type = 'sine';
+    sub.frequency.setValueAtTime(210, t);
+    sub.frequency.exponentialRampToValueAtTime(40, t + dur * 0.8);
+    var sg = c.createGain();
+    sg.gain.setValueAtTime(0.55, t);
+    sg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    sub.connect(sg); sg.connect(out); sub.start(t); sub.stop(t + dur + 0.02);
+    // deep crack
     var ns = c.createBufferSource(); ns.buffer = nb; ns.loop = true;
-    var nf = c.createBiquadFilter(); nf.type = 'lowpass';
-    nf.frequency.setValueAtTime(2600, t);
-    nf.frequency.exponentialRampToValueAtTime(200, t + dur);
+    var nf = c.createBiquadFilter(); nf.type = 'bandpass'; nf.Q.value = 0.9;
+    nf.frequency.setValueAtTime(2200, t);
+    nf.frequency.exponentialRampToValueAtTime(500, t + 0.16);
     var ng = c.createGain();
     ng.gain.setValueAtTime(0.5, t);
-    ng.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    ns.connect(nf); nf.connect(ng); ng.connect(out); ns.start(t); ns.stop(t + dur + 0.02);
-    // descending debris pings
-    var deb = [900, 650, 470];
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    ns.connect(nf); nf.connect(ng); ng.connect(out); ns.start(t); ns.stop(t + 0.22);
+    // big debris shower
+    var deb = [1600, 1250, 980, 760, 590, 460];
     for (var i = 0; i < deb.length; i++) {
-      var dt = t + 0.08 + i * 0.09;
-      var o = c.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(deb[i], dt);
+      var dt = t + 0.06 + i * 0.08;
+      var f = deb[i] * (0.9 + Math.random() * 0.2);
+      var o = c.createOscillator(); o.type = 'triangle';
+      o.frequency.setValueAtTime(f, dt);
+      o.frequency.exponentialRampToValueAtTime(f * 0.6, dt + 0.08);
       var g = c.createGain();
       g.gain.setValueAtTime(0.0001, dt);
-      g.gain.exponentialRampToValueAtTime(0.055, dt + 0.004);
-      g.gain.exponentialRampToValueAtTime(0.0001, dt + 0.06);
-      o.connect(g); g.connect(out); o.start(dt); o.stop(dt + 0.08);
+      g.gain.exponentialRampToValueAtTime(0.06, dt + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, dt + 0.1);
+      o.connect(g); g.connect(out); o.start(dt); o.stop(dt + 0.12);
     }
+  }
+
+  function buildExplosionBigC(c, dest, t, nb) {
+    var out = sat(c); out.connect(dest);
+    var dur = 0.72;
+    var sub = c.createOscillator(); sub.type = 'sine';
+    sub.frequency.setValueAtTime(190, t);
+    sub.frequency.exponentialRampToValueAtTime(38, t + 0.22);
+    var sg = c.createGain();
+    sg.gain.setValueAtTime(0.6, t);
+    sg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    sub.connect(sg); sg.connect(out); sub.start(t); sub.stop(t + dur + 0.02);
+    // huge slow low bloom
+    var ns = c.createBufferSource(); ns.buffer = nb; ns.loop = true;
+    var nf = c.createBiquadFilter(); nf.type = 'bandpass'; nf.Q.value = 0.7;
+    nf.frequency.setValueAtTime(560, t);
+    nf.frequency.exponentialRampToValueAtTime(150, t + dur);
+    var ng = c.createGain();
+    ng.gain.setValueAtTime(0.0001, t);
+    ng.gain.exponentialRampToValueAtTime(0.5, t + 0.03);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    ns.connect(nf); nf.connect(ng); ng.connect(out); ns.start(t); ns.stop(t + dur + 0.02);
+    var kn = c.createOscillator(); kn.type = 'triangle';
+    kn.frequency.setValueAtTime(210, t);
+    kn.frequency.exponentialRampToValueAtTime(64, t + 0.12);
+    var kg = c.createGain();
+    kg.gain.setValueAtTime(0.0001, t);
+    kg.gain.exponentialRampToValueAtTime(0.24, t + 0.006);
+    kg.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    kn.connect(kg); kg.connect(out); kn.start(t); kn.stop(t + 0.2);
   }
 
   function buildDeath(c, dest, t, nb) {
@@ -363,9 +544,10 @@
   var bufs = {};        // name -> AudioBuffer
   var bufPeak = {};     // name -> abs peak (verify/report)
   var lastRate = {};    // name -> last playbackRate used (verify: variation)
-  var rendered = false; // guard so we only render once
-  var renderMs = 0;     // wall time until the last buffer resolved
-  var renderCount = 0;  // how many resolved
+  var rendered = false; // guard so we only render the FULL set once
+  var renderMs = 0;     // wall time until the last boot buffer resolved
+  var renderCount = 0;  // (legacy) increments per resolve; count derived from bufs
+  var killRenderMs = 0; // wall time of the last kill-style re-render (verify)
 
   var RICH = [
     { name: 'boom',         dur: 0.5,  build: buildBoom },
@@ -377,40 +559,62 @@
 
   function tnow() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
 
-  function renderAll() {
-    if (rendered || !ctx) return;
-    rendered = true;
+  // Offline-render a set of RICH jobs into `bufs`, calling `done(ms)` once all
+  // resolve. Shared by the boot render (all patches) and the kill-style live
+  // re-render (just boom + explosionBig). Each build reads the CURRENT killStyle.
+  function renderJobs(jobs, done) {
     var OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-    if (!OAC) return;   // no offline render: live fallback covers every patch
-    var sr = ctx.sampleRate;
-    var t0 = tnow();
-    var pending = RICH.length;
-    RICH.forEach(function (job) {
+    if (!OAC) { if (done) done(0); return; }   // live fallback covers every patch
+    var sr = ctx.sampleRate, t0 = tnow(), pending = jobs.length;
+    if (!pending) { if (done) done(0); return; }
+    jobs.forEach(function (job) {
       try {
         var len = Math.ceil(sr * job.dur);
         var oc = new OAC(1, len, sr);
         var nb = makeNoise(oc, 1.0);
         job.build(oc, oc.destination, 0, nb);
         var p = oc.startRendering();
-        if (p && p.then) {
-          p.then(function (buf) {
-            bufs[job.name] = buf;
-            bufPeak[job.name] = peakOf(buf);
-            renderCount++;
-            if (--pending === 0) renderMs = tnow() - t0;
-          }, function () { if (--pending === 0) renderMs = tnow() - t0; });
-        } else {
-          // legacy callback form
-          oc.oncomplete = function (e) {
-            bufs[job.name] = e.renderedBuffer;
-            bufPeak[job.name] = peakOf(e.renderedBuffer);
-            renderCount++;
-            if (--pending === 0) renderMs = tnow() - t0;
-          };
-        }
-      } catch (e) { if (--pending === 0) renderMs = tnow() - t0; }
+        var ok = function (buf) {
+          bufs[job.name] = buf; bufPeak[job.name] = peakOf(buf); renderCount++;
+          if (--pending === 0 && done) done(tnow() - t0);
+        };
+        var bad = function () { if (--pending === 0 && done) done(tnow() - t0); };
+        if (p && p.then) p.then(ok, bad);
+        else oc.oncomplete = function (e) { ok(e.renderedBuffer); };   // legacy form
+      } catch (e) { if (--pending === 0 && done) done(tnow() - t0); }
     });
   }
+
+  function renderAll() {
+    if (rendered || !ctx) return;
+    rendered = true;
+    renderJobs(RICH, function (ms) { renderMs = ms; });
+  }
+
+  // Re-render ONLY the kill-family buffered patches (boom / explosionBig) for the
+  // current killStyle. Guarded + async: the stale-style buffers are dropped first
+  // so playRich falls back to the live builder (which reads killStyle) for the new
+  // style meanwhile, then swaps to the freshly rendered buffers when they resolve.
+  function rerenderKill() {
+    if (!ready) return;   // pre-boot: renderAll picks up whatever killStyle is set
+    var jobs = [];
+    for (var i = 0; i < RICH.length; i++) {
+      var nm = RICH[i].name;
+      if (nm === 'boom' || nm === 'explosionBig') { jobs.push(RICH[i]); delete bufs[nm]; }
+    }
+    renderJobs(jobs, function (ms) { killRenderMs = ms; });
+  }
+
+  // Live kill-sound style switch. Persists in a module var (default 'A'), re-renders
+  // the buffered kill patches for the new style. Returns false on an unknown style.
+  SFX.setKillStyle = function (s) {
+    if (s !== 'A' && s !== 'B' && s !== 'C') return false;
+    if (s === killStyle && bufs['boom']) return true;
+    killStyle = s;
+    rerenderKill();
+    return true;
+  };
+  SFX.getKillStyle = function () { return killStyle; };
 
   function peakOf(buf) {
     var d = buf.getChannelData(0), m = 0;
@@ -508,55 +712,188 @@
     if (!ready || muted) return;
     if (big) { playRich('explosionBig', buildExplosionBig, 0.05, 0.12); return; }
     var t = now();
-    var dur = 0.3;
-    var n = noiseVoice(t, dur, null);
-    var nf = ctx.createBiquadFilter();
-    nf.type = 'lowpass';
-    nf.frequency.setValueAtTime(1800, t);
-    nf.frequency.exponentialRampToValueAtTime(200, t + dur);
-    n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
-    n.g.gain.setValueAtTime(0.28, t);
-    n.g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    var o = ctx.createOscillator();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(320, t);
-    o.frequency.exponentialRampToValueAtTime(70, t + dur * 0.9);
-    var g = ctx.createGain();
-    g.gain.setValueAtTime(0.3, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(master);
-    o.start(t); o.stop(t + dur + 0.02);
+    if (killStyle === 'B') explB(t);
+    else if (killStyle === 'C') explC(t);
+    else explA(t);
   };
 
-  // popcorn kill: a bright zap-pop — the kill-cadence filler. LAYERS: a tight
-  // bandpassed noise BURST that sweeps down over 60ms (the "pop") + a fast square
-  // zap-chirp (the "zap"). Mid/high so it reads over the music bed; anti-stacked
-  // and DRY (excluded from reverb) so a formation wipe ticks cleanly.
+  // small live explosion = the mid kill tier between pop and boom, styled to match
+  // the family. DRY (killBus). ~0.3s tail.
+  function explA(t) {
+    var n = killNoise(t, 0.28);
+    var nf = ctx.createBiquadFilter(); nf.type = 'lowpass'; nf.Q.value = 0.7;
+    nf.frequency.setValueAtTime(5000, t);
+    nf.frequency.exponentialRampToValueAtTime(240, t + 0.26);
+    n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
+    n.g.gain.setValueAtTime(0.3, t);
+    n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+    var o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(320, t);
+    o.frequency.exponentialRampToValueAtTime(70, t + 0.27);
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.3, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+    o.connect(g); g.connect(killBus); o.start(t); o.stop(t + 0.32);
+  }
+
+  function explB(t) {
+    var n = killNoise(t, 0.09);
+    var nf = ctx.createBiquadFilter(); nf.type = 'bandpass'; nf.Q.value = 0.9;
+    nf.frequency.setValueAtTime(1900, t);
+    nf.frequency.exponentialRampToValueAtTime(700, t + 0.08);
+    n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
+    n.g.gain.setValueAtTime(0.3, t);
+    n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    var o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(280, t);
+    o.frequency.exponentialRampToValueAtTime(64, t + 0.14);
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.28, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    o.connect(g); g.connect(killBus); o.start(t); o.stop(t + 0.22);
+    var deb = [1300, 950, 700, 520];
+    for (var i = 0; i < deb.length; i++) {
+      var dt = t + 0.03 + i * 0.045;
+      var f = deb[i] * (0.9 + Math.random() * 0.2);
+      var po = ctx.createOscillator(); po.type = 'triangle';
+      po.frequency.setValueAtTime(f, dt);
+      po.frequency.exponentialRampToValueAtTime(f * 0.6, dt + 0.06);
+      var pg = ctx.createGain();
+      pg.gain.setValueAtTime(0.0001, dt);
+      pg.gain.exponentialRampToValueAtTime(0.03, dt + 0.004);
+      pg.gain.exponentialRampToValueAtTime(0.0001, dt + 0.07);
+      po.connect(pg); pg.connect(killBus); po.start(dt); po.stop(dt + 0.09);
+    }
+  }
+
+  function explC(t) {
+    var n = killNoise(t, 0.32);
+    var nf = ctx.createBiquadFilter(); nf.type = 'bandpass'; nf.Q.value = 0.7;
+    nf.frequency.setValueAtTime(560, t);
+    nf.frequency.exponentialRampToValueAtTime(170, t + 0.3);
+    n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
+    n.g.gain.setValueAtTime(0.0001, t);
+    n.g.gain.exponentialRampToValueAtTime(0.3, t + 0.02);
+    n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+    var o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(210, t);
+    o.frequency.exponentialRampToValueAtTime(52, t + 0.2);
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.34, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+    o.connect(g); g.connect(killBus); o.start(t); o.stop(t + 0.34);
+  }
+
+  // a live noise voice on the DRY kill bus, started at a RANDOM offset into the 1s
+  // noise buffer so rapid pops draw different samples (rapid stacks shimmer rather
+  // than phase-lock into a buzz). Returns { s, g } for filter insertion.
+  function killNoise(t, dur) {
+    var s = ctx.createBufferSource();
+    s.buffer = noise(); s.loop = true;
+    var g = ctx.createGain();
+    s.connect(g); g.connect(killBus);
+    s.start(t, Math.random() * 0.8); s.stop(t + dur + 0.02);
+    return { s: s, g: g };
+  }
+
+  // popcorn kill: the kill-cadence filler — fires constantly. NOISE-FORWARD: a
+  // crunchy compact explosion, not a laser zap. Dispatched on killStyle. Anti-
+  // stacked (throttle) and DRY — routed through the shared killBus saturator so a
+  // formation wipe SUMS into a drum-roll crackle instead of clipping to mush.
+  // SHORT (<=180ms tail). Per-play pitch + gain jitter + random noise offset keep a
+  // chain shimmering. Loudness role preserved (~0.055 peak family).
   SFX.pop = function () {
     if (!ready || muted) return;
     var t = now();
     if (t - lastPop < 0.022) return;
     lastPop = t;
-    var o = ctx.createOscillator();
-    o.type = 'square';
-    o.frequency.setValueAtTime(1050 * (1 + (Math.random() - 0.5) * 0.05), t);
-    o.frequency.exponentialRampToValueAtTime(360, t + 0.05);
-    var g = ctx.createGain();
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.055, t + 0.003);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
-    o.connect(g); g.connect(master);
-    o.start(t); o.stop(t + 0.085);
-    // bandpassed noise burst — sweeps down over ~60ms for the satisfying "pop"
-    var n = noiseVoice(t, 0.06, null);
-    var nf = ctx.createBiquadFilter();
-    nf.type = 'bandpass'; nf.Q.value = 1.4;
-    nf.frequency.setValueAtTime(2600, t);
-    nf.frequency.exponentialRampToValueAtTime(900, t + 0.06);
-    n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
-    n.g.gain.setValueAtTime(0.05, t);
-    n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    if (killStyle === 'B') popB(t);
+    else if (killStyle === 'C') popC(t);
+    else popA(t);
   };
+
+  // A "arcade crunch": a 3ms click + a dense noise burst a lowpass rakes 5k->300Hz
+  // over ~90ms + a tiny sub tick — a bright crunchy "pkhh".
+  function popA(t) {
+    var j = 1 + (Math.random() * 2 - 1) * 0.06;   // per-play gain jitter
+    var p = 1 + (Math.random() * 2 - 1) * 0.06;   // per-play pitch/rate jitter
+    lastPopRate = p;
+    // click transient
+    var c = killNoise(t, 0.004);
+    var cf = ctx.createBiquadFilter(); cf.type = 'highpass'; cf.frequency.setValueAtTime(3500 * p, t);
+    c.s.disconnect(); c.s.connect(cf); cf.connect(c.g);
+    c.g.gain.setValueAtTime(0.045 * j, t);
+    c.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.004);
+    // dense noise burst, lowpass raked down
+    var n = killNoise(t, 0.13);
+    var nf = ctx.createBiquadFilter(); nf.type = 'lowpass'; nf.Q.value = 0.7;
+    nf.frequency.setValueAtTime(5000 * p, t);
+    nf.frequency.exponentialRampToValueAtTime(300 * p, t + 0.09);
+    n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
+    n.g.gain.setValueAtTime(0.052 * j, t);
+    n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    // tiny sub tick
+    var o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(150 * p, t);
+    o.frequency.exponentialRampToValueAtTime(55, t + 0.05);
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.03 * j, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    o.connect(g); g.connect(killBus); o.start(t); o.stop(t + 0.08);
+  }
+
+  // B "firework": a short noise crack + a spray of 2-3 tiny descending debris pings
+  // at randomized pitches — a sparkly percussive burst.
+  function popB(t) {
+    var j = 1 + (Math.random() * 2 - 1) * 0.06;
+    var p = 1 + (Math.random() * 2 - 1) * 0.06;
+    lastPopRate = p;
+    // crack
+    var n = killNoise(t, 0.05);
+    var nf = ctx.createBiquadFilter(); nf.type = 'bandpass'; nf.Q.value = 1.0;
+    nf.frequency.setValueAtTime(2200 * p, t);
+    nf.frequency.exponentialRampToValueAtTime(1200 * p, t + 0.04);
+    n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
+    n.g.gain.setValueAtTime(0.05 * j, t);
+    n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
+    // debris pings (2 or 3), quiet, randomized
+    var pings = 2 + (Math.random() < 0.5 ? 0 : 1);
+    var base = [1500, 1050, 760];
+    for (var i = 0; i < pings; i++) {
+      var dt = t + 0.008 + i * 0.028 + Math.random() * 0.012;
+      var f = base[i] * (0.9 + Math.random() * 0.3) * p;
+      var po = ctx.createOscillator(); po.type = 'triangle';
+      po.frequency.setValueAtTime(f, dt);
+      po.frequency.exponentialRampToValueAtTime(f * 0.6, dt + 0.05);
+      var pg = ctx.createGain();
+      pg.gain.setValueAtTime(0.0001, dt);
+      pg.gain.exponentialRampToValueAtTime(0.014 * j, dt + 0.003);
+      pg.gain.exponentialRampToValueAtTime(0.0001, dt + 0.05);
+      po.connect(pg); pg.connect(killBus); po.start(dt); po.stop(dt + 0.06);
+    }
+  }
+
+  // C "meaty thump": shorter, rounder — a bandpassed noise knock centered ~700Hz +
+  // a sub tick, minimal top end — a muffled compact "whump" that stacks smoothly.
+  function popC(t) {
+    var j = 1 + (Math.random() * 2 - 1) * 0.06;
+    var p = 1 + (Math.random() * 2 - 1) * 0.06;
+    lastPopRate = p;
+    var n = killNoise(t, 0.07);
+    var nf = ctx.createBiquadFilter(); nf.type = 'bandpass'; nf.Q.value = 1.1;
+    nf.frequency.setValueAtTime(720 * p, t);
+    nf.frequency.exponentialRampToValueAtTime(480 * p, t + 0.06);
+    n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
+    n.g.gain.setValueAtTime(0.055 * j, t);
+    n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+    var o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(140 * p, t);
+    o.frequency.exponentialRampToValueAtTime(48, t + 0.06);
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.038 * j, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+    o.connect(g); g.connect(killBus); o.start(t); o.stop(t + 0.1);
+  }
 
   // midship / elite death: a deep, punchy chest-hit boom (heavier than the small
   // explosion). RICH buffered (kick sub 150→40 + mid knock + saturated noise
@@ -852,6 +1189,29 @@
   ];
   SFX.audition = function (name) {
     SFX.ensure(); SFX.resume();
+    // audition('killA'|'killB'|'killC'): switch to that style, play its full kill
+    // family (pop x3 chain -> small explosion -> boom), then restore the prior style.
+    if (name === 'killA' || name === 'killB' || name === 'killC') {
+      var style = name.charAt(name.length - 1);
+      var prev = killStyle;
+      SFX.setKillStyle(style);
+      var seq = [
+        ['pop',       function () { SFX.pop(); }],
+        ['pop',       function () { SFX.pop(); }],
+        ['pop',       function () { SFX.pop(); }],
+        ['explosion', function () { SFX.explosion(false); }],
+        ['boom',      function () { SFX.boom(); }]
+      ];
+      var qi = 0;
+      (function stepKill() {
+        if (qi >= seq.length) { SFX.setKillStyle(prev); return; }
+        var it = seq[qi++];
+        if (window.console) console.log('[SFX.audition] kill' + style + ':' + it[0]);
+        it[1]();
+        setTimeout(stepKill, it[0] === 'pop' ? 130 : 360);
+      })();
+      return true;
+    }
     if (name) {
       for (var i = 0; i < AUDITION.length; i++) {
         if (AUDITION[i][0] === name) {
@@ -890,11 +1250,16 @@
         lastRate: lastRate[nm] != null ? lastRate[nm] : 0
       });
     }
+    var count = 0;
+    for (var j = 0; j < RICH.length; j++) if (bufs[RICH[j].name]) count++;
     return {
       started: rendered,
-      count: renderCount,
+      count: count,
       total: RICH.length,
       renderMs: renderMs,
+      killRenderMs: killRenderMs,
+      killStyle: killStyle,
+      lastPopRate: lastPopRate,
       buffers: list
     };
   };
