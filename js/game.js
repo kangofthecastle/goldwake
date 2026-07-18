@@ -1569,6 +1569,7 @@
     e.script = null; e.scriptT = 0; e.scriptI = 0; e.scriptLoop = 1; e.poseT = 0;
     e.pathSegs = null; e.segI = 0; e.segT = 0; e.sx = 0; e.sy = 0;
     e.holdX = 0; e.holdY = 0; e.retreatAt = 0; e.didRetreat = false;
+    e.arrived = false; e.phaseT = 0; e.breathT = 0; e.segFloorHp = 0; e.segBounds = null;
     e.onDeath = null; e.onUpdate = null;
     return e;
   }
@@ -1695,7 +1696,7 @@
     if (e.weakT > 0) { e.weakT -= dt; if (e.weakT <= 0) e.weak = false; }
     // Burn (DoT); Ra 'spread' handled in killEnemy on death
     if (e.burnT > 0) {
-      e.burnT -= dt; e.hp -= e.burnDps * dt;
+      e.burnT -= dt; e.hp -= e.burnDps * dt; clampBossHp(e);   // burn respects the spellcard floor too
       if (Math.random() < dt * 9) spark(e.x, e.y, [1, 0.5, 0.12], 1, 130, 14);
       if (e.hp <= 0) { killEnemy(e, true); return; }
     }
@@ -1772,21 +1773,30 @@
 
   // --- path runner ---
   function initPath(e) { e.segI = 0; e.segT = 0; e.sx = e.x; e.sy = e.y; }
-  function pathTick(e, dt) {
-    var segs = e.pathSegs; if (!segs || e.segI >= segs.length) return;
+  // Shared path runner. opt (optional, boss callers) = { loop, poseFactor,
+  // bobRate }: loop wraps the segment list instead of auto-exiting (holds/
+  // pendulums/rails cycle); poseFactor/bobRate override the popcorn defaults.
+  // Popcorn callers pass no opt and get the original 0.30 / 1.6 / auto-exit
+  // behavior pixel-for-pixel.
+  function pathTick(e, dt, opt) {
+    var segs = e.pathSegs; if (!segs || !segs.length) return;
+    var loop = !!(opt && opt.loop);
+    var poseF = (opt && opt.poseFactor) || 0.30;
+    var bobR = (opt && opt.bobRate) || 1.6;
+    if (e.segI >= segs.length) { if (loop) { e.segI = 0; e.segT = 0; e.sx = e.x; e.sy = e.y; } else return; }
     var s = segs[e.segI];
-    var mdt = e.poseT > 0 ? dt * 0.30 : dt;      // slow into the beat, burst out of it
+    var mdt = e.poseT > 0 ? dt * poseF : dt;      // slow into the beat, burst out of it
     e.segT += mdt;
     var dur = s.dur || 0.001, u = e.segT / dur; if (u > 1) u = 1;
     var ue = (s.k === 'orbit') ? u : easeInOut(u);
     if (s.k === 'curve') { e.x = qbez(e.sx, s.cx, s.ex, ue); e.y = qbez(e.sy, s.cy, s.ey, ue); }
     else if (s.k === 'line' || s.k === 'exit') { e.x = e.sx + (s.ex - e.sx) * ue; e.y = e.sy + (s.ey - e.sy) * ue; }
-    else if (s.k === 'hold') { e.x = e.sx + (s.bob ? Math.sin(e.t * 1.6) * s.bob : 0); e.y = e.sy; }
+    else if (s.k === 'hold') { e.x = e.sx + (s.bob ? Math.sin(e.t * bobR) * s.bob : 0); e.y = e.sy; }
     else if (s.k === 'orbit') { var a = s.from + (s.to - s.from) * ue; e.x = s.cx + Math.cos(a) * s.rad; e.y = s.cy + Math.sin(a) * s.rad; }
     if (u >= 1) {
       if (s.k === 'exit') { killEnemy(e, false); return; }
       e.segI++; e.segT = 0; e.sx = e.x; e.sy = e.y;
-      if (e.segI >= segs.length) { e.pathSegs = [{ k: 'exit', dur: 2.4, ex: e.x, ey: H + 200 }]; initPath(e); }
+      if (!loop && e.segI >= segs.length) { e.pathSegs = [{ k: 'exit', dur: 2.4, ex: e.x, ey: H + 200 }]; initPath(e); }
     }
   }
   // --- fire script ---
@@ -2346,79 +2356,313 @@
     for (var i = 0; i < 2; i++) { var c = newEnemy(1, e.x + (i ? 120 : -120), e.y + 60, 40, GL.SPR.SHIP_POP, 60, 26, [1, 0.5, 0.3], 3, 300, false); if (c) { c.vy = 120; c.fireCd = 1.0; c.onUpdate = updateEscort; } }
   }
 
+  // ==================================================================
+  // BOSS SETLIST ENGINE (pass B) — spellcard phases.
+  // A boss is a list of named phases; each carries an HP segment, a movement
+  // path (looped from the path book) and a looping fire script of 2-3 attacks.
+  // Early phases CYCLE their attacks; mid-fight-onward phases LAYER a wide
+  // unaimed geometry (rings/walls/wheels) with a single telegraphed aimed
+  // accent (never two aimed at once; never area-alone). Transitions cancel the
+  // whole bullet field to gold (the payday), flash a name card + sting, breathe
+  // ~1s, then open the next composition. Timers tick in fixed-step update only,
+  // so pause freezes the whole fight.
+  // ==================================================================
+  var ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI'];
+
+  // Bosses run the shared pathTick with loop=true (wrap the segment list —
+  // holds/pendulums/rails cycle) and boss pose/bob constants (0.4 / 1.4).
+  var BOSS_PATH_OPT = { loop: true, poseFactor: 0.4, bobRate: 1.4 };
+
+  // --- boss path-book presets (each describes one looped cycle) ---
+  function bp_holdCenter(e, cfg) {
+    e.pathSegs = [
+      { k: 'line', dur: 1.0, ex: cfg.centerX, ey: cfg.holdY },
+      { k: 'hold', dur: 3.4, ex: cfg.centerX, ey: cfg.holdY, bob: 30 }
+    ]; initPath(e);
+  }
+  function bp_pendulum(e, cfg) {
+    var xa = cfg.centerX - cfg.strafe, xb = cfg.centerX + cfg.strafe, y = cfg.holdY;
+    e.pathSegs = [
+      { k: 'line', dur: 1.7, ex: xa, ey: y },
+      { k: 'hold', dur: 0.7, ex: xa, ey: y, bob: 12 },
+      { k: 'line', dur: 1.7, ex: xb, ey: y },
+      { k: 'hold', dur: 0.7, ex: xb, ey: y, bob: 12 }
+    ]; initPath(e);
+  }
+  function bp_rails(e, cfg) {   // screen-edge rushes between volleys
+    var l = 250, r = W - 250, y = cfg.holdY;
+    e.pathSegs = [
+      { k: 'hold', dur: 1.2, ex: cfg.centerX, ey: y, bob: 10 },
+      { k: 'curve', dur: 1.0, cx: l, cy: y - 90, ex: l, ey: y },
+      { k: 'hold', dur: 1.1, ex: l, ey: y, bob: 8 },
+      { k: 'curve', dur: 1.3, cx: cfg.centerX, cy: y + 70, ex: r, ey: y },
+      { k: 'hold', dur: 1.1, ex: r, ey: y, bob: 8 },
+      { k: 'curve', dur: 1.0, cx: cfg.centerX, cy: y - 70, ex: cfg.centerX, ey: y }
+    ]; initPath(e);
+  }
+  function bp_lunge(e, cfg) {   // AMMIT bite: lunge down, hold at the low point, retreat
+    var y = cfg.holdY;
+    e.pathSegs = [
+      { k: 'hold', dur: 1.1, ex: cfg.centerX, ey: y, bob: 16 },
+      { k: 'line', dur: 0.32, ex: cfg.centerX, ey: y + 300 },
+      { k: 'hold', dur: 0.5, ex: cfg.centerX, ey: y + 300, bob: 6 },
+      { k: 'line', dur: 0.9, ex: cfg.centerX, ey: y }
+    ]; initPath(e);
+  }
+  function bp_orbit(e, cfg) {   // wheel phases: orbit the hold point (a moving core)
+    var y = cfg.holdY, rad = 95;
+    e.pathSegs = [
+      { k: 'line', dur: 0.8, ex: cfg.centerX + rad, ey: y },
+      { k: 'orbit', dur: 4.2, cx: cfg.centerX, cy: y, rad: rad, from: 0, to: TAU }
+    ]; initPath(e);
+  }
+
+  // enter phase i: set the segment HP floor, movement and (on a transition) the
+  // payday cancel + name card + sting, then breathe before the script activates.
+  function bossEnterPhase(e, phases, cfg, i, transition) {
+    e.phase = i; e.phaseT = 0; e.s0 = 0; e.s1 = 0; e.s2 = 0; e.s3 = 0;
+    var ph = phases[i];
+    e.segFloorHp = e.maxhp * (1 - e.segBounds[i]);
+    // Breath is a payday moment, not a dps window: hold hp at where it stands
+    // now (the previous phase's floor, or full hp on arrival) so damage during
+    // the recenter/name-card is discarded. The path is initialized AFTER the
+    // breath (see bossActivateScript) so its origin snapshot is the post-
+    // recenter position — no horizontal snap-back on the next phase's tick.
+    e.breathFloor = e.hp;
+    e.script = null;                       // silent through the breath
+    if (transition) {
+      cancelBulletsToGold(false); homeAllGold();   // generic full-field cancel to gold
+      ringShock(e.x, e.y, [1, 0.92, 0.45], 90, 3200, 0.75);
+      flash(e.x, e.y, [1, 0.92, 0.6], 360, 0.45);
+      addShake(6); SFX.bossPhase();
+      e.breathT = 1.0;
+    } else {
+      e.breathT = 0.55;                    // phase I: a brief pose after the arrival
+    }
+    announce(ph.name, ROMAN[i] || ('' + (i + 1)), 1.9);
+  }
+  function bossActivateScript(e, phases, cfg) {
+    var ph = phases[e.phase];
+    ph.path(e, cfg);                        // init path NOW: origin snapshots the post-recenter position
+    setScript(e, ph.script, ph.loop, 0);
+  }
+  function bossTick(e, dt, phases, cfg) {
+    e.t += dt; e.rot = Math.PI;
+    if (!e.arrived) {                      // entry descent from off-screen
+      e.y += 175 * dt;
+      if (e.y >= cfg.holdY) { e.y = cfg.holdY; e.arrived = true; bossEnterPhase(e, phases, cfg, 0, false); }
+      return;
+    }
+    if (e.breathT > 0) {                   // transition breath: recenter, hold, no fire
+      e.breathT -= dt;
+      e.x += (cfg.centerX - e.x) * Math.min(1, dt * 2.4);
+      if (e.breathT <= 0) bossActivateScript(e, phases, cfg);
+      return;
+    }
+    pathTick(e, dt, BOSS_PATH_OPT);
+    scriptTick(e, dt);
+    e.phaseT += dt;
+    if (e.phase < phases.length - 1) {
+      var timedOut = e.phaseT >= phases[e.phase].timeout;
+      if (e.hp <= e.segFloorHp || timedOut) {
+        if (!timedOut) addPopup(e.x, e.y - 40, 'PHASE SEIZED', UI_GOLD, 30);   // homage: beaten on damage
+        bossEnterPhase(e, phases, cfg, e.phase + 1, true);
+      }
+    }
+  }
+  function bossSegBounds(phases) {         // cumulative HP-segment boundaries
+    var b = [], cum = 0;
+    for (var i = 0; i < phases.length; i++) { cum += phases[i].hp; b.push(cum); }
+    b[phases.length - 1] = 1;              // last segment always bottoms out at 0 hp
+    return b;
+  }
+  function startBoss(e, phases, cfg) {
+    e.boss = true; e.arrived = false; e.phase = 0; e.breathT = 0; e.phaseT = 0; e.breathFloor = 0;
+    e.segBounds = bossSegBounds(phases);
+    G.boss = e;
+    e.onUpdate = function (en, dt) { bossTick(en, dt, phases, cfg); };
+  }
+
   // -------- bosses --------
-  // Sector-1 anchor: TALOS, the bronze sentinel. (Function + meta names keep
-  // their legacy 'warden' spelling so saved unlocks survive — reskin only,
-  // same fight.) Tint: molten bronze, hotter/redder than loot gold.
+  // Sector-1 anchor: TALOS, the bronze sentinel — 5 phases (teaches the setlist:
+  // single geometries early, layered geometry+accent late). Function + meta names
+  // keep their legacy 'warden' spelling so saved unlocks survive. Tint: molten
+  // bronze, hotter/redder than loot gold. Accent needles a fixed hot gold (ACC).
   function spawnWarden(rank) {
     var e = newEnemy(5, W / 2, -160, 3000 * rank, GL.SPR.SHIP_MID, 210, 92, [1.0, 0.58, 0.22], 40, 40000, true); if (!e) return;
-    e.boss = true; e.name = 'TALOS'; e.fireCd = 0.05; G.boss = e;
+    e.name = 'TALOS';
     announce('TALOS', 'the bronze sentinel', 2.4);
-    e.onUpdate = function (e, dt) {
-      e.t += dt;
-      if (e.y < 360) { e.y += 180 * dt; return; }
-      e.x = W / 2 + Math.sin(e.t * 0.6) * 220; e.rot = Math.PI;
-      var hf = e.hp / e.maxhp; e.fireT -= dt;
-      if (hf > 0.5) {
-        if (e.fireT <= 0) { e.fireT = 0.06; e.s0 += 0.22; Patterns.doubleSpiral(e.x, e.y, e.s0, 200 * G.rank, { color: Patterns.MAGENTA, radius: 12, arms: 3 }); }
-      } else {
-        if (e.fireT <= 0) {
-          e.fireT = 0.9;
-          Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 9, 0.9, 300 * G.rank, { color: Patterns.CYAN, shape: Patterns.NEEDLE, radius: 10 });
-          Patterns.ring(e.x, e.y, 22, 170 * G.rank, { color: Patterns.MAGENTA, radius: 12, offset: e.t });
-        }
-      }
-    };
+    var BRZ = [1.0, 0.5, 0.16], HOT = [1.0, 0.72, 0.28], MAG = P.MAGENTA, ACC = [1.0, 0.86, 0.4];
+    var cfg = { holdY: 360, centerX: W / 2, strafe: 250 };
+    function pose(col, h) { return { t: 0, fn: function (e) { e.poseT = h || 0.42; muzzle(e, col || BRZ); } }; }
+    var phases = [
+      // I Foundry Breath — pulse rings on stomp beats (single geometry: pulse)
+      { name: 'FOUNDRY BREATH', hp: 0.16, timeout: 32, path: bp_holdCenter, loop: 3.4, script: [
+        pose(BRZ),
+        { t: 0.5, fn: function (e) { e.s0 += 0.4; P.pulse(e.x, e.y, { rings: 3, count: 16, speed: rankSpd(P.SPD.slow), speedStep: 58, offset: e.s0, colorA: BRZ, colorB: HOT }); } },
+        { t: 1.7, fn: function (e) { e.poseT = 0.42; muzzle(e, HOT); } },
+        { t: 2.2, fn: function (e) { e.s0 += 0.4; P.pulse(e.x, e.y, { rings: 4, count: 14, speed: rankSpd(P.SPD.slow), speedStep: 64, offset: -e.s0, colorA: HOT, colorB: MAG }); } }
+      ] },
+      // II Piston Lances — arcWall columns slamming alternate lanes (geometry: arcWall)
+      { name: 'PISTON LANCES', hp: 0.18, timeout: 32, path: bp_pendulum, loop: 2.6, script: [
+        pose(BRZ),
+        { t: 0.4, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.6, 17, rankSpd(P.SPD.slow), { laneAt: (e.s1 % 2 ? -0.28 : 0.28), laneWidth: 3.6, fam: P.FAM.PELLET, tier: 'M', color: BRZ }); } },
+        { t: 1.3, fn: function (e) { e.poseT = 0.4; muzzle(e, HOT); } },
+        { t: 1.7, fn: function (e) { P.arcWall(e.x, e.y, DOWN, 1.6, 17, rankSpd(P.SPD.mid), { laneAt: (e.s1 % 2 ? 0.28 : -0.28), laneWidth: 3.6, fam: P.FAM.PELLET, tier: 'M', color: HOT }); } }
+      ] },
+      // III The Bronze Wheel — rotating gap-wheel + aimed accent, pendulum-strafe (LAYER)
+      { name: 'THE BRONZE WHEEL', hp: 0.20, timeout: 34, path: bp_pendulum, loop: 2.4, script: [
+        pose(BRZ),
+        { t: 0.35, fn: function (e) { e.s0 += 0.5; P.wheel(e.x, e.y, e.s0, 16, rankSpd(P.SPD.slow), { gapEvery: 6, fam: P.FAM.ORB, tier: 'M', color: MAG }); } },
+        { t: 1.0, fn: function (e) { e.s0 += 0.5; P.wheel(e.x, e.y, e.s0, 16, rankSpd(P.SPD.mid), { gapEvery: 6, fam: P.FAM.ORB, tier: 'S', color: BRZ }); } },
+        { t: 1.6, fn: function (e) { e.poseT = 0.34; muzzle(e, ACC); } },
+        { t: 1.95, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.2, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+      ] },
+      // IV Molten Veins — mirrored snake ribbons + kunai accent (LAYER: snake)
+      { name: 'MOLTEN VEINS', hp: 0.22, timeout: 34, path: bp_holdCenter, loop: 2.6, script: [
+        pose(BRZ),
+        { t: 0.35, fn: function (e) { e.s1++; P.snake(e.x, e.y, DOWN - 0.5, 8, rankSpd(P.SPD.mid), { amp: 46, freq: 0.9, phase: e.s1 * 0.5, fam: P.FAM.SHARD, tier: 'M', color: BRZ }); } },
+        { t: 0.75, fn: function (e) { P.snake(e.x, e.y, DOWN + 0.5, 8, rankSpd(P.SPD.mid), { amp: 46, freq: 0.9, phase: e.s1 * 0.5 + 1.6, fam: P.FAM.SHARD, tier: 'M', color: HOT }); } },
+        { t: 1.5, fn: function (e) { e.poseT = 0.34; muzzle(e, ACC); } },
+        { t: 1.9, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.22, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+      ] },
+      // V Colossus Falls — ringGap terrain (gaps tightening) + arcWall lances + accent,
+      // emitter rushing the rails (signature: two-speed geometry + one aimed).
+      { name: 'COLOSSUS FALLS', hp: 0.24, timeout: 38, path: bp_rails, loop: 2.8, script: [
+        pose(BRZ, 0.36),
+        { t: 0.3, fn: function (e) { e.s0 += 0.5; e.s2++; var gw = Math.max(2.0, 3.4 - e.s2 * 0.14); P.ringGap(e.x, e.y, 26, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: gw, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: MAG }); } },
+        { t: 1.0, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.7, 18, rankSpd(P.SPD.mid), { laneAt: ((e.s1 % 3) - 1) * 0.24, laneWidth: 3.6, fam: P.FAM.PELLET, tier: 'M', color: HOT }); } },
+        { t: 1.7, fn: function (e) { e.poseT = 0.32; muzzle(e, ACC); } },
+        { t: 2.05, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 6, { spread: 0.26, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+      ] }
+    ];
+    startBoss(e, phases, cfg);
     e.onDeath = function () { Run.onWardenKilled(); G.boss = null; bigDeath(e, 60); announce('TALOS FELLED', 'the bronze cools', 2.0); };
   }
-  // Sector-2 anchor: AMMIT, devourer of hearts (her own beast — same remixed
-  // 3-pattern fight the Reforged ran). Tint: bruised magenta.
+  // Sector-2 anchor: AMMIT, devourer of hearts — 6 phases. Tint: bruised magenta,
+  // with a LIME counterpoint on her opening petals (ART.md). She lunges on her
+  // bite phases (The Jaws / Devourer) via the path book.
   function spawnWarden2(rank) {
     var e = newEnemy(5, W / 2, -160, 5400 * rank, GL.SPR.SHIP_MID, 230, 100, [0.82, 0.28, 0.55], 60, 70000, true); if (!e) return;
-    e.boss = true; e.name = 'AMMIT'; e.fireCd = 0.05; G.boss = e;
+    e.name = 'AMMIT';
     announce('AMMIT', 'devourer of hearts', 2.6);
-    e.onUpdate = function (e, dt) {
-      e.t += dt;
-      if (e.y < 360) { e.y += 180 * dt; return; }
-      e.x = W / 2 + Math.sin(e.t * 0.8) * 250; e.rot = Math.PI;
-      var hf = e.hp / e.maxhp; e.fireT -= dt;
-      if (hf > 0.66) {
-        if (e.fireT <= 0) { e.fireT = 0.05; e.s0 += 0.27; Patterns.doubleSpiral(e.x, e.y, e.s0, 230 * G.rank, { color: Patterns.ORANGE, radius: 12, arms: 4 }); }
-      } else if (hf > 0.33) {
-        if (e.fireT <= 0) { e.fireT = 0.8; Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 11, 1.0, 320 * G.rank, { color: Patterns.CYAN, shape: Patterns.NEEDLE, radius: 10 }); Patterns.ring(e.x, e.y, 26, 180 * G.rank, { color: Patterns.MAGENTA, radius: 12, offset: e.t }); }
-      } else {
-        if (e.fireT <= 0) { e.fireT = 1.3; Patterns.flower(e.x, e.y, 24, 250 * G.rank, { color: Patterns.LIME, radius: 12, stall: 0.8, reaccel: 190 * G.rank, offset: e.t }); }
-        if (Math.floor(e.t * 2) !== Math.floor((e.t - dt) * 2)) Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 3, 0.2, 460 * G.rank, { color: Patterns.CYAN, shape: Patterns.NEEDLE, radius: 9 });
-      }
-    };
+    var MAG = [0.9, 0.22, 0.5], ROSE = [1.0, 0.3, 0.62], LIME = P.LIME, ACC = [1.0, 0.86, 0.4];
+    var cfg = { holdY: 360, centerX: W / 2, strafe: 260 };
+    function pose(col, h) { return { t: 0, fn: function (e) { e.poseT = h || 0.42; muzzle(e, col || MAG); } }; }
+    var phases = [
+      // I Scent of Sin — drifting rain curtains + LIME shard petals (rain; the green counterpoint)
+      { name: 'SCENT OF SIN', hp: 0.14, timeout: 30, path: bp_holdCenter, loop: 3.0, script: [
+        pose(MAG),
+        { t: 0.4, fn: function (e) { e.s0 += 0.6; P.rain(24, { speed: rankSpd(P.SPD.slow), waves: 3, phase: e.s0, gapThresh: 0.05, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } },
+        { t: 1.2, fn: function (e) { e.s0 += 0.6; P.rain(24, { speed: rankSpd(P.SPD.slow), waves: 3, phase: e.s0, gapThresh: 0.05, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } },
+        { t: 2.0, fn: function (e) { e.poseT = 0.4; muzzle(e, LIME); } },
+        { t: 2.4, fn: function (e) { e.s1 += 0.5; P.ring(e.x, e.y, 14, rankSpd(P.SPD.slow), { fam: P.FAM.SHARD, tier: 'M', color: LIME, offset: e.s1, accel: -150, accel2: 130, accelSwitchT: 0.8, minSpeed: 8 }); } }
+      ] },
+      // II The Jaws — mirrored crossfire closing like bites; boss lunges (crossfire)
+      { name: 'THE JAWS', hp: 0.15, timeout: 30, path: bp_lunge, loop: 2.4, script: [
+        pose(MAG),
+        { t: 0.4, fn: function (e) { e.s1++; P.crossfire(220, W - 220, cfg.holdY - 40, 7, rankSpd(P.SPD.mid), { angle: (e.s1 % 2 ? 0.5 : 0.34), spacing: 34, fam: P.FAM.KUNAI, tier: 'M', color: MAG }); } },
+        { t: 1.2, fn: function (e) { e.poseT = 0.36; muzzle(e, ROSE); } },
+        { t: 1.5, fn: function (e) { P.crossfire(220, W - 220, cfg.holdY - 40, 7, rankSpd(P.SPD.mid), { angle: (e.s1 % 2 ? 0.34 : 0.5), spacing: 34, fam: P.FAM.KUNAI, tier: 'M', color: ROSE }); } }
+      ] },
+      // III Weighing of the Heart — alternating left/right arcWalls, the scales (arcWall)
+      { name: 'WEIGHING OF THE HEART', hp: 0.16, timeout: 32, path: bp_pendulum, loop: 2.6, script: [
+        pose(MAG),
+        { t: 0.4, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.5, 16, rankSpd(P.SPD.slow), { laneAt: -0.3, laneWidth: 3.4, fam: P.FAM.PELLET, tier: 'M', color: MAG }); } },
+        { t: 1.3, fn: function (e) { e.poseT = 0.4; muzzle(e, ROSE); } },
+        { t: 1.7, fn: function (e) { P.arcWall(e.x, e.y, DOWN, 1.5, 16, rankSpd(P.SPD.mid), { laneAt: 0.3, laneWidth: 3.4, fam: P.FAM.PELLET, tier: 'M', color: ROSE }); } }
+      ] },
+      // IV Heart-Seekers — pulse orb terrain threaded by aimed seeker bursts (LAYER)
+      { name: 'HEART-SEEKERS', hp: 0.17, timeout: 34, path: bp_holdCenter, loop: 2.6, script: [
+        pose(MAG),
+        { t: 0.3, fn: function (e) { e.s0 += 0.35; P.pulse(e.x, e.y, { rings: 3, count: 16, speed: rankSpd(P.SPD.slow), speedStep: 55, offset: e.s0, colorA: MAG, colorB: ROSE }); } },
+        { t: 1.0, fn: function (e) { e.s0 += 0.35; P.pulse(e.x, e.y, { rings: 2, count: 14, speed: rankSpd(P.SPD.slow), speedStep: 60, offset: -e.s0, colorA: ROSE, colorB: MAG }); } },
+        { t: 1.6, fn: function (e) { e.poseT = 0.34; muzzle(e, ACC); } },
+        { t: 1.95, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.2, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+      ] },
+      // V Devourer — rotating ringGap terrain + seekers, lunging between bites (LAYER)
+      { name: 'DEVOURER', hp: 0.18, timeout: 36, path: bp_lunge, loop: 2.8, script: [
+        pose(MAG),
+        { t: 0.3, fn: function (e) { e.s0 += 0.55; P.ringGap(e.x, e.y, 24, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 3.0, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: MAG }); } },
+        { t: 1.0, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 22, rankSpd(P.SPD.mid), { gaps: 2, gapWidth: 2.8, offset: -e.s0, fam: P.FAM.ORB, tier: 'M', color: ROSE }); } },
+        { t: 1.6, fn: function (e) { e.poseT = 0.34; muzzle(e, ACC); } },
+        { t: 1.95, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 6, { spread: 0.24, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+      ] },
+      // VI The Second Death — everything at once, one drifting lane (snake + ringGap + accent)
+      { name: 'THE SECOND DEATH', hp: 0.20, timeout: 40, path: bp_rails, loop: 3.0, script: [
+        pose(MAG, 0.36),
+        { t: 0.3, fn: function (e) { e.s2++; P.snake(e.x, e.y, DOWN - 0.4, 8, rankSpd(P.SPD.mid), { amp: 44, freq: 0.9, phase: e.s2 * 0.5, fam: P.FAM.SHARD, tier: 'M', color: MAG }); } },
+        { t: 0.7, fn: function (e) { P.snake(e.x, e.y, DOWN + 0.4, 8, rankSpd(P.SPD.mid), { amp: 44, freq: 0.9, phase: e.s2 * 0.5 + 1.6, fam: P.FAM.SHARD, tier: 'M', color: ROSE }); } },
+        { t: 1.3, fn: function (e) { e.s0 += 0.5; P.ringGap(e.x, e.y, 22, rankSpd(P.SPD.slow), { gaps: 1, gapWidth: 3.6, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: MAG }); } },
+        { t: 2.0, fn: function (e) { e.poseT = 0.32; muzzle(e, ACC); } },
+        { t: 2.4, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 6, { spread: 0.26, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+      ] }
+    ];
+    startBoss(e, phases, cfg);
     e.onDeath = function () { Run.onWardenKilled(); G.boss = null; bigDeath(e, 90); announce('AMMIT DEVOURED', 'the scales balance', 2.2); };
   }
+  // Sector-3 anchor: GILDED SOVEREIGN — the run's finale, 6 phases of gold-lattice
+  // identity (interleaved ringGap lanes, gold rain, wheel spokes, an edict-wall
+  // and pulse regalia, then a full-screen finale with one readable path). Enemy
+  // fire stays in the warm band — a hot amber/rose, NOT loot-gold (a threat must
+  // never read as pickup gold, ART.md); the regalia read comes from the body tint.
   function spawnBoss(rank) {
-    var e = newEnemy(6, W / 2, -260, 23000 * rank, GL.SPR.SHIP_BOSS, 300, 130, [1, 0.35, 0.75], 90, 200000, true); if (!e) return;
-    e.boss = true; e.name = 'GILDED SOVEREIGN'; e.phase = 0; G.boss = e;
+    var e = newEnemy(6, W / 2, -260, 23000 * rank, GL.SPR.SHIP_BOSS, 300, 130, [1, 0.5, 0.28], 90, 200000, true); if (!e) return;
+    e.name = 'GILDED SOVEREIGN';
     announce('GILDED SOVEREIGN', 'final guardian', 3.0);
-    e.onUpdate = function (e, dt) {
-      e.t += dt;
-      if (e.y < 420) { e.y += 150 * dt; return; }
-      e.x = W / 2 + Math.sin(e.t * 0.5) * 240; e.rot = Math.PI;
-      var hf = e.hp / e.maxhp;
-      if (e.phase === 0 && hf <= 0.66) enterBossPhase(e, 1);
-      else if (e.phase === 1 && hf <= 0.33) enterBossPhase(e, 2);
-      e.fireT -= dt;
-      if (e.phase === 0) {
-        e.r = 1; e.g = 0.35; e.b = 0.75;
-        if (e.fireT <= 0) { e.fireT = 0.05; e.s0 += 0.16; Patterns.doubleSpiral(e.x, e.y, e.s0, 210 * G.rank, { color: Patterns.MAGENTA, radius: 12, arms: 2 }); }
-        if (Math.floor(e.t * 1.2) !== Math.floor((e.t - dt) * 1.2)) Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 5, 0.5, 340 * G.rank, { color: Patterns.CYAN, shape: Patterns.NEEDLE, radius: 10 });
-      } else if (e.phase === 1) {
-        e.r = 1; e.g = 0.55; e.b = 0.15;
-        if (e.fireT <= 0) { e.fireT = 1.5; Patterns.flower(e.x, e.y, 26, 260 * G.rank, { color: Patterns.ORANGE, radius: 13, stall: 0.9, reaccel: 200 * G.rank, offset: e.t }); }
-        if (Math.floor(e.t * 0.8) !== Math.floor((e.t - dt) * 0.8)) { var dd = (Math.floor(e.t * 0.8) % 2 === 0) ? 1 : -1; Patterns.whip(e.x, e.y, Math.PI / 2, 16, 240 * G.rank, { color: Patterns.MAGENTA, swing: 1.2, curl: 1.4 * dd, radius: 12 }); }
-      } else {
-        e.r = 1; e.g = 0.75; e.b = 0.2;
-        if (e.fireT <= 0) { e.fireT = 0.5; e.s0 += 0.5; Patterns.ring(e.x, e.y, 30 + Math.floor(6 * G.rank), 130 * G.rank, { color: Patterns.hue(e.s0 * 0.13), radius: 13, offset: e.s0 }); }
-        if (Math.floor(e.t * 2) !== Math.floor((e.t - dt) * 2)) Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 3, 0.18, 520 * G.rank, { color: Patterns.CYAN, shape: Patterns.NEEDLE, radius: 9 });
-      }
-    };
+    var AMB = [1.0, 0.58, 0.2], ROSE = [1.0, 0.32, 0.55], MAG = P.MAGENTA, ACC = [1.0, 0.86, 0.4];
+    var cfg = { holdY: 420, centerX: W / 2, strafe: 260 };
+    function pose(col, h) { return { t: 0, fn: function (e) { e.poseT = h || 0.44; muzzle(e, col || AMB); } }; }
+    var phases = [
+      // I Coronation — interleaved ringGap lattice whose gaps spell a drifting lane (ringGap)
+      { name: 'CORONATION', hp: 0.14, timeout: 32, path: bp_holdCenter, loop: 2.8, script: [
+        pose(AMB),
+        { t: 0.4, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 26, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 3.2, offset: e.s0, fam: P.FAM.ORB, tier: 'M', color: AMB }); } },
+        { t: 1.1, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 26, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 3.2, offset: e.s0 + 0.2, fam: P.FAM.RING, tier: 'M', color: ROSE }); } },
+        { t: 1.9, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 26, rankSpd(P.SPD.mid), { gaps: 2, gapWidth: 3.2, offset: e.s0 + 0.4, fam: P.FAM.ORB, tier: 'S', color: AMB }); } }
+      ] },
+      // II Tribute of Gold — drifting rain curtains, two speeds (rain)
+      { name: 'TRIBUTE OF GOLD', hp: 0.15, timeout: 32, path: bp_pendulum, loop: 2.6, script: [
+        pose(AMB),
+        { t: 0.4, fn: function (e) { e.s0 += 0.7; P.rain(26, { speed: rankSpd(P.SPD.slow), waves: 4, phase: e.s0, gapThresh: 0.02, fam: P.FAM.PELLET, tier: 'S', color: AMB }); } },
+        { t: 1.1, fn: function (e) { e.s0 += 0.7; P.rain(26, { speed: rankSpd(P.SPD.mid), waves: 4, phase: -e.s0, gapThresh: 0.02, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } }
+      ] },
+      // III Wheel of Thrones — rotating spoke wheel + aimed accent, orbiting core (LAYER)
+      { name: 'WHEEL OF THRONES', hp: 0.16, timeout: 34, path: bp_orbit, loop: 2.4, script: [
+        pose(AMB),
+        { t: 0.35, fn: function (e) { e.s0 += 0.5; P.wheel(e.x, e.y, e.s0, 18, rankSpd(P.SPD.slow), { gapEvery: 6, fam: P.FAM.ORB, tier: 'M', color: AMB }); } },
+        { t: 1.0, fn: function (e) { e.s0 += 0.5; P.wheel(e.x, e.y, e.s0, 18, rankSpd(P.SPD.mid), { gapEvery: 6, fam: P.FAM.ORB, tier: 'S', color: ROSE }); } },
+        { t: 1.6, fn: function (e) { e.poseT = 0.34; muzzle(e, ACC); } },
+        { t: 1.95, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.2, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+      ] },
+      // IV Edict Walls — alternating arcWall edicts + aimed accent (LAYER)
+      { name: 'EDICT WALLS', hp: 0.16, timeout: 34, path: bp_pendulum, loop: 2.6, script: [
+        pose(AMB),
+        { t: 0.35, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.7, 18, rankSpd(P.SPD.slow), { laneAt: (e.s1 % 2 ? -0.26 : 0.26), laneWidth: 3.6, fam: P.FAM.PELLET, tier: 'M', color: AMB }); } },
+        { t: 1.0, fn: function (e) { P.arcWall(e.x, e.y, DOWN, 1.4, 12, rankSpd(P.SPD.mid), { laneAt: (e.s1 % 2 ? 0.26 : -0.26), laneWidth: 3.4, fam: P.FAM.ORB, tier: 'S', color: ROSE }); } },
+        { t: 1.7, fn: function (e) { e.poseT = 0.32; muzzle(e, ACC); } },
+        { t: 2.05, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.22, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+      ] },
+      // V Regalia — concentric pulse terrain + aimed seekers, rushing the rails (LAYER)
+      { name: 'REGALIA', hp: 0.17, timeout: 36, path: bp_rails, loop: 2.7, script: [
+        pose(AMB),
+        { t: 0.35, fn: function (e) { e.s0 += 0.32; P.pulse(e.x, e.y, { rings: 3, count: 18, speed: rankSpd(P.SPD.slow), speedStep: 56, offset: e.s0, colorA: AMB, colorB: ROSE }); } },
+        { t: 1.1, fn: function (e) { e.s0 += 0.32; P.pulse(e.x, e.y, { rings: 2, count: 16, speed: rankSpd(P.SPD.slow), speedStep: 62, offset: -e.s0, colorA: ROSE, colorB: MAG }); } },
+        { t: 1.7, fn: function (e) { e.poseT = 0.32; muzzle(e, ACC); } },
+        { t: 2.05, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 6, { spread: 0.24, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+      ] },
+      // VI The Gilded Verdict — full-screen finale lattice with one readable path
+      // (snake + ringGap two-speed geometry + one aimed accent; max articulation).
+      { name: 'THE GILDED VERDICT', hp: 0.22, timeout: 42, path: bp_rails, loop: 3.0, script: [
+        pose(AMB, 0.36),
+        { t: 0.3, fn: function (e) { e.s2++; P.snake(e.x, e.y, DOWN - 0.35, 9, rankSpd(P.SPD.mid), { amp: 42, freq: 0.85, phase: e.s2 * 0.5, fam: P.FAM.SHARD, tier: 'M', color: AMB }); } },
+        { t: 0.7, fn: function (e) { P.snake(e.x, e.y, DOWN + 0.35, 9, rankSpd(P.SPD.mid), { amp: 42, freq: 0.85, phase: e.s2 * 0.5 + 1.6, fam: P.FAM.SHARD, tier: 'M', color: ROSE }); } },
+        { t: 1.3, fn: function (e) { e.s0 += 0.45; P.ringGap(e.x, e.y, 24, rankSpd(P.SPD.slow), { gaps: 1, gapWidth: 3.8, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: MAG }); } },
+        { t: 2.0, fn: function (e) { e.poseT = 0.3; muzzle(e, ACC); } },
+        { t: 2.4, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 7, { spread: 0.28, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+      ] }
+    ];
+    startBoss(e, phases, cfg);
     e.onDeath = function () {
       G.boss = null;
       for (var i = 0; i < 90; i++) spawnGold(e.x, e.y, 1, 1.4);
@@ -2427,13 +2671,6 @@
       addScore(500000 * G.mult);
       addPopup(W / 2, H * 0.4, 'CLEAR BONUS  +' + commas(Math.floor(500000 * G.mult)), UI_GOLD, 48);
     };
-  }
-  function enterBossPhase(e, ph) {
-    e.phase = ph; e.fireT = 0; e.s0 = 0;
-    cancelBulletsToGold(false); homeAllGold();
-    ringShock(e.x, e.y, [1, 0.9, 0.4], 80, 3000, 0.7);
-    flash(e.x, e.y, [1, 0.9, 0.6], 320, 0.4);
-    addShake(6); announce('PHASE ' + (ph + 1), '', 1.6);
   }
   function bigDeath(e, goldN) {
     spawnGold(e.x, e.y, goldN, 1.2);
@@ -2478,6 +2715,22 @@
   }
 
   // central damage: applies Marked / Weak / crit, popups, kill.
+  // Boss spellcard rule (DANMAKU.md "each spellcard gets its stage time"):
+  // while a boss is on a NON-final phase its hp cannot fall below the current
+  // segment floor — overkill past the floor is discarded, so one big hit
+  // advances at most one phase (via the e.hp <= segFloorHp trigger in bossTick)
+  // instead of skipping the setlist or one-shotting the fight. During a
+  // transition breath the floor rises to breathFloor (the hp at breath start),
+  // so the breath is a payday, not a dps window. On the final phase segFloorHp
+  // is 0 (segBounds bottoms out at 1), so the boss dies normally. Every path
+  // that reduces boss hp routes through here (damageEnemy) or the burn tick,
+  // which both call this immediately after the subtraction.
+  function clampBossHp(e) {
+    if (!e.boss || !e.arrived) return;
+    var floor = e.segFloorHp;
+    if (e.breathT > 0 && e.breathFloor > floor) floor = e.breathFloor;
+    if (e.hp < floor) e.hp = floor;
+  }
   function damageEnemy(e, dmg, isCrit) {
     if (e.dying) return;
     var m = 1;
@@ -2491,6 +2744,7 @@
     if (isCrit) dmg *= (G.mods.artemisMulti ? 4 : 3);
     if (G.communion === 'KEMET' && hasStatus(e)) dmg *= 1.1;   // Rite of Two Suns
     e.hp -= dmg;
+    clampBossHp(e);                         // spellcard floor: discard overkill on non-final phases / during breath
     e.hitFlash = isCrit ? 0.14 : 0.08;
     if (isCrit) { addPopup(e.x, e.y - 30, commas(Math.round(dmg)) + '!', UI_GOLD, 30); SFX.crit(); spark(e.x, e.y, [0.8, 1, 0.4], 5, 320, 22); }
     else if (Math.random() < 0.2) SFX.hit();
@@ -3362,13 +3616,25 @@
     }
   }
   function drawBossBar() {
-    var e = G.boss, x = 120, y = 40, w = W - 240, h = 16;
+    var e = G.boss, x = 120, y = 40, w = W - 240, h = 16, by = y + 60;
     var frac = Math.max(0, e.hp / e.maxhp);
     hud.textAlign = 'center'; hud.font = '700 30px Consolas, monospace'; hud.fillStyle = UI_GOLD;
     hud.fillText(e.name, W / 2, 60);
-    hud.fillStyle = 'rgba(40,10,25,0.7)'; roundRect(hud, x, y + 60, w, h, 6); hud.fill();
+    hud.fillStyle = 'rgba(40,10,25,0.7)'; roundRect(hud, x, by, w, h, 6); hud.fill();
     var grd = hud.createLinearGradient(x, 0, x + w, 0); grd.addColorStop(0, '#ff3b7b'); grd.addColorStop(1, '#ffd766');
-    hud.fillStyle = grd; roundRect(hud, x, y + 60, w * frac, h, 6); hud.fill();
+    hud.fillStyle = grd; roundRect(hud, x, by, w * frac, h, 6); hud.fill();
+    // segment ticks — one per spellcard boundary (remaining-hp fraction = 1 - cum),
+    // plus a phase counter so the setlist reads on the bar.
+    var bounds = e.segBounds;
+    if (bounds) {
+      hud.strokeStyle = 'rgba(6,10,14,0.85)'; hud.lineWidth = 3;
+      for (var i = 0; i < bounds.length - 1; i++) {
+        var tx = x + w * (1 - bounds[i]);
+        hud.beginPath(); hud.moveTo(tx, by - 2); hud.lineTo(tx, by + h + 2); hud.stroke();
+      }
+      hud.textAlign = 'right'; hud.font = '700 20px Consolas, monospace'; hud.fillStyle = UI_CYAN;
+      hud.fillText('PHASE ' + (e.phase + 1) + '/' + bounds.length, x + w, by - 8);
+    }
   }
   function tierStars(R) {
     var t = R >= 3.5 ? 5 : R >= 2.9 ? 4 : R >= 2.25 ? 3 : R >= 1.5 ? 2 : 1;

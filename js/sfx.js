@@ -333,6 +333,43 @@
     o.start(t); o.stop(t + 0.07);
   };
 
+  // boss phase-transition name-card hit: a gong-like metallic sting (bright
+  // struck partial over a low bloom) — lands on the card, distinct from vaunt.
+  SFX.bossPhase = function () {
+    if (!ready || muted) return;
+    var t = now();
+    // struck metallic body: two detuned partials ringing down
+    var parts = [523.25, 784.0, 1174.7];
+    for (var i = 0; i < parts.length; i++) {
+      var o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(parts[i] * (1 + 0.004 * i), t);
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.10 / (i + 1), t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9 - i * 0.18);
+      o.connect(g); g.connect(master);
+      o.start(t); o.stop(t + 1.0);
+    }
+    // low bloom under it
+    var s = ctx.createOscillator();
+    s.type = 'sine';
+    s.frequency.setValueAtTime(130.8, t);
+    s.frequency.exponentialRampToValueAtTime(65.4, t + 0.5);
+    var sg = ctx.createGain();
+    sg.gain.setValueAtTime(0.5, t);
+    sg.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+    s.connect(sg); sg.connect(master);
+    s.start(t); s.stop(t + 0.7);
+    // bright transient shimmer
+    var n = noiseSource(t, 0.18, null);
+    var nf = ctx.createBiquadFilter();
+    nf.type = 'bandpass'; nf.Q.value = 1.2; nf.frequency.setValueAtTime(4200, t);
+    n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
+    n.g.gain.setValueAtTime(0.18, t);
+    n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+  };
+
   SFX.powerup = function () {
     if (!ready || muted) return;
     var t = now();

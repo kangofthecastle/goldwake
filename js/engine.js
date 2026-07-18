@@ -130,6 +130,8 @@
       pathSegs: null, segI: 0, segT: 0, sx: 0, sy: 0,
       holdX: 0, holdY: 0,
       retreatAt: 0, didRetreat: false, seq: 0,
+      // boss setlist engine (pass B): phase timer, transition breath, segment HP
+      arrived: false, phaseT: 0, breathT: 0, segFloorHp: 0, segBounds: null,
       onDeath: null, onUpdate: null
     };
   }
