@@ -1,0 +1,2679 @@
+// game.js — combat / stage layer. Exposes window.Game.
+// Owns the player, enemies, bosses, bullets, the Vaunt system, the SPECIAL
+// weapon, the god-boon effects + enemy status system, scoring, FX and all
+// in-combat HUD. Run structure (sectors/waves/drafts/shops/title) lives in
+// run.js and drives this layer through the Game.* API near the bottom.
+(function () {
+  'use strict';
+
+  var Game = {};
+  window.Game = Game;
+
+  var W = 1080, H = 1920;
+  var TAU = Math.PI * 2;
+  var UP = -Math.PI / 2;
+
+  var glCanvas, hudCanvas, hud;
+  var G = null;
+
+  // tuning ---------------------------------------------------------------
+  var PLAYER_SPEED = 620, PLAYER_FOCUS = 300;
+  var PLAYER_R = 4;
+  var FIRE_CD = 0.075;
+  var SHOT_SPEED = 1500;
+  var SHOT_DMG = 1.0;             // base attack damage (intentionally modest)
+  var GAUGE_MAX = 100;
+  var GOLD_GAUGE = 1.3, GRAZE_GAUGE = 0.6;
+  var GRAZE_R = 26;
+  var MAGNET_R = 220;
+  var VAUNT_DUR = 6.0;
+  var VAUNT_SHIELD = 1.2;
+  var MERCY = 0.5;
+  var GOLD_VALUE = 120, GRAZE_SCORE = 50;
+  var VAUNT_BASE = 800;
+  var BANK_PER_SHARD = 9;
+  // special
+  var SP_RECHARGE = 0.085;        // charges per second (passive)
+  var SP_KILL = 0.11;             // charge added per kill
+  var LANCE_DMG = 7.0;            // base special lance damage per tick
+  // status
+  var CHARM_THRESHOLD = 5, CHARM_PER_HIT = 1, CHARM_TIME = 5.0;
+  // pantheon 2
+  var BEAM_DPS = 48;             // Ra solar beam base DPS (parity with stream fire)
+  var RAVEN_DMG = 9;             // Odin raven contact damage (parity: ravens were below-band)
+  var GUNGNIR_DMG = 18;          // Odin spear per-pierce damage
+  var SERPENT_DMG = 55;          // Quetzalcoatl serpent DPS
+  var killGoldMul = 1;           // transient gold multiplier for execute / judgment kills
+
+  var UI_CYAN = '#5fe6ff', UI_GOLD = '#ffd766', UI_RED = '#ff5a6e';
+  function UI_DIM() { return '#6fa9b8'; }
+
+  // ---------------------------------------------------------------------
+  // boot
+  // ---------------------------------------------------------------------
+  Game.boot = function () {
+    glCanvas = document.getElementById('gl');
+    hudCanvas = document.getElementById('hud');
+    if (!GL.init(glCanvas)) {
+      showMsg('<b>GOLDWAKE</b><br><br>This game needs <b>WebGL2</b>, which your browser or GPU did not provide.<br><br>Try a recent Chrome, Edge, or Firefox with hardware acceleration enabled.');
+      return;
+    }
+    hud = hudCanvas.getContext('2d');
+    Run.init(hudCanvas);
+    Engine.onFirstGesture(function () { SFX.ensure(); });
+    window.addEventListener('resize', onResize);
+    onResize();
+    G = makeState({});
+    G.mode = 'title';
+    Engine.start(update, render);
+  };
+
+  function showMsg(html) { var m = document.getElementById('msg'); m.innerHTML = html; m.style.display = 'flex'; }
+  function onResize() {
+    GL.resize();
+    var v = GL.viewSize();
+    hudCanvas.width = v.w; hudCanvas.height = v.h;
+  }
+
+  // ---------------------------------------------------------------------
+  // state
+  // ---------------------------------------------------------------------
+  function makeState(opts) {
+    opts = opts || {};
+    Engine.clearAllPools();
+    timers.length = 0;
+    Patterns.setGlobal(1, 1);
+    goldCombo = 0; goldComboT = 0;
+    for (var h = 0; h < hazards.length; h++) hazards[h].active = false;
+    return {
+      mode: 'title',
+      score: 0, wallet: 0,
+      lives: opts.lives != null ? opts.lives : 3,
+      graze: 0,
+      mult: 1, multFrom: 1, multDecayT: 0,
+      rank: 1,
+      paused: false,
+      time: 0,
+      player: {
+        x: W / 2, y: H - 300, alive: true, invuln: 2.0, blink: 0,
+        fireT: 0, respawnT: 0, dead: false, drones: [], recoil: 0, hammerT: 0
+      },
+      vaunt: { gauge: (opts.gaugePct || 0) * GAUGE_MAX, active: false, timer: 0, duration: VAUNT_DUR, killCount: 0, mercy: 0, ready: (opts.gaugePct || 0) >= 1 },
+      // special weapon
+      sp: { charge: 3, max: 3, flash: 0 },
+      // god boons
+      attackGod: null, attackR: 1,
+      specialGod: null, specialR: 1,
+      communion: null,
+      mods: {
+        zeusChain: 0, zeusCrit: false, zeusFork: false, zeusField: false,
+        poseidonBig: false, poseidonDrag: false, poseidonSplash: false, poseidonForce: false,
+        artemisCrit: 0, artemisRefund: false, artemisSpread: false, artemisMulti: false,
+        aphroLong: false, aphroExplode: false, aphroTaunt: false, aphroFast: false,
+        aresDecay: false, aresCharge: false, aresTerror: false, aresSpoils: false,
+        demeterFast: false, demeterShatter: false, demeterAoE: false, demeterSlow: false,
+        raRamp: false, raSpread: false, raSplit: false, raBurn: false,
+        anubisThresh: false, anubisRefund: false, anubisShard: false, anubisBossDmg: false,
+        lokiLong: false, lokiBoom: false, lokiVaunt: false, lokiChance: false,
+        odinRaven: false, odinMark: false, odinRavenMark: false, odinGungnir: false,
+        wukongClones: false, wukongStaff: false, wukongSpecial: false, wukongChance: false,
+        quetzBig: false, quetzGold: false, quetzCircle: false, quetzPierce: false,
+        thorBelt: false, thorFast: false, thorGauntlet: false, thorSkymark: false
+      },
+      duos: {
+        frozenStorm: false, eclipse: false, worldSerpent: false, deathSentence: false,
+        loveAndWar: false, doubleTrouble: false, huntersEye: false, permafrostTomb: false,
+        bloodAndFire: false, typhoonPillar: false, allfathersWrath: false, featheredHeart: false,
+        stormfathers: false,
+        ragnarok: false, wildHunt: false, fifthSunDawn: false, havocInHeaven: false,
+        frozenTide: false, eternalDevotion: false, stormSurge: false, silentWinter: false
+      },
+      frenzy: { stacks: 0, decayT: 0 },
+      thorBuff: 0,
+      hammers: [],
+      // god entities
+      ra: { active: false, target: null, ramp: 0, tx: 0, ty0: 0, ty1: 0 },
+      decoy: { active: false, x: 0, y: 0, timer: 0, absorb: 0 },
+      ravens: [],
+      gungnir: { active: false, x: 0, y: 0, timer: 0, tx: 0, ty: 0, ang: 0, visited: [] },
+      wraiths: [],
+      clones: [],
+      debris: [],
+      slowFireT: 0,
+      hermes: { speed: 0, focus: 0, recharge: 0, graze: 0 },
+      // scaling
+      stats: { atkDmg: opts.baseDmg || 1, atkRate: 1, spDmg: 1, spRecharge: 1 },
+      // retained generics
+      up: { hitboxMul: 1, magnet: 0, goldWorth: 1, vdur: 0, multCap: 5 },
+      aff: { name: '', desc: '', hpMul: 1, eliteGoldMul: 1, popcornAdd: 0, volatile: false, shopDiscount: 0 },
+      boss: null, waveKind: 'normal', waveGrace: 0, clearT: 0, clearKind: 'wave',
+      bg: makeBackground(),
+      shakeX: 0, shakeY: 0, shakeMag: 0,
+      chroma: 0, chromaTarget: 0, bloom: 1.0, bloomTarget: 1.0,
+      flashAll: 0,
+      popups: makePopups(),
+      announce: { text: '', sub: '', t: 0, dur: 0 }
+    };
+  }
+
+  Game.resetRun = function (opts) { G = makeState(opts); };
+  Game.st = function () { return G; };
+  Game.setMode = function (m) { G.mode = m; };
+
+  // ---------------------------------------------------------------------
+  // background
+  // ---------------------------------------------------------------------
+  function makeBackground() {
+    var stars = [];
+    var layers = [
+      { n: 70, sp: 26, sz: 3.0, a: 0.35 },
+      { n: 60, sp: 55, sz: 4.5, a: 0.55 },
+      { n: 45, sp: 95, sz: 6.5, a: 0.85 }
+    ];
+    for (var l = 0; l < layers.length; l++) {
+      var L = layers[l];
+      for (var i = 0; i < L.n; i++) {
+        stars.push({ x: Math.random() * W, y: Math.random() * H, sp: L.sp, sz: L.sz * (0.6 + Math.random() * 0.8), a: L.a * (0.5 + Math.random() * 0.5), tw: Math.random() * TAU });
+      }
+    }
+    var nebula = [
+      { x: W * 0.3, y: H * 0.35, r: 900, col: [0.55, 0.1, 0.6], a: 0.05, dx: 7, dy: 12 },
+      { x: W * 0.72, y: H * 0.7, r: 1100, col: [0.05, 0.5, 0.55], a: 0.045, dx: -6, dy: 9 }
+    ];
+    return { stars: stars, nebula: nebula };
+  }
+  function updateBackground(dt) {
+    var b = G.bg, i;
+    for (i = 0; i < b.stars.length; i++) {
+      var s = b.stars[i];
+      s.y += s.sp * dt; s.tw += dt * 3;
+      if (s.y > H + 10) { s.y = -10; s.x = Math.random() * W; }
+    }
+    for (i = 0; i < b.nebula.length; i++) {
+      var n = b.nebula[i];
+      n.x += n.dx * dt; n.y += n.dy * dt;
+      if (n.x < -200) n.x = W + 200; if (n.x > W + 200) n.x = -200;
+      if (n.y < -200) n.y = H + 200; if (n.y > H + 200) n.y = -200;
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // popups / announce / fx
+  // ---------------------------------------------------------------------
+  function makePopups() {
+    var arr = new Array(72);
+    for (var i = 0; i < 72; i++) arr[i] = { active: false, x: 0, y: 0, vy: 0, age: 0, life: 1, text: '', col: UI_GOLD, size: 30 };
+    return arr;
+  }
+  function addPopup(x, y, text, col, size) {
+    var arr = G.popups;
+    for (var i = 0; i < arr.length; i++) {
+      if (!arr[i].active) {
+        var p = arr[i];
+        p.active = true; p.x = x; p.y = y; p.vy = -80; p.age = 0; p.life = 1.1; p.text = text; p.col = col || UI_GOLD; p.size = size || 30; return;
+      }
+    }
+  }
+  function updatePopups(dt) {
+    var arr = G.popups;
+    for (var i = 0; i < arr.length; i++) {
+      var p = arr[i]; if (!p.active) continue;
+      p.age += dt; p.y += p.vy * dt; p.vy *= 0.92;
+      if (p.age >= p.life) p.active = false;
+    }
+  }
+  function announce(text, sub, dur) { G.announce.text = text; G.announce.sub = sub || ''; G.announce.t = 0; G.announce.dur = dur || 2.6; }
+
+  var K_SPARK = 0, K_RING = 1, K_FLASH = 2;
+  function spark(x, y, col, count, spd, size) {
+    for (var i = 0; i < count; i++) {
+      var p = Engine.particles.alloc(); if (!p) return;
+      var a = Math.random() * TAU, s = spd * (0.4 + Math.random() * 0.9);
+      p.x = x; p.y = y; p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s;
+      p.age = 0; p.life = 0.35 + Math.random() * 0.35;
+      p.size = size || 26; p.grow = -(size || 26) * 0.6; p.drag = 0.9;
+      p.r = col[0]; p.g = col[1]; p.b = col[2]; p.a = 1;
+      p.spr = GL.SPR.SPARK; p.rot = a; p.angVel = (Math.random() - 0.5) * 10; p.kind = K_SPARK;
+    }
+  }
+  function ringShock(x, y, col, size, grow, life) {
+    var p = Engine.particles.alloc(); if (!p) return;
+    p.x = x; p.y = y; p.vx = 0; p.vy = 0; p.age = 0; p.life = life || 0.5;
+    p.size = size; p.grow = grow; p.drag = 1;
+    p.r = col[0]; p.g = col[1]; p.b = col[2]; p.a = 1;
+    p.spr = GL.SPR.RING; p.rot = 0; p.angVel = 0; p.kind = K_RING;
+  }
+  function flash(x, y, col, size, life) {
+    var p = Engine.particles.alloc(); if (!p) return;
+    p.x = x; p.y = y; p.vx = 0; p.vy = 0; p.age = 0; p.life = life || 0.18;
+    p.size = size; p.grow = size * 1.5; p.drag = 1;
+    p.r = col[0]; p.g = col[1]; p.b = col[2]; p.a = 1;
+    p.spr = GL.SPR.GLOW; p.rot = 0; p.angVel = 0; p.kind = K_FLASH;
+  }
+  // jagged additive polyline via a trail of bright dots (chain lightning)
+  function arcFx(x1, y1, x2, y2, col) {
+    var seg = 6, px = x1, py = y1;
+    for (var i = 1; i <= seg; i++) {
+      var t = i / seg;
+      var jx = (Math.random() - 0.5) * 40, jy = (Math.random() - 0.5) * 40;
+      var nx = x1 + (x2 - x1) * t + (i < seg ? jx : 0);
+      var ny = y1 + (y2 - y1) * t + (i < seg ? jy : 0);
+      var steps = 3;
+      for (var k = 0; k < steps; k++) {
+        var p = Engine.particles.alloc(); if (!p) return;
+        var f = k / steps;
+        p.x = px + (nx - px) * f; p.y = py + (ny - py) * f;
+        p.vx = 0; p.vy = 0; p.age = 0; p.life = 0.12;
+        p.size = 20; p.grow = -30; p.drag = 1;
+        p.r = col[0]; p.g = col[1]; p.b = col[2]; p.a = 1;
+        p.spr = GL.SPR.CORE; p.rot = 0; p.angVel = 0; p.kind = K_FLASH;
+      }
+      px = nx; py = ny;
+    }
+  }
+  function addShake(mag) { if (mag > G.shakeMag) G.shakeMag = Math.min(mag, 8); }
+
+  // ---------------------------------------------------------------------
+  // gold + wallet
+  // ---------------------------------------------------------------------
+  function spawnGold(x, y, count, value, bank, life) {
+    for (var i = 0; i < count; i++) {
+      var g = Engine.gold.alloc(); if (!g) return;
+      var a = Math.random() * TAU, s = 120 + Math.random() * 260;
+      g.x = x; g.y = y; g.vx = Math.cos(a) * s; g.vy = Math.sin(a) * s - 80;
+      g.age = 0; g.life = life || (11 + Math.random() * 3);
+      g.value = value; g.rot = Math.random() * TAU; g.angVel = (Math.random() - 0.5) * 8;
+      g.scale = 20; g.homing = false; g.magnet = 240; g.bank = bank || 0;
+      g.r = 1; g.g = 0.78; g.b = 0.24;
+    }
+  }
+  function homeAllGold() { Engine.gold.forEach(function (g) { g.homing = true; }); }
+
+  function updateGold(dt) {
+    var px = G.player.x, py = G.player.y;
+    var vauntOn = G.vaunt.active;
+    var magR = MAGNET_R * (1 + G.up.magnet);
+    Engine.gold.forEach(function (g) {
+      g.age += dt; g.rot += g.angVel * dt;
+      var dx = px - g.x, dy = py - g.y, d2 = dx * dx + dy * dy;
+      var homing = g.homing || vauntOn || d2 < magR * magR;
+      if (homing && G.player.alive) {
+        var d = Math.sqrt(d2) || 1;
+        g.magnet = Math.min(g.magnet + 2600 * dt, 1900);
+        g.vx = (dx / d) * g.magnet; g.vy = (dy / d) * g.magnet;
+      } else { g.vx *= 0.95; g.vy = g.vy * 0.95 + 20 * dt; }
+      g.x += g.vx * dt; g.y += g.vy * dt;
+      if (G.player.alive && d2 < 46 * 46) { collectGold(g); Engine.gold.release(g); return; }
+      if (g.age >= g.life || g.y > H + 120) Engine.gold.release(g);
+    });
+  }
+  var goldCombo = 0, goldComboT = 0;
+  function collectGold(g) {
+    goldCombo++; goldComboT = 0.55;
+    var gw = G.up.goldWorth * (G.communion === 'KEMET' ? 1.15 : 1);   // Rite of Two Suns
+    addScore(GOLD_VALUE * g.value * G.mult * gw);
+    addGauge(GOLD_GAUGE * g.value);
+    var bank = g.bank > 0 ? g.bank : Math.round(BANK_PER_SHARD * g.value * gw);
+    G.wallet += bank;
+    Run.addCareerGold(bank);
+    SFX.gold(goldCombo);
+    flash(g.x, g.y, [1, 0.85, 0.4], 40, 0.14);
+  }
+
+  // ---------------------------------------------------------------------
+  // scoring / gauge / vaunt
+  // ---------------------------------------------------------------------
+  function addScore(n) { G.score += Math.floor(n); Run.reportScore(G.score); }
+  function addGauge(n) {
+    if (G.vaunt.active) return;
+    G.vaunt.gauge = Math.min(GAUGE_MAX, G.vaunt.gauge + n);
+    if (G.vaunt.gauge >= GAUGE_MAX) G.vaunt.ready = true;
+  }
+
+  function tryVaunt() {
+    var v = G.vaunt;
+    if (v.active || v.gauge < GAUGE_MAX) return;
+    v.active = true;
+    v.duration = VAUNT_DUR + G.up.vdur + (G.communion === 'OLYMPUS' ? 2 : 0);
+    v.timer = v.duration; v.killCount = 0; v.ready = false;
+    G.mult = 3; G.multDecayT = 0;
+    G.player.invuln = Math.max(G.player.invuln, VAUNT_SHIELD);
+    cancelBulletsToGold(false);
+    ringShock(G.player.x, G.player.y, [1, 0.85, 0.35], 60, 3200, 0.6);
+    ringShock(G.player.x, G.player.y, [0.4, 0.95, 1], 40, 2400, 0.45);
+    flash(G.player.x, G.player.y, [1, 0.95, 0.7], 260, 0.3);
+    addShake(7);
+    G.chromaTarget = 0.02; G.bloomTarget = 1.9;
+    announce('VAUNT', '', 1.2);
+    SFX.vaunt();
+  }
+  function updateVaunt(dt) {
+    var v = G.vaunt;
+    if (v.mercy > 0) v.mercy -= dt;
+    if (v.active) {
+      v.timer -= dt;
+      v.gauge = Math.max(0, (v.timer / v.duration) * GAUGE_MAX);
+      if (Math.random() < dt * 7) spawnGold(100 + Math.random() * (W - 200), -40, 1, 0.6);
+      G.chromaTarget = 0.012 + 0.010 * (0.5 + 0.5 * Math.sin(G.time * 14));
+      G.bloomTarget = 1.9;
+      if (v.timer <= 0) endVaunt();
+    } else { G.chromaTarget = 0; G.bloomTarget = 1.0; }
+    if (G.multDecayT > 0) {
+      G.multDecayT -= dt;
+      var f = Math.max(0, G.multDecayT / 2.0);
+      G.mult = 1 + (G.multFrom - 1) * f;
+      if (G.multDecayT <= 0) G.mult = 1;
+    }
+  }
+  function endVaunt() {
+    var v = G.vaunt; v.active = false;
+    var payout = v.killCount * G.mult * VAUNT_BASE;
+    if (payout > 0) {
+      addScore(payout);
+      addPopup(W / 2, H * 0.42, 'VAUNT BONUS  +' + commas(Math.floor(payout)), UI_GOLD, 46);
+      announce('VAUNT BONUS', v.killCount + ' kills  x' + G.mult.toFixed(1), 2.2);
+      SFX.vauntBonus();
+    }
+    G.multFrom = G.mult; G.multDecayT = 2.0;
+    v.mercy = MERCY;
+    G.player.invuln = Math.max(G.player.invuln, v.mercy);
+    v.gauge = 0; v.ready = false;
+    addShake(4);
+  }
+  function cancelBulletsToGold(midas) {
+    var val = 0.5;
+    Engine.bullets.forEach(function (b) {
+      if (Engine.gold.freeTop > 0) spawnGold(b.x, b.y, 1, val);
+      flash(b.x, b.y, [1, 0.8, 0.3], 22, 0.12);
+      Engine.bullets.release(b);
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // SPECIAL weapon
+  // ---------------------------------------------------------------------
+  function addCharge(n) { G.sp.charge = Math.min(G.sp.max, G.sp.charge + n); }
+
+  function updateSpecial(dt) {
+    var rate = SP_RECHARGE * G.stats.spRecharge * (1 + G.hermes.recharge);
+    G.sp.charge = Math.min(G.sp.max, G.sp.charge + rate * dt);
+    if (G.sp.flash > 0) G.sp.flash -= dt;
+    if (G.player.recoil > 0) G.player.recoil -= dt;
+  }
+
+  function doSpecial(free) {
+    if (!free) {
+      if (G.sp.charge < 1) { SFX.hit(); return; }
+      G.sp.charge -= 1;
+    }
+    var p = G.player;
+    p.recoil = 0.12; p.y = Math.min(H - 40, p.y + 22);
+    G.sp.flash = 0.16; G.flashAll = Math.max(G.flashAll, 0.12);
+    addShake(4);
+    SFX.special();
+    var g = G.specialGod;
+    if (g === 'zeus') stormBolt();
+    else if (g === 'artemis') huntArrow();
+    else if (g === 'aphrodite') charmMissile();
+    else if (g === 'poseidon') tidalWave();
+    else if (g === 'ares') phobosDeimos();
+    else if (g === 'demeter') winterBloom();
+    else if (g === 'ra') solarFlare();
+    else if (g === 'anubis') hallOfJudgment();
+    else if (g === 'loki') shadowTwin();
+    else if (g === 'odin') gungnirCast();
+    else if (g === 'wukong') staffSlam();
+    else if (g === 'quetz') skySerpent();
+    else if (g === 'thor') giantsBane();
+    else lanceVolley();
+    // wukongSpecial fork: living clones echo a small lance volley
+    if (G.mods.wukongSpecial) {
+      for (var i = 0; i < G.clones.length; i++) {
+        var c = G.clones[i];
+        lanceShot(c.x, 1, LANCE_DMG * 0.25 * G.stats.spDmg, [1, 0.5, 0.3]);
+      }
+    }
+  }
+
+  function lanceShot(x, kind, dmg, col) {
+    var s = Engine.shots.alloc(); if (!s) return;
+    s.x = x; s.y = G.player.y - 30; s.vx = 0; s.vy = -1700;
+    s.radius = 28; s.scale = 62; s.damage = dmg; s.age = 0; s.life = 0.85;
+    s.r = col[0]; s.g = col[1]; s.b = col[2];
+    s.pierce = 999; s.homing = false; s.turn = 0; s.kind = kind;
+    s.faction = 1; s.big = true; s.markHit = false; s.forceCrit = 0;
+    flash(x, G.player.y - 40, col, 120, 0.18);
+  }
+  function lanceVolley() {
+    var d = LANCE_DMG * G.stats.spDmg;
+    lanceShot(G.player.x, 1, d, [0.7, 1.0, 1.0]);
+    lanceShot(G.player.x - 46, 1, d * 0.7, [0.6, 0.95, 1.0]);
+    lanceShot(G.player.x + 46, 1, d * 0.7, [0.6, 0.95, 1.0]);
+  }
+  function stormBolt() {
+    var d = LANCE_DMG * G.stats.spDmg * G.specialR;
+    lanceShot(G.player.x, 3, d, [0.6, 0.85, 1.0]);
+    lanceShot(G.player.x - 40, 3, d * 0.7, [0.7, 0.9, 1.0]);
+    lanceShot(G.player.x + 40, 3, d * 0.7, [0.7, 0.9, 1.0]);
+  }
+  function huntArrow() {
+    var s = Engine.shots.alloc(); if (!s) return;
+    s.x = G.player.x; s.y = G.player.y - 30; s.vx = 0; s.vy = -2000;
+    s.radius = 34; s.scale = 80; s.damage = LANCE_DMG * 2.2 * G.stats.spDmg * G.specialR;
+    s.age = 0; s.life = 0.8; s.r = 0.7; s.g = 1.0; s.b = 0.3;
+    s.pierce = 3; s.kind = 4; s.faction = 1; s.big = true; s.markHit = true; s.forceCrit = 1;
+    flash(s.x, s.y, [0.7, 1, 0.3], 150, 0.2);
+  }
+  function charmMissile() {
+    var s = Engine.shots.alloc(); if (!s) return;
+    s.x = G.player.x; s.y = G.player.y - 30; s.vx = 0; s.vy = -1200;
+    s.radius = 24; s.scale = 56; s.damage = LANCE_DMG * 1.2 * G.stats.spDmg;
+    s.age = 0; s.life = 1.4; s.r = 1.0; s.g = 0.45; s.b = 0.85;
+    s.pierce = 0; s.kind = 5; s.faction = 1; s.big = true; s.markHit = false; s.forceCrit = 0;
+    flash(s.x, s.y, [1, 0.5, 0.85], 120, 0.2);
+  }
+  function tidalWave() {
+    var hz = allocHazard(); if (!hz) return;
+    hz.type = 'wave'; hz.x = W / 2; hz.y = H + 60; hz.vy = -720; hz.r = 190; hz.timer = 4;
+    hz.dmg = LANCE_DMG * 0.9 * G.stats.spDmg * G.specialR;
+    hz.tick = 0;
+  }
+  function winterBloom() {
+    var p = G.player, radius = 520;
+    ringShock(p.x, p.y, [0.7, 0.95, 1.0], 80, 3600, 0.7);
+    flash(p.x, p.y, [0.8, 0.95, 1.0], 320, 0.35);
+    Engine.enemies.forEach(function (e) {
+      if (e.dying || e.charmed) return;
+      var dx = e.x - p.x, dy = e.y - p.y;
+      if (dx * dx + dy * dy < radius * radius) { e.chillStacks = Math.min(10, e.chillStacks + 4); e.chillT = 3.5; }
+    });
+    Engine.bullets.forEach(function (b) { b.timeScale = 0.6; b.slowT = 2.5; });
+    G.chromaTarget = 0.016;
+  }
+
+  // ---------------------------------------------------------------------
+  // hazards (special-weapon area effects; small preallocated pool)
+  // ---------------------------------------------------------------------
+  var hazards = [];
+  (function () { for (var i = 0; i < 8; i++) hazards.push({ active: false, type: '', x: 0, y: 0, vy: 0, r: 0, timer: 0, dur: 1, tick: 0, dmg: 0, rot: 0, halfW: 0, esc: 0, trail: null, hue: 0 }); })();
+  function allocHazard() { for (var i = 0; i < hazards.length; i++) if (!hazards[i].active) { var z = hazards[i]; z.active = true; z.rot = 0; z.halfW = 0; z.esc = 0; z.trail = null; z.hue = 0; return z; } return null; }
+
+  function updateHazards(dt) {
+    var px = G.player.x, py = G.player.y;
+    for (var i = 0; i < hazards.length; i++) {
+      var hz = hazards[i]; if (!hz.active) continue;
+      hz.timer -= dt; hz.rot += dt * 6;
+      if (hz.type === 'wave') {
+        hz.y += hz.vy * dt;
+        // shove + damage enemies in band; carry bullets up
+        Engine.enemies.forEach(function (e) {
+          if (e.dying || e.charmed) return;
+          if (Math.abs(e.y - hz.y) < hz.r) { e.y = Math.max(60, e.y + hz.vy * dt * 0.8); damageEnemy(e, hz.dmg * dt * 3, false); }
+        });
+        Engine.bullets.forEach(function (b) {
+          if (b.y > hz.y - hz.r && b.y < hz.y + hz.r * 0.4) { b.y += hz.vy * dt * 0.9; b.carried = true; b.slowT = 0.2; b.timeScale = 0.5; }
+        });
+        if (hz.y < -hz.r) {
+          // carried bullets convert to gold; drag gold to player (mod)
+          Engine.bullets.forEach(function (b) {
+            if (b.carried) { if (Engine.gold.freeTop > 0) { spawnGold(b.x, b.y, 1, 0.4, 0, 8); if (G.mods.poseidonDrag) homeAllGold(); } if (G.duos.frozenTide) chillBurst(b.x, b.y); Engine.bullets.release(b); }
+          });
+          if (G.duos.frozenTide && !hasHazard('ice')) spawnIceWall();   // FROZEN TIDE: glacier shield wall
+          hz.active = false;
+        }
+      }
+      else if (hz.type === 'staff') {
+        hz.tick -= dt;
+        if (hz.tick <= 0) {
+          hz.tick = 0.1;
+          Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; if (Math.abs(e.x - hz.x) < hz.halfW + e.radius * 0.5) damageEnemy(e, hz.dmg, false); });
+          spark(hz.x, 300 + Math.random() * (H - 500), [1, 0.55, 0.2], 3, 300, 32);
+        }
+        if (hz.timer <= 0) {
+          if (G.mods.wukongStaff) Engine.enemies.forEach(function (e) { if (!e.dying && !e.charmed && !e.boss && Math.abs(e.x - hz.x) < hz.halfW + e.radius * 0.5) e.stunT = 1.5; });
+          hz.active = false;
+        }
+      }
+      else if (hz.type === 'judgment') {
+        hz.esc += dt; hz.tick -= dt;
+        if (hz.tick <= 0) {
+          hz.tick = 0.15;
+          var jd = hz.dmg * (1 + hz.esc * 0.35);
+          killGoldMul = 2;
+          Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; var dx = hz.x - e.x, dy = hz.y - e.y; if (dx * dx + dy * dy < hz.r * hz.r) damageEnemy(e, jd, false); });
+          killGoldMul = 1;
+          spark(hz.x, hz.y, [1, 0.85, 0.3], 4, 260, 30);
+        }
+        if (hz.timer <= 0) { flash(hz.x, hz.y, [1, 0.9, 0.4], hz.r, 0.35); hz.active = false; }
+      }
+      else if (hz.type === 'serpent') {
+        var u = 1 - hz.timer / hz.dur;
+        if (G.mods.quetzCircle && u > 0.82) {            // Skywalk end: circle the player
+          var ca = ((u - 0.82) / 0.18) * Math.PI * 2;
+          hz.x = G.player.x + Math.cos(ca) * 240; hz.y = G.player.y + Math.sin(ca) * 240;
+        } else {
+          hz.x = W / 2 + Math.sin(u * Math.PI * 3) * (W * 0.40);
+          hz.y = 150 + u * (H - 420);
+        }
+        hz.hue += dt * 0.4;
+        if (!hz.trail) hz.trail = [];
+        hz.trail.push(hz.x); hz.trail.push(hz.y);
+        var maxPts = Math.round(hz.r * 0.9);
+        while (hz.trail.length > maxPts * 2) { hz.trail.shift(); hz.trail.shift(); }
+        var segR = 72 * (G.mods.quetzBig ? 1.35 : 1);
+        var feathered = G.duos.featheredHeart;
+        for (var ti = 0; ti < hz.trail.length; ti += 6) {
+          var sx = hz.trail[ti], sy = hz.trail[ti + 1];
+          Engine.enemies.forEach(function (e) {
+            if (e.dying || e.charmed) return;
+            var dx = e.x - sx, dy = e.y - sy;
+            if (dx * dx + dy * dy < segR * segR) {
+              if (feathered && !e.boss) charmEnemy(e);   // FEATHERED HEART: charm instead of damage
+              else { damageEnemy(e, SERPENT_DMG * dt * G.specialR, false); if (G.duos.fifthSunDawn) applyBurn(e, 16 * G.specialR, 1.5); }  // FIFTH SUN DAWN: solar trail burns
+            }
+          });
+        }
+        var eatR = segR * (G.duos.worldSerpent ? 1.8 : 1);   // WORLD SERPENT: wider bullet-sweeping wake
+        Engine.bullets.forEach(function (b) {
+          var bx = b.x - hz.x, by = b.y - hz.y;
+          if (bx * bx + by * by < eatR * eatR) {
+            addGauge(1.2);
+            if (G.mods.quetzGold && Engine.gold.freeTop > 0) spawnGold(b.x, b.y, 1, 0.3);
+            if (G.duos.fifthSunDawn) { var ne = nearestEnemy(b.x, b.y); if (ne) applyBurn(ne, 16 * G.specialR, 1.5); }  // eaten bullets ignite
+            spark(b.x, b.y, [0.4, 1, 0.7], 2, 160, 16);
+            Engine.bullets.release(b);
+          }
+        });
+        if (hz.timer <= 0) hz.active = false;
+      }
+      else if (hz.type === 'zap') {
+        hz.tick -= dt;
+        if (hz.tick <= 0) {
+          hz.tick = 0.2;
+          Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; var dx = hz.x - e.x, dy = hz.y - e.y; if (dx * dx + dy * dy < hz.r * hz.r) { damageEnemy(e, hz.dmg, false); arcFx(hz.x, hz.y, e.x, e.y, [0.7, 0.9, 1.0]); } });
+        }
+        if (hz.timer <= 0) hz.active = false;
+      }
+      else if (hz.type === 'ice') {   // FROZEN TIDE glacier wall — blocks enemy bullets
+        Engine.bullets.forEach(function (b) { if (b.friendly) return; if (Math.abs(b.y - hz.y) < 42) { spark(b.x, hz.y, [0.6, 0.9, 1], 1, 120, 14); Engine.bullets.release(b); } });
+        if (hz.timer <= 0) { chillBurstWide(hz.y); flash(W / 2, hz.y, [0.7, 0.95, 1], 400, 0.3); hz.active = false; }
+      }
+      else if (hz.type === 'chillzone') {   // Apostate Demeter — slows the player's fire while inside
+        var cdx = G.player.x - hz.x, cdy = G.player.y - hz.y;
+        if (cdx * cdx + cdy * cdy < hz.r * hz.r) G.slowFireT = 0.4;
+        if (hz.timer <= 0) hz.active = false;
+      }
+      if (hz.timer <= 0 && hz.type === 'wave') hz.active = false;
+    }
+  }
+
+  function drawHazards() {
+    for (var i = 0; i < hazards.length; i++) {
+      var hz = hazards[i]; if (!hz.active) continue;
+      if (hz.type === 'wave') {
+        for (var x = 60; x < W; x += 80) {
+          GL.draw(GL.SPR.GLOW, x, hz.y, 130, hz.r * 1.4, 0, 0.2, 0.75, 0.85, 0.5);
+          GL.draw(GL.SPR.CORE, x, hz.y, 60, 24, 0, 0.5, 0.95, 1.0, 0.7);
+        }
+      }
+      else if (hz.type === 'staff') {
+        var pa = Math.min(1, hz.timer * 3);
+        GL.draw(GL.SPR.GLOW, hz.x, H / 2, hz.halfW * 3.0, H, 0, 1, 0.55, 0.2, 0.4 * pa);
+        GL.draw(GL.SPR.CORE, hz.x, H / 2, hz.halfW * 1.5, H, 0, 1, 0.8, 0.4, 0.8 * pa);
+        GL.draw(GL.SPR.CORE, hz.x, H / 2, hz.halfW * 0.5, H, 0, 1, 1, 0.9, 0.9 * pa);
+      }
+      else if (hz.type === 'judgment') {
+        var ja = Math.min(1, hz.timer);
+        GL.draw(GL.SPR.GLOW, hz.x, hz.y, hz.r * 2.4, hz.r * 2.4, hz.rot, 0.9, 0.75, 0.25, 0.35 * ja);
+        GL.draw(GL.SPR.RING, hz.x, hz.y, hz.r * 2.0, hz.r * 2.0, hz.rot, 1, 0.85, 0.35, 0.9 * ja);
+        GL.draw(GL.SPR.RING, hz.x, hz.y, hz.r * 1.3, hz.r * 1.3, -hz.rot * 1.4, 0.2, 0.15, 0.25, 0.9 * ja);
+        GL.draw(GL.SPR.CORE, hz.x, hz.y, hz.r * 0.35, hz.r * 0.35, 0, 1, 0.9, 0.5, 0.6 * ja);
+      }
+      else if (hz.type === 'serpent' && hz.trail) {
+        var segR2 = 72 * (G.mods.quetzBig ? 1.35 : 1);
+        for (var ti = 0; ti < hz.trail.length; ti += 2) {
+          var f = ti / Math.max(2, hz.trail.length);
+          var col = Patterns.hue(hz.hue + f * 0.6);
+          var sz = segR2 * (0.6 + 0.4 * f);
+          GL.draw(GL.SPR.GLOW, hz.trail[ti], hz.trail[ti + 1], sz * 1.6, sz * 1.6, 0, col[0], col[1], col[2], 0.5);
+          GL.draw(GL.SPR.CORE, hz.trail[ti], hz.trail[ti + 1], sz * 0.7, sz * 0.7, 0, col[0], col[1], col[2], 0.8);
+        }
+        // head
+        GL.draw(GL.SPR.CORE, hz.x, hz.y, segR2, segR2, 0, 1, 1, 0.9, 0.9);
+      }
+      else if (hz.type === 'zap') {
+        var za = Math.min(1, hz.timer);
+        GL.draw(GL.SPR.GLOW, hz.x, hz.y, hz.r * 2.0, hz.r * 2.0, hz.rot, 0.6, 0.85, 1.0, 0.3 * za);
+        GL.draw(GL.SPR.CORE, hz.x, hz.y, hz.r * 0.4, hz.r * 0.4, 0, 0.8, 0.95, 1.0, 0.6 * za);
+      }
+      else if (hz.type === 'ice') {
+        var ia = 0.5 + 0.5 * Math.min(1, hz.timer);
+        for (var ix = 50; ix < W; ix += 90) {
+          GL.draw(GL.SPR.GLOW, ix, hz.y, 130, 70, 0, 0.55, 0.85, 1.0, 0.35 * ia);
+          GL.draw(GL.SPR.CORE, ix, hz.y, 70, 26, 0, 0.7, 0.92, 1.0, 0.7 * ia);
+        }
+      }
+      else if (hz.type === 'chillzone') {
+        GL.draw(GL.SPR.GLOW, hz.x, hz.y, hz.r * 2.0, hz.r * 2.0, hz.rot, 0.5, 0.85, 1.0, 0.22);
+        GL.draw(GL.SPR.RING, hz.x, hz.y, hz.r * 1.9, hz.r * 1.9, hz.rot, 0.6, 0.9, 1.0, 0.4);
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // pantheon 2 — entities, specials, status helpers
+  // ---------------------------------------------------------------------
+  // RA — continuous solar beam (attack transform)
+  function raBeam(dt) {
+    var p = G.player, halfW = 36;
+    var target = null, bestY = -1e9;
+    Engine.enemies.forEach(function (e) {
+      if (e.dying || e.charmed) return;
+      if (e.y < p.y - 30 && Math.abs(e.x - p.x) < halfW + e.radius * 0.7) { if (e.y > bestY) { bestY = e.y; target = e; } }
+    });
+    var cap = 2.5 * (G.mods.raRamp ? 1.15 : 1);
+    var rate = G.mods.raRamp ? 0.9 : 0.5;   // ~2s to full (faster with mod)
+    if (target && target === G.ra.target) G.ra.ramp = Math.min(1, G.ra.ramp + rate * dt);
+    else { G.ra.ramp = 0; G.ra.target = target; }
+    G.ra.active = true; G.ra.tx = p.x; G.ra.ty0 = p.y - 24; G.ra.ty1 = target ? target.y : 30;
+    if (target) {
+      var mult = 1 + (cap - 1) * G.ra.ramp;
+      var tick = BEAM_DPS * mult * G.stats.atkDmg * dt;
+      // raSplit: when a 2nd foe is in the column, split into two half beams (swarm answer)
+      if (G.mods.raSplit) {
+        var t2 = null, b2 = 1e18;
+        Engine.enemies.forEach(function (e) { if (e.dying || e.charmed || e === target) return; if (e.y < p.y - 30 && Math.abs(e.x - p.x) < halfW + e.radius * 0.7) { var dd = Math.abs(e.x - p.x); if (dd < b2) { b2 = dd; t2 = e; } } });
+        if (t2) { damageEnemy(target, tick * 0.6, false); damageEnemy(t2, tick * 0.6, false); if (G.mods.raBurn) applyBurn(t2, 18 * G.attackR, 1.5); }
+        else damageEnemy(target, tick, false);
+      } else damageEnemy(target, tick, false);
+      if (G.mods.raBurn) applyBurn(target, 18 * G.attackR, 1.5);
+      if (G.duos.eclipse && Math.random() < dt * 6) chainLightning(target, tick * 5, false); // ECLIPSE: beam arcs chains
+      if (Math.random() < 0.12) SFX.shot();
+      if (Math.random() < 0.4) spark(target.x, target.y, [1, 0.9, 0.5], 1, 120, 16);
+    }
+  }
+  function drawRaBeam() {
+    if (!G.ra.active) return;
+    var x = G.ra.tx, cy = (G.ra.ty0 + G.ra.ty1) / 2, hh = Math.abs(G.ra.ty0 - G.ra.ty1) + 20;
+    var pulse = 0.8 + 0.2 * Math.sin(G.time * 40), ramp = G.ra.ramp;
+    GL.draw(GL.SPR.GLOW, x, cy, 90 + ramp * 46, hh, 0, 1, 0.85, 0.35, 0.5 * pulse);
+    GL.draw(GL.SPR.CORE, x, cy, 46 + ramp * 26, hh, 0, 1, 0.92, 0.5, 0.8 * pulse);
+    GL.draw(GL.SPR.CORE, x, cy, 16 + ramp * 12, hh, 0, 1, 1, 0.95, pulse);
+    GL.draw(GL.SPR.GLOW, x, G.ra.ty1, 130, 130, 0, 1, 0.9, 0.5, 0.7);
+  }
+
+  function nearestEnemy(x, y) {
+    var best = null, bd = 1e18;
+    Engine.enemies.forEach(function (e) {
+      if (e.dying || e.charmed) return;
+      var dx = e.x - x, dy = e.y - y, d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; best = e; }
+    });
+    return best;
+  }
+
+  // ODIN — ravens
+  function updateRavens(dt) {
+    if (G.attackGod !== 'odin') { if (G.ravens.length) G.ravens.length = 0; return; }
+    while (G.ravens.length < 2) G.ravens.push({ ang: G.ravens.length * Math.PI, state: 0, x: G.player.x, y: G.player.y, tx: 0, ty: 0, cd: 1.2 + G.ravens.length * 0.6 });
+    var p = G.player, interval = G.mods.odinRaven ? 1.0 : 1.7;
+    var dmg = RAVEN_DMG * (G.mods.odinRaven ? 1.7 : 1) * G.stats.atkDmg;
+    for (var i = 0; i < G.ravens.length; i++) {
+      var r = G.ravens[i]; r.ang += dt * 2.4;
+      if (r.state === 0) {
+        var ox = p.x + Math.cos(r.ang) * 82, oy = p.y + Math.sin(r.ang) * 82 - 26;
+        r.x += (ox - r.x) * Math.min(1, dt * 10); r.y += (oy - r.y) * Math.min(1, dt * 10);
+        r.cd -= dt;
+        if (r.cd <= 0) { var t = (G.duos.wildHunt ? nearestTerrified(r.x, r.y) : null) || nearestEnemy(r.x, r.y); if (t) { r.state = 1; r.tx = t.x; r.ty = t.y; } else r.cd = 0.3; }
+      } else if (r.state === 1) {
+        var dx = r.tx - r.x, dy = r.ty - r.y, d = Math.hypot(dx, dy) || 1;
+        r.x += dx / d * 720 * dt; r.y += dy / d * 720 * dt;
+        var hitFlag = false;
+        Engine.enemies.forEach(function (e) { if (hitFlag || e.dying || e.charmed) return; if (Engine.hit(r.x, r.y, 20, e.x, e.y, e.radius)) { damageEnemy(e, (G.duos.wildHunt && e.terrorT > 0) ? dmg * 3 : dmg, false); if (G.mods.odinRavenMark) markEnemy(e); hitFlag = true; } });
+        if (hitFlag || d < 24) r.state = 2;
+      } else {
+        var dx2 = p.x - r.x, dy2 = p.y - r.y, d2 = Math.hypot(dx2, dy2) || 1;
+        r.x += dx2 / d2 * 640 * dt; r.y += dy2 / d2 * 640 * dt;
+        if (d2 < 70) { r.state = 0; r.cd = interval; }
+      }
+    }
+  }
+  function drawRavens() {
+    for (var i = 0; i < G.ravens.length; i++) {
+      var r = G.ravens[i];
+      GL.draw(GL.SPR.GLOW, r.x, r.y, 46, 46, 0, 0.6, 0.62, 0.72, 0.5);
+      GL.draw(GL.SPR.SHIP_POP, r.x, r.y, 34, 34, r.state === 1 ? Math.atan2(r.ty - r.y, r.tx - r.x) + Math.PI / 2 : 0, 0.78, 0.8, 0.88, 0.95);
+    }
+  }
+
+  // ODIN — Gungnir (special)
+  function updateGungnir(dt) {
+    var g = G.gungnir; if (!g.active) return;
+    g.timer -= dt;
+    var target = null, bd = 1e18;
+    Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; if (g.visited.indexOf(e) >= 0) return; var dx = e.x - g.x, dy = e.y - g.y, d = dx * dx + dy * dy; if (d < bd) { bd = d; target = e; } });
+    if (!target || g.timer <= 0) { g.active = false; return; }
+    var dx = target.x - g.x, dy = target.y - g.y, d = Math.sqrt(bd) || 1;
+    g.ang = Math.atan2(dy, dx);
+    g.x += dx / d * 1500 * dt; g.y += dy / d * 1500 * dt;
+    spark(g.x, g.y, [1, 0.9, 0.5], 1, 80, 14);
+    if (d < target.radius + 22) {
+      damageEnemy(target, GUNGNIR_DMG * G.stats.spDmg * G.specialR * (G.mods.odinGungnir ? 1.5 : 1), false);
+      markEnemy(target);
+      if (G.duos.allfathersWrath) chainLightning(target, GUNGNIR_DMG * 0.4 * G.specialR, false); // ALLFATHER'S WRATH
+      g.visited.push(target);
+    }
+  }
+  function drawGungnir() {
+    if (!G.gungnir.active) return;
+    var g = G.gungnir, ang = g.ang + Math.PI / 2;
+    GL.draw(GL.SPR.GLOW, g.x, g.y, 60, 170, ang, 1, 0.9, 0.5, 0.6);
+    GL.draw(GL.SPR.NEEDLE, g.x, g.y, 42, 190, ang, 1, 0.95, 0.6, 1);
+    GL.draw(GL.SPR.CORE, g.x, g.y, 26, 26, 0, 1, 1, 0.9, 0.9);
+  }
+  function markEnemy(e) { e.marked = true; e.markT = G.mods.odinMark ? 10 : 6; }
+
+  // LOKI — decoy
+  function updateDecoy(dt) {
+    if (!G.decoy.active) return;
+    G.decoy.timer -= dt;
+    if (G.duos.doubleTrouble) {                          // DOUBLE TROUBLE: decoy is a firing clone
+      G.decoy.fireT = (G.decoy.fireT || 0) - dt;
+      if (G.decoy.fireT <= 0) { G.decoy.fireT = FIRE_CD / (G.stats.atkRate * frenzyRate()); fireStreams(G.decoy.x, G.decoy.y, false, 0.5); }
+    }
+    if (G.decoy.timer <= 0) expireDecoy();
+  }
+  function expireDecoy() {
+    if (!G.decoy.active) return;
+    G.decoy.active = false;
+    if (G.duos.ragnarok) ragnarokStrike(G.decoy.x, G.decoy.y);   // RAGNAROK: the trick ends in the hammer
+    spark(G.decoy.x, G.decoy.y, [0.4, 1, 0.5], 14, 300, 26);
+    if (G.mods.lokiBoom) {
+      Engine.bullets.forEach(function (b) { var dx = b.x - G.decoy.x, dy = b.y - G.decoy.y; if (dx * dx + dy * dy < 260 * 260) { if (Engine.gold.freeTop > 0) spawnGold(b.x, b.y, 1, 0.5); Engine.bullets.release(b); } });
+      flash(G.decoy.x, G.decoy.y, [0.4, 1, 0.5], 200, 0.3);
+    }
+  }
+  function drawDecoy() {
+    if (!G.decoy.active) return;
+    var d = G.decoy, pulse = 0.6 + 0.4 * Math.sin(G.time * 10);
+    GL.draw(GL.SPR.GLOW, d.x, d.y, 72, 72, 0, 0.4, 1, 0.5, 0.5 * pulse);
+    GL.draw(GL.SPR.SHIP_PLAYER, d.x, d.y, 72, 72, 0, 0.4, 1, 0.5, 0.7);
+    GL.draw(GL.SPR.RING, d.x, d.y, 92, 92, G.time * 3, 0.4, 1, 0.5, 0.6);
+  }
+
+  // WUKONG — clones
+  function spawnClone() {
+    var max = G.mods.wukongClones ? 3 : 2;
+    if (G.clones.length >= max) return;
+    var used = []; for (var j = 0; j < G.clones.length; j++) used.push(G.clones[j].offset);
+    var offs = [130, -130, 210, -210], off = 130;
+    for (var k = 0; k < offs.length; k++) { if (used.indexOf(offs[k]) < 0) { off = offs[k]; break; } }
+    G.clones.push({ offset: off, x: G.player.x + off, y: G.player.y, timer: G.mods.wukongClones ? 7 : 4, fireT: 0 });
+    flash(G.player.x + off, G.player.y, [1, 0.4, 0.2], 80, 0.2);
+  }
+  function updateClones(dt) {
+    var p = G.player;
+    for (var i = G.clones.length - 1; i >= 0; i--) {
+      var c = G.clones[i]; c.timer -= dt;
+      if (c.timer <= 0) { spark(c.x, c.y, [1, 0.4, 0.2], 10, 240, 24); G.clones.splice(i, 1); continue; }
+      c.x = p.x + c.offset; c.y = p.y;
+      if (c.x < 40) c.x = 40; if (c.x > W - 40) c.x = W - 40;
+      if (Engine.fireHeld()) { c.fireT -= dt; if (c.fireT <= 0) { c.fireT = FIRE_CD / (G.stats.atkRate * frenzyRate()); fireStreams(c.x, c.y, Engine.focusHeld(), 0.45, true); } }
+    }
+  }
+  function drawClones() {
+    for (var i = 0; i < G.clones.length; i++) {
+      var c = G.clones[i], a = Math.min(1, c.timer) * 0.62;
+      GL.draw(GL.SPR.GLOW, c.x, c.y + 30, 46, 70, 0, 1, 0.4, 0.2, 0.4 * a);
+      GL.draw(GL.SPR.SHIP_PLAYER, c.x, c.y, 68, 68, 0, 1, 0.4, 0.25, a);
+      GL.draw(GL.SPR.CORE, c.x, c.y, 10, 10, 0, 1, 0.7, 0.5, a);
+    }
+  }
+
+  // status helpers
+  function applyBurn(e, dps, dur) { if (e.burnT < dur) e.burnT = dur; if (e.burnDps < dps) e.burnDps = dps; }
+  function spreadBurn(e) { Engine.enemies.forEach(function (o) { if (o.dying || o.charmed || o === e) return; var dx = o.x - e.x, dy = o.y - e.y; if (dx * dx + dy * dy < 200 * 200) applyBurn(o, e.burnDps * 0.8, 2.5); }); }
+  function anubisThreshold() { return 0.2 + (G.mods.anubisThresh ? 0.08 : 0); }
+  function executeEnemy(e) {
+    if (e.dying) return;
+    // ETERNAL DEVOTION: the executed rise as charmed ghost allies instead of dying
+    if (G.duos.eternalDevotion && !e.boss && !e.charmed) {
+      e.charmed = true; e.charmMeter = 0; e.charmT = 4; e.ghost = true; e.fireHold = 0;
+      flash(e.x, e.y, [0.85, 0.3, 0.7], 80, 0.3); spark(e.x, e.y, [0.85, 0.3, 0.7], 12, 280, 26);
+      return;
+    }
+    flash(e.x, e.y, [1, 0.9, 0.4], 90, 0.3); ringShock(e.x, e.y, [1, 0.85, 0.3], 30, 2000, 0.4); spark(e.x, e.y, [1, 0.9, 0.4], 10, 300, 26);
+    if (G.mods.anubisShard) addGauge(4);                  // executed foes drop a vaunt shard
+    killGoldMul = 1.5; killEnemy(e, true); killGoldMul = 1;
+    if (G.mods.anubisRefund) addCharge(0.12);
+  }
+
+  // pantheon-2 specials
+  function solarFlare() {
+    G.flashAll = Math.max(G.flashAll, 0.4); addShake(5);
+    ringShock(G.player.x, G.player.y, [1, 0.95, 0.6], 100, 5000, 0.6);
+    Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; applyBurn(e, 22 * G.stats.spDmg * G.specialR, 3.0); });
+  }
+  function hallOfJudgment() {
+    var hz = allocHazard(); if (!hz) return;
+    hz.type = 'judgment'; hz.x = G.player.x; hz.y = Math.max(340, G.player.y - 300); hz.r = 230; hz.timer = 5; hz.dur = 5; hz.tick = 0; hz.esc = 0;
+    hz.dmg = LANCE_DMG * 0.35 * G.stats.spDmg * G.specialR;
+  }
+  function shadowTwin() {
+    G.decoy.active = true; G.decoy.x = G.player.x; G.decoy.y = G.player.y; G.decoy.absorb = 0;
+    G.decoy.timer = 6 * (G.mods.lokiLong ? 1.5 : 1);
+    flash(G.player.x, G.player.y, [0.4, 1, 0.5], 120, 0.25);
+  }
+  function gungnirCast() {
+    var g = G.gungnir; g.active = true; g.timer = G.mods.odinGungnir ? 6 : 4; g.x = G.player.x; g.y = G.player.y - 30; g.ang = -Math.PI / 2; g.visited = [];
+  }
+  function staffSlam() {
+    var hz = allocHazard(); if (!hz) return;
+    hz.type = 'staff'; hz.x = G.player.x; hz.halfW = 90 * (G.mods.wukongStaff ? 1.55 : 1); hz.timer = 0.8; hz.dur = 0.8; hz.tick = 0;
+    hz.dmg = LANCE_DMG * 0.9 * G.stats.spDmg;
+    addShake(8);
+    if (G.duos.typhoonPillar) tidalWave();               // TYPHOON PILLAR: staff sends a shockwave wall
+  }
+  function skySerpent() {
+    var hz = allocHazard(); if (!hz) return;
+    hz.type = 'serpent'; hz.timer = 2.5 * (G.mods.quetzBig ? 1.3 : 1); hz.dur = hz.timer; hz.r = 16; hz.trail = []; hz.hue = 0; hz.x = W / 2; hz.y = 150;
+  }
+
+  // ---------------------------------------------------------------------
+  // ARES — Bloodlust (frenzy) + Phobos & Deimos (Terror wraiths)
+  // ---------------------------------------------------------------------
+  function addFrenzy() {
+    G.frenzy.stacks = Math.min(10, G.frenzy.stacks + 1);
+    G.frenzy.decayT = G.mods.aresDecay ? 3.0 : 1.5;
+  }
+  function anyBurning() {
+    var found = false;
+    Engine.enemies.forEach(function (e) { if (e.burnT > 0) found = true; });
+    return found;
+  }
+  function updateFrenzy(dt) {
+    if (G.attackGod !== 'ares' && G.frenzy.stacks === 0) return;
+    // BLOOD AND FIRE duo: stacks don't decay while anything burns
+    var hold = G.duos.bloodAndFire && anyBurning();
+    if (!hold && G.frenzy.stacks > 0) {
+      G.frenzy.decayT -= dt;
+      if (G.frenzy.decayT <= 0) { G.frenzy.stacks--; G.frenzy.decayT = G.mods.aresDecay ? 3.0 : 1.5; }
+    }
+    // aresCharge fork: charge special ~2x faster while >= 5 stacks
+    if (G.mods.aresCharge && G.frenzy.stacks >= 5) addCharge(SP_RECHARGE * G.stats.spRecharge * dt);
+  }
+  function frenzyRate() { return 1 + 0.06 * G.frenzy.stacks; }  // +6% fire rate per stack
+
+  // Terror application from a passing wraith (or LOVE AND WAR duo)
+  function terrify(e, fromX, fromY) {
+    if (e.dying || e.charmed) return;
+    if (e.boss) { e.shakenT = Math.max(e.shakenT, 1.0); pushDisp(e, fromX, fromY, 90); return; }
+    var dur = 2.5 * (G.mods.aresTerror ? 1.6 : 1);
+    if (e.terrorT < dur) e.terrorT = dur;
+    e.impactDmg = e.maxhp * 0.2 + 30;
+    pushDisp(e, fromX, fromY, 420);
+    spark(e.x, e.y, [0.7, 0.05, 0.1], 4, 260, 22);
+  }
+  function pushDisp(e, fromX, fromY, power) {
+    var dx = e.x - fromX, dy = e.y - fromY, d = Math.hypot(dx, dy) || 1;
+    var mul = e.boss ? 0.15 : 1;
+    e.dispVX += (dx / d) * power * mul;
+    e.dispVY += (dy / d) * power * mul;
+  }
+
+  function phobosDeimos() {
+    G.wraiths.length = 0;
+    var base = G.player.x, by = G.player.y;
+    for (var i = 0; i < 2; i++) G.wraiths.push({ x: base, y: by, ang: i * Math.PI, dir: i === 0 ? 1 : -1, r: 30, timer: 1.4 });
+    ringShock(base, by, [0.7, 0.05, 0.1], 60, 2600, 0.5);
+    addShake(5);
+  }
+  function updateWraiths(dt) {
+    for (var i = G.wraiths.length - 1; i >= 0; i--) {
+      var w = G.wraiths[i];
+      w.timer -= dt;
+      if (w.timer <= 0) { G.wraiths.splice(i, 1); continue; }
+      w.ang += w.dir * dt * 5.0;
+      w.r += 620 * dt;                               // spiral outward
+      w.x = G.player.x + Math.cos(w.ang) * w.r;
+      w.y = G.player.y + Math.sin(w.ang) * w.r;
+      Engine.enemies.forEach(function (e) {
+        if (e.dying || e.charmed) return;
+        var dx = e.x - w.x, dy = e.y - w.y;
+        if (dx * dx + dy * dy < 130 * 130) terrify(e, w.x, w.y);
+      });
+    }
+  }
+  function drawWraiths() {
+    for (var i = 0; i < G.wraiths.length; i++) {
+      var w = G.wraiths[i], a = Math.min(1, w.timer * 2);
+      GL.draw(GL.SPR.GLOW, w.x, w.y, 150, 150, w.ang, 0.55, 0.02, 0.06, 0.55 * a);
+      GL.draw(GL.SPR.CORE, w.x, w.y, 40, 40, 0, 0.9, 0.1, 0.15, 0.8 * a);
+      GL.draw(GL.SPR.SHIP_POP, w.x, w.y, 44, 44, w.ang + Math.PI / 2, 0.7, 0.05, 0.1, a);
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // shared mod / duo helpers
+  // ---------------------------------------------------------------------
+  function spreadMark(e) {
+    var best = null, bd = 320 * 320;
+    Engine.enemies.forEach(function (o) { if (o.dying || o.charmed || o === e || o.marked) return; var dx = o.x - e.x, dy = o.y - e.y, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = o; } });
+    if (best) { best.marked = true; best.markT = G.mods.odinMark ? 10 : 6; }
+  }
+  function spawnZapField(x, y) {
+    var hz = allocHazard(); if (!hz) return;
+    hz.type = 'zap'; hz.x = x; hz.y = y; hz.r = 120; hz.timer = 1.6; hz.dur = 1.6; hz.tick = 0;
+    hz.dmg = 6 * G.stats.atkDmg * G.attackR;
+  }
+  function hasHazard(type) { for (var i = 0; i < hazards.length; i++) if (hazards[i].active && hazards[i].type === type) return true; return false; }
+  function spawnIceWall() {
+    var hz = allocHazard(); if (!hz) return;
+    hz.type = 'ice'; hz.x = W / 2; hz.y = H * 0.4; hz.r = 40; hz.timer = 3; hz.dur = 3;
+  }
+  function chillBurst(x, y) { Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; var dx = e.x - x, dy = e.y - y; if (dx * dx + dy * dy < 130 * 130) applyChill(e, 2); }); }
+  function chillBurstWide(y) { Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; if (Math.abs(e.y - y) < 220) applyChill(e, 3); }); }
+
+  // ---------------------------------------------------------------------
+  // THOR — Mjolnir (kinetic hammer). No lightning — that is Zeus.
+  // ---------------------------------------------------------------------
+  function highestHpEnemy() {
+    var best = null, bm = -1;
+    Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; if (e.maxhp > bm) { bm = e.maxhp; best = e; } });
+    return best;
+  }
+  function nearestTerrified(x, y) {
+    var best = null, bd = 1e18;
+    Engine.enemies.forEach(function (e) { if (e.dying || e.charmed || e.terrorT <= 0) return; var dx = e.x - x, dy = e.y - y, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = e; } });
+    return best;
+  }
+  function throwHammer(big, dmg, kb) {
+    G.hammers.push({ x: G.player.x, y: G.player.y - 24, state: 'out', vy: -1150, t: 0, dmg: dmg, kb: kb, big: big, spin: 0, hoverT: 0, hit: [], target: big ? highestHpEnemy() : null });
+  }
+  function giantsBane() {
+    var dmg = LANCE_DMG * 3.0 * G.stats.spDmg * G.specialR * (G.mods.thorBelt ? 1.4 : 1);
+    throwHammer(true, dmg, 420 * (G.mods.thorBelt ? 1.5 : 1));
+    addShake(6);
+  }
+  function hammerImpact(h, ix, iy, crunch, e) {
+    addShake(h.big ? (crunch ? 7 : 3) : 2);
+    ringShock(ix, iy, [0.62, 0.66, 0.78], crunch ? 120 : (h.big ? 70 : 42), crunch ? 3400 : 1700, 0.4);
+    if (crunch || Math.random() < 0.5) SFX.thud();
+    if (e && !e.dying) {
+      damageEnemy(e, h.dmg * (crunch ? 1.6 : 1), false);
+      pushDisp(e, G.player.x, G.player.y, h.kb); e.impactDmg = h.dmg * 0.5;
+      if (G.duos.stormfathers) chainLightning(e, h.dmg * 0.35, false);   // STORMFATHERS
+      if (G.duos.stormSurge) stormSurgeWave(ix, iy);                     // STORM SURGE
+    }
+    if (crunch && h.big) {
+      Engine.enemies.forEach(function (o) { if (o.dying || o.charmed || o === e) return; var dx = o.x - ix, dy = o.y - iy; if (dx * dx + dy * dy < 260 * 260) { damageEnemy(o, h.dmg * 0.6, false); pushDisp(o, ix, iy, h.kb * 1.1); o.impactDmg = h.dmg * 0.4; } });
+      if (G.duos.stormSurge) stormSurgeWave(ix, iy);
+    }
+  }
+  function hammerSweep(h) {
+    var rr = h.big ? 72 : 46;
+    Engine.enemies.forEach(function (e) { if (e.dying || e.charmed || h.hit.indexOf(e) >= 0) return; if (Engine.hit(h.x, h.y, rr, e.x, e.y, e.radius)) { hammerImpact(h, e.x, e.y, false, e); h.hit.push(e); } });
+  }
+  function updateHammers(dt) {
+    for (var i = G.hammers.length - 1; i >= 0; i--) {
+      var h = G.hammers[i]; h.spin += dt * 16; h.t += dt;
+      if (h.state === 'out') {
+        if (h.big && h.target && !h.target.dying) {
+          var dx = h.target.x - h.x, dy = h.target.y - h.y, d = Math.hypot(dx, dy) || 1;
+          h.x += dx / d * 1400 * dt; h.y += dy / d * 1400 * dt;
+          if (d < h.target.radius + 44) { hammerImpact(h, h.target.x, h.target.y, true, h.target); h.state = 'return'; h.hit = []; }
+        } else {
+          h.y += h.vy * dt;
+          var apexY = h.big ? 180 : Math.max(220, G.player.y - 780);
+          if (h.y <= apexY) { if (h.big) hammerImpact(h, h.x, h.y, true, null); if (G.mods.thorSkymark && !h.big) { h.state = 'hover'; h.hoverT = 0.8; } else { h.state = 'return'; h.hit = []; } }
+        }
+        hammerSweep(h);
+      } else if (h.state === 'hover') {
+        h.hoverT -= dt; hammerSweep(h);
+        if (h.hoverT <= 0) { h.state = 'return'; h.hit = []; }
+      } else {
+        var dx2 = G.player.x - h.x, dy2 = G.player.y - h.y, d2 = Math.hypot(dx2, dy2) || 1;
+        h.x += dx2 / d2 * 1300 * dt; h.y += dy2 / d2 * 1300 * dt;
+        hammerSweep(h);
+        if (d2 < 46) { if (G.mods.thorGauntlet) G.thorBuff = 2.0; G.hammers.splice(i, 1); continue; }
+      }
+      if (h.t > 6) G.hammers.splice(i, 1);
+    }
+  }
+  function drawHammers() {
+    for (var i = 0; i < G.hammers.length; i++) {
+      var h = G.hammers[i], sz = h.big ? 130 : 78;
+      GL.draw(GL.SPR.GLOW, h.x, h.y, sz * 1.5, sz * 1.5, 0, 0.5, 0.6, 0.75, 0.5);
+      GL.draw(GL.SPR.SHIP_MID, h.x, h.y, sz, sz, h.spin, 0.6, 0.66, 0.8, 1);
+      GL.draw(GL.SPR.CORE, h.x, h.y, sz * 0.4, sz * 0.4, 0, 0.95, 0.35, 0.3, 0.7);
+    }
+  }
+  // RAGNAROK duo — a Giant's Bane crunch at a point (70% power)
+  function ragnarokStrike(x, y) {
+    var h = { big: true, dmg: LANCE_DMG * 3.0 * G.stats.spDmg * G.specialR * 0.7, kb: 420 };
+    ringShock(x, y, [0.6, 0.66, 0.78], 130, 3400, 0.5); addShake(7); SFX.thud();
+    hammerImpact(h, x, y, true, null);
+  }
+  // STORM SURGE duo — mini tidal shove on hammer impacts
+  function stormSurgeWave(ix, iy) {
+    Engine.bullets.forEach(function (b) { var dx = b.x - ix, dy = b.y - iy; if (dx * dx + dy * dy < 220 * 220) { b.y -= 60; b.slowT = 0.3; b.timeScale = 0.5; } });
+    Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; var dx = e.x - ix, dy = e.y - iy; if (dx * dx + dy * dy < 220 * 220) pushDisp(e, ix, iy, 120); });
+    ringShock(ix, iy, [0.2, 0.8, 0.85], 40, 1800, 0.35);
+  }
+
+  // ---------------------------------------------------------------------
+  // aim point — every enemy aimed pattern targets this (Loki decoy redirects
+  // all aimed fire; Confuse reflects an enemy's aim through itself = +pi).
+  // ---------------------------------------------------------------------
+  var aimTX = W / 2, aimTY = H - 300;
+  function refreshAim() {
+    if (G.decoy.active) { aimTX = G.decoy.x; aimTY = G.decoy.y; }
+    else { aimTX = G.player.x; aimTY = G.player.y; }
+  }
+  function tauntTarget(e) {
+    if (!G.mods.aphroTaunt) return null;
+    var best = null, bd = 380 * 380;
+    Engine.enemies.forEach(function (o) { if (!o.charmed || o.dying) return; var dx = o.x - e.x, dy = o.y - e.y, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = o; } });
+    return best;
+  }
+  function AIMX(e) { var t = tauntTarget(e); var tx = t ? t.x : aimTX; return e.confuseT > 0 ? (2 * e.x - tx) : tx; }
+  function AIMY(e) { var t = tauntTarget(e); var ty = t ? t.y : aimTY; return e.confuseT > 0 ? (2 * e.y - ty) : ty; }
+  Game.aimPoint = function () { return { x: aimTX, y: aimTY }; };
+
+  // ---------------------------------------------------------------------
+  // player
+  // ---------------------------------------------------------------------
+  function updatePlayer(dt) {
+    var p = G.player;
+    if (p.dead) {
+      p.respawnT -= dt;
+      if (p.respawnT <= 0) { p.dead = false; p.alive = true; p.x = W / 2; p.y = H - 300; p.invuln = 2.0; }
+      return;
+    }
+    var mv = Engine.readMove();
+    var focus = Engine.focusHeld();
+    var sp = (focus ? PLAYER_FOCUS * (1 + G.hermes.focus) : PLAYER_SPEED * (1 + G.hermes.speed));
+    var len = Math.hypot(mv.x, mv.y) || 1;
+    p.x += (mv.x / len) * sp * dt; p.y += (mv.y / len) * sp * dt;
+    var m = 40;
+    if (p.x < m) p.x = m; if (p.x > W - m) p.x = W - m;
+    if (p.y < m) p.y = m; if (p.y > H - m) p.y = H - m;
+    if (p.invuln > 0) p.invuln -= dt;
+    p.blink += dt;
+    // Ra replaces projectile fire with a continuous solar beam
+    if (G.attackGod === 'ra') {
+      if (Engine.fireHeld()) raBeam(dt);
+      else { G.ra.active = false; G.ra.target = null; G.ra.ramp = 0; }
+    } else {
+      p.fireT -= dt;
+      if (Engine.fireHeld() && p.fireT <= 0) { p.fireT = FIRE_CD / (G.stats.atkRate * frenzyRate() * (G.slowFireT > 0 ? 0.8 : 1)); fireShots(focus); SFX.shot(); }
+    }
+    if (G.thorBuff > 0) G.thorBuff -= dt;
+    if (G.slowFireT > 0) G.slowFireT -= dt;
+    // Thor Mjolnir throw cycle (alongside the thinned normal stream)
+    if (G.attackGod === 'thor') {
+      p.hammerT -= dt;
+      if (Engine.fireHeld() && p.hammerT <= 0) {
+        p.hammerT = G.mods.thorFast ? 0.9 : 1.4;
+        throwHammer(false, 5 * G.stats.atkDmg * G.attackR * (G.mods.thorBelt ? 1.4 : 1), 300 * (G.mods.thorBelt ? 1.5 : 1));
+      }
+    }
+  }
+
+  function streamAngles(n, spread) {
+    var out = [];
+    if (n === 1) { out.push(0); return out; }
+    var step = spread / (n - 1);
+    for (var i = 0; i < n; i++) out.push(-spread / 2 + step * i);
+    return out;
+  }
+  function fireShots(focus) { fireStreams(G.player.x, G.player.y, focus, 1, false); }
+  function fireStreams(px, py, focus, dmgScale, isClone) {
+    var n = focus ? 4 : 3;
+    if (G.attackGod === 'thor') n = Math.max(1, n - 1);   // Mjolnir: thinned normal stream
+    var spread = focus ? 0.16 : 0.30;
+    var quetz = (G.attackGod === 'quetz');
+    if (quetz) spread += 0.16;               // Feathered Winds: wider coverage
+    var dmg = (focus ? 1.0 : 1.05) * SHOT_DMG * G.stats.atkDmg * dmgScale * (G.thorBuff > 0 ? 1.3 : 1);
+    var angs = streamAngles(n, spread);
+    for (var i = 0; i < angs.length; i++) {
+      var s = Engine.shots.alloc(); if (!s) break;
+      var a = UP + angs[i];
+      s.x = px + Math.cos(a) * 26; s.y = py + Math.sin(a) * 26 - 20;
+      s.vx = Math.cos(a) * SHOT_SPEED; s.vy = Math.sin(a) * SHOT_SPEED;
+      s.radius = 12; s.damage = dmg; s.age = 0; s.life = 1.6; s.scale = 30;
+      s.pierce = quetz ? (G.mods.quetzPierce ? 2 : 1) : 0; s.homing = false; s.turn = 0; s.kind = 0;
+      s.faction = 0; s.big = false; s.markHit = false; s.forceCrit = 0; s.cloneShot = !!isClone;
+      if (quetz) { s.weave = 1; s.phase = i * 1.3 + Math.random() * 6.28; s.r = 0.4; s.g = 1.0; s.b = 0.7; }
+      else { s.weave = 0; var fr = G.frenzy.stacks / 10; s.r = 0.6 + 0.4 * fr; s.g = 1.0 - 0.7 * fr; s.b = 1.0 - 0.85 * fr; }
+    }
+  }
+
+  function updateShots(dt) {
+    Engine.shots.forEach(function (s) {
+      s.age += dt;
+      s.x += s.vx * dt; s.y += s.vy * dt;
+      if (s.weave) s.x += Math.sin(s.age * 16 + s.phase) * 340 * dt; // serpentine
+      if (s.y < -80 || s.y > H + 60 || s.age > s.life || s.x < -80 || s.x > W + 80) Engine.shots.release(s);
+    });
+  }
+
+  function playerHit() {
+    var p = G.player;
+    if (!p.alive || p.invuln > 0 || G.vaunt.active || G.vaunt.mercy > 0) return;
+    p.alive = false; p.dead = true; p.respawnT = 1.4;
+    G.lives--;
+    G.mult = 1; G.multDecayT = 0; G.vaunt.gauge = Math.max(0, G.vaunt.gauge * 0.3);
+    SFX.death();
+    for (var i = 0; i < 3; i++) ringShock(p.x, p.y, [1, 0.5, 0.4], 40 + i * 30, 2200, 0.6);
+    spark(p.x, p.y, [1, 0.7, 0.4], 40, 520, 40);
+    flash(p.x, p.y, [1, 0.8, 0.7], 300, 0.4);
+    addShake(6);
+    var clearR = 340;
+    Engine.bullets.forEach(function (b) {
+      var dx = b.x - p.x, dy = b.y - p.y;
+      if (dx * dx + dy * dy < clearR * clearR) { flash(b.x, b.y, [1, 0.7, 0.4], 18, 0.1); Engine.bullets.release(b); }
+    });
+    var spill = Math.floor(G.wallet * 0.25);
+    if (spill > 0) {
+      G.wallet -= spill;
+      var nn = 14;
+      for (var k = 0; k < nn; k++) spawnGold(p.x, p.y, 1, 0.4, Math.floor(spill / nn), 4.0);
+    }
+    if (G.communion === 'ASGARD' && G.lives > 0) doSpecial(true);   // Twilight Oath: death answers with a free special
+    if (G.lives <= 0) Run.onGameOver();
+  }
+
+  // ---------------------------------------------------------------------
+  // enemies + status
+  // ---------------------------------------------------------------------
+  function bezier(t, a, b, c, d) { var u = 1 - t; return u * u * u * a + 3 * u * u * t * b + 3 * u * t * t * c + t * t * t * d; }
+
+  function newEnemy(type, x, y, hp, spr, scale, radius, col, gold, score, elite) {
+    var e = Engine.enemies.alloc(); if (!e) return null;
+    e.type = type; e.x = x; e.y = y; e.vx = 0; e.vy = 0;
+    e.hp = hp * G.aff.hpMul; e.maxhp = e.hp; e.spr = spr; e.scale = scale; e.radius = radius;
+    e.r = col[0]; e.g = col[1]; e.b = col[2];
+    e.t = 0; e.fireT = 0; e.fireCd = 1;
+    e.s0 = 0; e.s1 = 0; e.s2 = 0; e.s3 = 0;
+    e.p0x = 0; e.p0y = 0; e.p1x = 0; e.p1y = 0; e.p2x = 0; e.p2y = 0; e.p3x = 0; e.p3y = 0;
+    e.pathT = 0; e.pathDur = 1; e.angle = Math.PI / 2; e.rot = Math.PI;
+    e.gold = gold; e.score = score; e.hitFlash = 0;
+    e.boss = false; e.phase = 0; e.name = ''; e.invuln = false; e.dying = false; e.elite = !!elite;
+    e.terrorT = 0; e.shakenT = 0; e.chillStacks = 0; e.chillT = 0;
+    e.charmMeter = 0; e.charmed = false; e.charmT = 0;
+    e.marked = false; e.markT = 0; e.weak = false; e.weakT = 0; e.ghost = false;
+    e.burnT = 0; e.burnDps = 0; e.confuseT = 0; e.stunT = 0; e.confuseBudget = 0; e.judgeT = 0;
+    e.dispX = 0; e.dispY = 0; e.dispVX = 0; e.dispVY = 0; e.impactDmg = 0; e.slamCd = 0;
+    e.arch = ''; e.aura = ''; e.link = null; e.gen = 0; e.g1 = ''; e.g2 = ''; e.shieldT = 0;
+    e.knx = 0; e.kny = 0; e.fireHold = 0;
+    e.onDeath = null; e.onUpdate = null;
+    return e;
+  }
+
+  // ----- status effect application (from god attack hits) -----
+  function applyAttackGod(e, s, dmg) {
+    switch (G.attackGod) {
+      case 'zeus': chainLightning(e, dmg * 0.4 * G.attackR); break;
+      case 'poseidon': knockback(e, dmg); break;
+      case 'aphrodite':
+        if (e.boss) { e.weak = true; e.weakT = 4; }
+        else { e.charmMeter += CHARM_PER_HIT; if (e.charmMeter >= (G.mods.aphroFast ? 3 : CHARM_THRESHOLD)) charmEnemy(e); }
+        break;
+      case 'demeter':
+        applyChill(e, G.mods.demeterFast ? 2 : 1);
+        break;
+      case 'loki': {
+        var ch = 0.12 + (G.mods.lokiChance ? 0.06 : 0);
+        if (e.boss) { if (Math.random() < ch * 0.5) { e.confuseT = 0.8; e.confuseBudget = e.maxhp * 0.03; } }
+        else if (Math.random() < ch) e.confuseT = 2.0;
+        break;
+      }
+      case 'anubis':
+        if (!e.boss && !e.dying && e.hp < anubisThreshold() * e.maxhp) executeEnemy(e);
+        break;
+      // ares = Bloodlust (frenzy on kill); artemis = crit in damageEnemy;
+      // ra/odin/wukong/quetz have no on-hit status.
+    }
+  }
+  function applyChill(e, stacks) {
+    e.chillStacks = Math.min(10, e.chillStacks + stacks);
+    e.chillT = 3.0;
+  }
+
+  function chainLightning(origin, dmg, isStorm) {
+    var jumps = 2 + G.mods.zeusChain + (isStorm ? 2 : 0);
+    var col = [0.7, 0.9, 1.0];
+    var fx = origin.x, fy = origin.y;
+    var hitList = [origin];
+    for (var j = 0; j < jumps; j++) {
+      var best = zapNearest(fx, fy, hitList);
+      if (!best) break;
+      arcFx(fx, fy, best.x, best.y, col);
+      damageEnemy(best, dmg, false);
+      if (G.duos.frozenStorm) applyChill(best, 2);          // FROZEN STORM: chill spreads down the chain
+      hitList.push(best);
+      // zeusFork: also strike a second nearby target this jump
+      if (G.mods.zeusFork) {
+        var fork = zapNearest(fx, fy, hitList);
+        if (fork) { arcFx(fx, fy, fork.x, fork.y, col); damageEnemy(fork, dmg * 0.7, false); if (G.duos.frozenStorm) applyChill(fork, 2); hitList.push(fork); }
+      }
+      fx = best.x; fy = best.y;
+    }
+    if (G.mods.zeusCrit && !origin.dying) damageEnemy(origin, dmg * 0.6, true);
+  }
+  function zapNearest(fx, fy, hitList) {
+    var best = null, bd = 340 * 340;
+    Engine.enemies.forEach(function (e) {
+      if (e.dying || e.charmed || hitList.indexOf(e) >= 0) return;
+      var dx = e.x - fx, dy = e.y - fy, d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; best = e; }
+    });
+    return best;
+  }
+
+  // Poseidon knockback: push via the displacement system (visible on scripted
+  // movers) — the wall-slam / enemy-slam is resolved in integrateDisp().
+  function knockback(e, dmg) {
+    var force = 300 * (G.mods.poseidonBig ? 1.6 : 1) * (G.mods.poseidonForce ? 1.4 : 1);
+    pushDisp(e, G.player.x, G.player.y, force);
+    e.impactDmg = dmg * 1.5 * (G.mods.poseidonBig ? 1.8 : 1) * (G.mods.poseidonForce ? 1.4 : 1);
+  }
+
+  // spring-damper displacement integration + slam resolution
+  function integrateDisp(e, dt) {
+    if (e.slamCd > 0) e.slamCd -= dt;
+    var k = 55, damp = 0.86;
+    e.dispVX += (-e.dispX * k) * dt; e.dispVY += (-e.dispY * k) * dt;
+    e.dispVX *= damp; e.dispVY *= damp;
+    e.dispX += e.dispVX * dt; e.dispY += e.dispVY * dt;
+    var cl = e.terrorT > 0 ? 480 : 150;
+    var dm = Math.hypot(e.dispX, e.dispY);
+    if (dm > cl) { var s = cl / dm; e.dispX *= s; e.dispY *= s; e.dispVX *= 0.4; e.dispVY *= 0.4; }
+    if ((e.arch === 'aegis' || e.aura === 'bulwark') && dm > 80) e.shieldT = 1.5;   // physics spins the shield open
+    if (dm > 45 && e.slamCd <= 0) {
+      var wx = e.x + e.dispX, wy = e.y + e.dispY;
+      if (wx < 40 || wx > W - 40 || wy < 40) { doSlam(e, wx, wy); }
+      else {
+        var slam = false, other = null;
+        Engine.enemies.forEach(function (o) {
+          if (slam || o === e || o.dying || o.charmed) return;
+          var dx = (o.x + o.dispX) - wx, dy = (o.y + o.dispY) - wy;
+          if (dx * dx + dy * dy < (e.radius + o.radius) * (e.radius + o.radius)) { slam = true; other = o; }
+        });
+        if (slam) { var d0 = e.impactDmg; doSlam(e, wx, wy); if (other && !other.dying) damageEnemy(other, d0 > 0 ? d0 : (e.maxhp * 0.1 + 20), false); }
+      }
+    }
+  }
+  function doSlam(e, wx, wy) {
+    e.slamCd = 0.35;
+    var dmg = e.impactDmg > 0 ? e.impactDmg : (e.maxhp * 0.1 + 20);
+    spark(wx, wy, [0.3, 0.85, 0.9], 8, 380, 26);
+    flash(wx, wy, [0.5, 0.95, 1.0], 60, 0.14);
+    if (G.mods.aresSpoils && e.terrorT > 0 && Engine.gold.freeTop > 1) spawnGold(wx, wy, 2, 0.5); // spoils of war
+    if (G.mods.poseidonSplash) Engine.enemies.forEach(function (o) { if (o.dying || o.charmed || o === e) return; var dx = o.x - wx, dy = o.y - wy; if (dx * dx + dy * dy < 150 * 150) damageEnemy(o, dmg * 0.5, false); });
+    var wasTerror = e.terrorT > 0;
+    damageEnemy(e, dmg, false);
+    if (G.duos.wildHunt && wasTerror && e.dying) addFrenzy();   // WILD HUNT: terror-slam kills feed frenzy
+  }
+
+  function charmEnemy(e) {
+    if (e.boss || e.charmed) return;
+    e.charmed = true; e.charmMeter = 0;
+    e.charmT = CHARM_TIME * (G.mods.aphroLong ? 1.6 : 1);
+    spark(e.x, e.y, [1, 0.5, 0.85], 10, 260, 28);
+    flash(e.x, e.y, [1, 0.5, 0.85], 60, 0.2);
+  }
+
+  function updateStatus(e, dt) {
+    // marked / weak decay
+    if (e.markT > 0) { e.markT -= dt; if (e.markT <= 0) e.marked = false; }
+    if (e.weakT > 0) { e.weakT -= dt; if (e.weakT <= 0) e.weak = false; }
+    // Burn (DoT); Ra 'spread' handled in killEnemy on death
+    if (e.burnT > 0) {
+      e.burnT -= dt; e.hp -= e.burnDps * dt;
+      if (Math.random() < dt * 9) spark(e.x, e.y, [1, 0.5, 0.12], 1, 130, 14);
+      if (e.hp <= 0) { killEnemy(e, true); return; }
+    }
+    if (e.confuseT > 0) e.confuseT -= dt;
+    if (e.stunT > 0) e.stunT -= dt;
+    // Ares terror / shaken
+    if (e.terrorT > 0) e.terrorT -= dt;
+    if (e.shakenT > 0) e.shakenT -= dt;
+    // chill decay / shatter
+    if (e.chillStacks >= 10 && !e.dying) { shatter(e); }
+    else if (e.chillT > 0) { e.chillT -= dt; if (e.chillT <= 0) e.chillStacks = 0; }
+    // charm meter slow decay
+    if (!e.charmed && e.charmMeter > 0) e.charmMeter = Math.max(0, e.charmMeter - dt * 0.5);
+  }
+
+  function shatter(e) {
+    var rad = 180 * (G.mods.demeterShatter ? 1.5 : 1);
+    var dmg = e.maxhp * 0.12 + 40;
+    ringShock(e.x, e.y, [0.7, 0.95, 1.0], 40, rad * 12, 0.4);
+    flash(e.x, e.y, [0.8, 0.95, 1.0], rad, 0.25);
+    Engine.enemies.forEach(function (o) {
+      if (o.dying || o.charmed) return;
+      var dx = o.x - e.x, dy = o.y - e.y;
+      if (dx * dx + dy * dy < rad * rad) {
+        if (G.duos.permafrostTomb && !o.boss && o.hp < 0.30 * o.maxhp) { executeEnemy(o); return; } // PERMAFROST TOMB
+        damageEnemy(o, o === e ? dmg * 1.5 : dmg, false);
+        if (G.mods.demeterAoE && o !== e) applyChill(o, 4);   // shatter spreads chill
+      }
+    });
+    e.chillStacks = 0; e.chillT = 0;
+  }
+
+  function updateCharmed(e, dt) {
+    e.charmT -= dt;
+    // find nearest non-charmed enemy
+    var best = null, bd = 1e18;
+    Engine.enemies.forEach(function (o) {
+      if (o === e || o.dying || o.charmed) return;
+      var dx = o.x - e.x, dy = o.y - e.y, d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; best = o; }
+    });
+    if (best) {
+      var dx = best.x - e.x, dy = best.y - e.y, d = Math.sqrt(bd) || 1;
+      e.x += (dx / d) * 160 * dt; e.y += (dy / d) * 160 * dt;
+      e.rot = Math.atan2(dy, dx) + Math.PI / 2;
+      e.fireHold -= dt;
+      if (e.fireHold <= 0) {
+        e.fireHold = G.duos.loveAndWar ? 0.175 : 0.35;   // LOVE AND WAR: charmed allies fire twice as fast
+        var s = Engine.shots.alloc();
+        if (s) {
+          s.x = e.x; s.y = e.y; s.vx = (dx / d) * 900; s.vy = (dy / d) * 900;
+          s.radius = 12; s.scale = 26; s.damage = e.ghost ? 0.6 : 1.4; s.age = 0; s.life = 1.2;
+          s.r = 1; s.g = 0.5; s.b = 0.85; s.pierce = 0; s.kind = 2; s.faction = 2; s.big = false; s.markHit = false; s.forceCrit = 0;
+        }
+      }
+    } else { e.y -= 60 * dt; if (e.charmT > 0.4) e.charmT = 0.4; } // no targets left — wind down so waves can clear
+    if (e.charmT <= 0) expireCharm(e);
+  }
+  function expireCharm(e) {
+    if (e.dying) return;
+    e.dying = true;
+    spark(e.x, e.y, [1, 0.5, 0.85], 16, 320, 30);
+    ringShock(e.x, e.y, [1, 0.4, 0.8], 30, 1600, 0.5);
+    if (G.mods.aphroExplode) {
+      Engine.enemies.forEach(function (o) {
+        if (o.dying || o.charmed || o === e) return;
+        var dx = o.x - e.x, dy = o.y - e.y;
+        if (dx * dx + dy * dy < 200 * 200) damageEnemy(o, e.maxhp * 0.4 + 30, false);
+      });
+    }
+    if (G.duos.loveAndWar) {                              // expiry inflicts Terror around them
+      Engine.enemies.forEach(function (o) { if (o.dying || o.charmed || o === e) return; var dx = o.x - e.x, dy = o.y - e.y; if (dx * dx + dy * dy < 240 * 240) terrify(o, e.x, e.y); });
+    }
+    addScore(e.score * G.mult * 0.5);
+    spawnGold(e.x, e.y, e.gold, 1);
+    addCharge(SP_KILL);
+    Engine.enemies.release(e);
+  }
+
+  function spawnDarter(startX, curlX, exitX) {
+    var e = newEnemy(1, startX, -120, 3, GL.SPR.SHIP_POP, 74, 30, [1, 0.4, 0.55], 4, 500, false); if (!e) return;
+    e.p0x = startX; e.p0y = -120; e.p1x = curlX; e.p1y = 520; e.p2x = W - curlX; e.p2y = 1050; e.p3x = exitX; e.p3y = -160;
+    e.pathDur = 4.2; e.fireCd = 0.55; e.onUpdate = updateDarter; maybeAura(e);
+  }
+  function updateDarter(e, dt) {
+    e.t += dt; e.pathT = Math.min(1, e.t / e.pathDur);
+    e.x = bezier(e.pathT, e.p0x, e.p1x, e.p2x, e.p3x);
+    e.y = bezier(e.pathT, e.p0y, e.p1y, e.p2y, e.p3y);
+    e.rot = Math.PI;
+    if (e.pathT > 0.28 && e.pathT < 0.78) {
+      e.fireT -= dt;
+      if (e.fireT <= 0) { e.fireT = e.fireCd; Patterns.aimed(e.x, e.y, AIMX(e), AIMY(e), 340 * G.rank, { color: Patterns.CYAN, radius: 11 }); }
+    }
+    if (e.pathT >= 1) killEnemy(e, false);
+  }
+  function spawnWeaver(cx, amp, phase) {
+    var e = newEnemy(2, cx, -100, 4, GL.SPR.SHIP_POP, 70, 28, [1, 0.55, 0.2], 4, 700, false); if (!e) return;
+    e.s0 = cx; e.s1 = amp; e.s2 = phase; e.vy = 175; e.fireCd = 1.1; e.onUpdate = updateWeaver; maybeAura(e);
+  }
+  function updateWeaver(e, dt) {
+    e.t += dt; e.y += e.vy * dt; e.x = e.s0 + Math.sin(e.t * 1.8 + e.s2) * e.s1; e.rot = Math.PI;
+    e.fireT -= dt;
+    if (e.fireT <= 0 && e.y > 120 && e.y < H - 500) { e.fireT = e.fireCd; Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 3, 0.34, 300 * G.rank, { color: Patterns.ORANGE, radius: 11 }); }
+    if (e.y > H + 120) killEnemy(e, false);
+  }
+  function spawnTurret(x, targetY) {
+    var e = newEnemy(3, x, -100, 10, GL.SPR.SHIP_MID, 84, 38, [0.6, 0.4, 1.0], 7, 1500, true); if (!e) return;
+    e.s0 = targetY; e.vy = 230; e.fireCd = 1.5; e.onUpdate = updateTurret; maybeAura(e);
+  }
+  function updateTurret(e, dt) {
+    e.t += dt;
+    if (e.y < e.s0) { e.y += e.vy * dt; }
+    else {
+      e.fireT -= dt;
+      if (e.fireT <= 0) {
+        e.fireT = e.fireCd; e.s1++;
+        Patterns.ring(e.x, e.y, 14 + Math.floor(4 * G.rank), 230 * G.rank, { color: Patterns.VIOLET, radius: 12, offset: e.s1 * 0.4 });
+        if (e.s1 >= 5) { e.vy = 200; e.s0 = -9999; }
+      }
+      if (e.s0 === -9999) e.y += e.vy * dt;
+    }
+    e.rot = Math.PI;
+    if (e.y > H + 140) killEnemy(e, false);
+  }
+  function spawnGunship(fromLeft) {
+    var sx = fromLeft ? -140 : W + 140;
+    var e = newEnemy(4, sx, 330, 26, GL.SPR.SHIP_GUN, 110, 52, [1, 0.5, 0.15], 12, 3000, true); if (!e) return;
+    e.vx = fromLeft ? 240 : -240; e.fireCd = 1.15; e.onUpdate = updateGunship; maybeAura(e);
+  }
+  function updateGunship(e, dt) {
+    e.t += dt; e.x += e.vx * dt;
+    if (e.x < 180) { e.x = 180; e.vx = Math.abs(e.vx); }
+    if (e.x > W - 180) { e.x = W - 180; e.vx = -Math.abs(e.vx); }
+    e.rot = Math.PI; e.fireT -= dt;
+    if (e.fireT <= 0) { e.fireT = e.fireCd; Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 5 + Math.floor(2 * G.rank), 0.7, 260 * G.rank, { color: Patterns.ORANGE, radius: 12 }); }
+    if (e.t > 16) killEnemy(e, false);
+  }
+
+  // ---------------------------------------------------------------------
+  // phase-6 enemy archetypes + elite auras
+  // ---------------------------------------------------------------------
+  function applyAura(e, aura) {
+    e.aura = aura;
+    if (aura === 'gilded') { e.gold = Math.round(e.gold * 2); e.hp *= 1.4; e.maxhp = e.hp; }
+  }
+  function maybeAura(e) {
+    if (!e || e.boss) return;
+    var r = Math.random();
+    if (r < 0.05) applyAura(e, 'gilded');
+    else if (r < 0.09) applyAura(e, 'bulwark');
+    else if (r < 0.13) applyAura(e, 'frenzied');
+  }
+
+  // AEGIS SHIELDBEARER — front shield; displacement spins it to expose the back
+  function spawnAegis(x) {
+    var e = newEnemy(20, x, -120, 70, GL.SPR.SHIP_GUN, 110, 50, [0.5, 0.8, 1.0], 8, 2200, true); if (!e) return;
+    e.arch = 'aegis'; e.vy = 120; e.fireCd = 1.4; e.onUpdate = updateAegis;
+  }
+  function updateAegis(e, dt) {
+    e.t += dt;
+    if (e.y < 360) e.y += e.vy * dt; else e.x += Math.cos(e.t) * 60 * dt;
+    e.rot = Math.PI;
+    if (e.shieldT > 0) e.shieldT -= dt;
+    e.fireT -= dt;
+    if (e.fireT <= 0) { e.fireT = e.fireCd; Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 3, 0.4, 280 * G.rank, { color: Patterns.CYAN, radius: 11 }); }
+    if (e.t > 18) { e.y += 100 * dt; if (e.y > H + 140) killEnemy(e, false); }
+  }
+
+  // WEAVER PAIR — two drones linked by a perpendicular bullet-curtain tether
+  function spawnWeaverPair() {
+    var a = newEnemy(21, W * 0.3, -100, 44, GL.SPR.SHIP_POP, 66, 26, [0.6, 0.4, 1.0], 4, 1200, false);
+    var b = newEnemy(21, W * 0.7, -110, 44, GL.SPR.SHIP_POP, 66, 26, [0.6, 0.4, 1.0], 4, 1200, false);
+    if (!a || !b) return;
+    a.arch = 'weaver2'; b.arch = 'weaver2'; a.link = b; b.link = a;
+    a.s2 = 0.15; b.s2 = 0.65; a.vy = 90; b.vy = 90; a.s3 = 1; b.s3 = 0;
+    a.onUpdate = updateWeaverPair; b.onUpdate = updateWeaverPair;
+    a.onDeath = weaverPairDeath; b.onDeath = weaverPairDeath;
+  }
+  function updateWeaverPair(e, dt) {
+    e.t += dt; e.y += e.vy * dt;
+    e.x = W / 2 + Math.cos(e.t * 0.8 + e.s2 * 6.28) * 300 * (e.s3 ? 1 : -1);
+    e.rot = Math.PI;
+    if (e.s3 && e.link && e.link.active && !e.link.dying) {
+      var mx = (e.x + e.link.x) / 2, my = (e.y + e.link.y) / 2;
+      e.s0 += dt; e.fireT -= dt;
+      if (e.fireT <= 0) {
+        e.fireT = 0.5;
+        var ang = Math.atan2(e.link.y - e.y, e.link.x - e.x) + Math.PI / 2;
+        Patterns.bullet(mx, my, ang, 120 * G.rank, { color: Patterns.VIOLET, radius: 12 });
+        Patterns.bullet(mx, my, ang + Math.PI, 120 * G.rank, { color: Patterns.VIOLET, radius: 12 });
+      }
+      if (e.s0 >= 10) { e.s0 = 0; Patterns.ring(mx, my, 24, 220 * G.rank, { color: Patterns.MAGENTA, radius: 12 }); }
+    }
+    if (e.y > H + 120) killEnemy(e, false);
+  }
+  function weaverPairDeath(e) { if (e.link && e.link.active) e.link.link = null; }
+
+  // GILDED MIMIC — disguised as a gold cluster; lunges + sprays when neared
+  function spawnMimic(x, y) {
+    var e = newEnemy(22, x, y, 20, GL.SPR.GOLD, 40, 30, [1, 0.8, 0.3], 12, 900, false); if (!e) return;
+    e.arch = 'mimic'; e.s0 = 0; e.onUpdate = updateMimic;
+  }
+  function updateMimic(e, dt) {
+    e.t += dt;
+    var dx = G.player.x - e.x, dy = G.player.y - e.y, d2 = dx * dx + dy * dy;
+    if (e.s0 === 0) {
+      e.x += Math.sin(e.t) * 22 * dt; e.y += 22 * dt;
+      if (d2 < 200 * 200 && G.player.alive) {
+        e.s0 = 1; var d = Math.sqrt(d2) || 1; e.vx = dx / d * 420; e.vy = dy / d * 420;
+        e.spr = GL.SPR.SHIP_POP; e.r = 1; e.g = 0.5; e.b = 0.2; e.scale = 62; e.radius = 26;
+        Patterns.spray(e.x, e.y, Patterns.aimAngle(e.x, e.y, AIMX(e), AIMY(e)), 1.2, 8, 220 * G.rank, 340 * G.rank, { color: Patterns.ORANGE, radius: 11 });
+        spark(e.x, e.y, [1, 0.6, 0.2], 14, 320, 26);
+      } else if (e.y > H + 100) killEnemy(e, false);
+    } else {
+      e.x += e.vx * dt; e.y += e.vy * dt; e.vx *= 0.95; e.vy *= 0.95;
+      e.fireT -= dt;
+      if (e.fireT <= 0) { e.fireT = 0.7; Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 3, 0.4, 300 * G.rank, { color: Patterns.ORANGE, radius: 11 }); }
+      if (e.y > H + 120 || e.x < -100 || e.x > W + 100) killEnemy(e, false);
+    }
+  }
+
+  // SPLITTER — jelly that halves into children (3 generations)
+  function spawnSplitter(x, y, gen) {
+    var sc = 96 - gen * 24, hp = 34 / (gen + 1);
+    var e = newEnemy(23, x, y, hp, GL.SPR.SHIP_MID, sc, sc * 0.42, [0.4, 1, 0.6], 3, 600, false); if (!e) return;
+    e.arch = 'splitter'; e.gen = gen; e.vy = 100 + gen * 40; e.onUpdate = updateSplitter; e.onDeath = splitterDeath;
+  }
+  function updateSplitter(e, dt) {
+    e.t += dt; e.y += e.vy * dt; e.x += Math.sin(e.t * 2) * 40 * dt; e.rot = Math.PI;
+    e.fireT -= dt;
+    if (e.fireT <= 0 && e.y > 100 && e.y < H - 400) { e.fireT = 1.4; Patterns.ring(e.x, e.y, 6 + e.gen * 2, 180 * G.rank, { color: Patterns.LIME, radius: 11 }); }
+    if (e.y > H + 120) killEnemy(e, false);
+  }
+  function splitterDeath(e) { if (e.gen < 2) { spawnSplitter(e.x - 32, e.y, e.gen + 1); spawnSplitter(e.x + 32, e.y, e.gen + 1); } }
+
+  // CHORUS ACOLYTE — heals nearest elite/boss; skitters from the player
+  function spawnAcolyte(x) {
+    var e = newEnemy(24, x, -100, 26, GL.SPR.SHIP_POP, 64, 28, [0.4, 1, 0.7], 5, 1400, false); if (!e) return;
+    e.arch = 'acolyte'; e.vy = 120; e.onUpdate = updateAcolyte;
+  }
+  function updateAcolyte(e, dt) {
+    e.t += dt;
+    if (e.y < 300) e.y += e.vy * dt; else e.x += Math.cos(e.t) * 50 * dt;
+    e.rot = Math.PI;
+    var tgt = nearestHealTarget(e);
+    e.link = tgt;
+    if (tgt) tgt.hp = Math.min(tgt.maxhp, tgt.hp + tgt.maxhp * 0.03 * dt);
+    if (e.hitFlash > 0) { var dx = e.x - G.player.x, dy = e.y - G.player.y, d = Math.hypot(dx, dy) || 1; e.dispVX += dx / d * 500 * dt; e.dispVY += dy / d * 500 * dt; }
+    if (e.y > H + 120) killEnemy(e, false);
+  }
+  function nearestHealTarget(e) {
+    var best = null, bd = 1e18;
+    Engine.enemies.forEach(function (o) {
+      if (o === e || o.dying || o.charmed) return;
+      if (!(o.boss || o.aura === 'gilded' || o.arch === 'aegis' || o.arch === 'carrier' || o.arch === 'gardener')) return;
+      if (o.hp >= o.maxhp) return;
+      var dx = o.x - e.x, dy = o.y - e.y, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = o; }
+    });
+    return best;
+  }
+
+  // CARRIER HULK — spawns escorts; breaks into physics debris on death
+  function spawnCarrier(rank) {
+    var e = newEnemy(25, W / 2, -180, 320 * rank, GL.SPR.SHIP_GUN, 190, 88, [0.9, 0.5, 0.3], 30, 8000, true); if (!e) return;
+    e.arch = 'carrier'; e.vy = 60; e.fireCd = 2.0; e.onUpdate = updateCarrier; e.onDeath = carrierDeath;
+  }
+  function updateCarrier(e, dt) {
+    e.t += dt;
+    if (e.y < 300) e.y += e.vy * dt; else e.x = W / 2 + Math.sin(e.t * 0.4) * 260;
+    e.rot = Math.PI; e.fireT -= dt;
+    if (e.fireT <= 0) { e.fireT = e.fireCd; spawnEscort(e.x, e.y); }
+    if (e.t > 40) killEnemy(e, false);
+  }
+  function carrierDeath(e) { var n = 3 + (Math.random() < 0.5 ? 1 : 0); for (var i = 0; i < n; i++) spawnDebris(e.x, e.y, Math.random() * TAU); }
+  function spawnEscort(x, y) {
+    var e = newEnemy(1, x, y, 2, GL.SPR.SHIP_POP, 58, 24, [1, 0.4, 0.5], 2, 300, false); if (!e) return;
+    e.vy = 230; e.fireCd = 1.0; e.onUpdate = updateEscort;
+  }
+  function updateEscort(e, dt) {
+    e.t += dt; e.y += e.vy * dt; e.x += Math.sin(e.t * 3) * 60 * dt; e.rot = Math.PI;
+    e.fireT -= dt;
+    if (e.fireT <= 0 && e.y < H - 400) { e.fireT = e.fireCd; Patterns.aimed(e.x, e.y, AIMX(e), AIMY(e), 320 * G.rank, { color: Patterns.CYAN, radius: 10 }); }
+    if (e.y > H + 120) killEnemy(e, false);
+  }
+
+  // BLINK MOTH — teleports between aimed bursts
+  function spawnMoth(x) {
+    var e = newEnemy(26, x, -100, 18, GL.SPR.SHIP_POP, 60, 26, [0.7, 0.5, 1.0], 5, 1300, false); if (!e) return;
+    e.arch = 'moth'; e.s0 = 0; e.vy = 100; e.onUpdate = updateMoth;
+  }
+  function updateMoth(e, dt) {
+    e.t += dt; e.rot = Math.PI;
+    if (e.y < 250) { e.y += e.vy * dt; return; }
+    e.s1 -= dt;
+    if (e.s0 === 0) {
+      e.fireT -= dt;
+      if (e.fireT <= 0) { e.fireT = 0.3; e.s2++; Patterns.aimed(e.x, e.y, AIMX(e), AIMY(e), 360 * G.rank, { color: Patterns.VIOLET, shape: Patterns.NEEDLE, radius: 9 }); if (e.s2 >= 3) { e.s0 = 1; e.s1 = 0.45; } }
+    } else if (e.s0 === 1) {
+      if (e.s1 <= 0) { e.s0 = 2; e.s1 = 0.14; flash(e.x, e.y, [0.7, 0.5, 1], 80, 0.15); }
+    } else {
+      if (e.s1 <= 0) { e.x = 120 + Math.random() * (W - 240); e.y = 200 + Math.random() * 420; e.s0 = 0; e.s2 = 0; flash(e.x, e.y, [0.7, 0.5, 1], 90, 0.2); }
+    }
+    if (e.t > 30) killEnemy(e, false);
+  }
+
+  // BULLET GARDENER — extrudes a persistent bullet garden; death cancels it to gold
+  function spawnGardener(x) {
+    var e = newEnemy(27, x, -120, 90, GL.SPR.SHIP_MID, 100, 46, [0.6, 1, 0.5], 14, 3000, true); if (!e) return;
+    e.arch = 'gardener'; e.vy = 120; e.s1 = 0; e.onUpdate = updateGardener; e.onDeath = gardenerDeath;
+  }
+  function updateGardener(e, dt) {
+    e.t += dt;
+    if (e.y < 320) e.y += e.vy * dt;
+    e.rot = Math.PI;
+    if (e.s1 < 150) {
+      e.fireT -= dt;
+      if (e.fireT <= 0) {
+        e.fireT = 0.12;
+        var b = Patterns.bullet(e.x, e.y, Math.random() * TAU, 60 + Math.random() * 40, { color: Patterns.LIME, radius: 12, life: 60 });
+        if (b) { b.gardenerId = e._i; e.s1++; }
+      }
+    }
+    if (e.t > 45) killEnemy(e, false);
+  }
+  function gardenerDeath(e) {
+    var id = e._i, n = 0;
+    Engine.bullets.forEach(function (b) { if (b.gardenerId === id) { if (Engine.gold.freeTop > 0) spawnGold(b.x, b.y, 1, 0.35); flash(b.x, b.y, [1, 0.85, 0.3], 20, 0.14); Engine.bullets.release(b); n++; } });
+    if (n) { ringShock(e.x, e.y, [1, 0.9, 0.4], 60, 5000, 0.8); flash(e.x, e.y, [1, 0.9, 0.5], 300, 0.4); addShake(5); homeAllGold(); }
+  }
+
+  // carrier debris — short-lived player-side tumbling chunks that hurt enemies
+  function spawnDebris(x, y, ang) {
+    var sp = 200 + Math.random() * 220;
+    G.debris.push({ x: x, y: y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, spin: 0, t: 0, hit: [], dmg: 45 });
+  }
+  function updateDebris(dt) {
+    for (var i = G.debris.length - 1; i >= 0; i--) {
+      var d = G.debris[i]; d.t += dt; d.spin += dt * 9; d.vy += 200 * dt;
+      d.x += d.vx * dt; d.y += d.vy * dt;
+      Engine.enemies.forEach(function (e) { if (e.dying || e.charmed || d.hit.indexOf(e) >= 0) return; if (Engine.hit(d.x, d.y, 30, e.x, e.y, e.radius)) { damageEnemy(e, d.dmg, false); pushDisp(e, d.x, d.y, 220); d.hit.push(e); } });
+      if (d.t > 3 || d.y > H + 80 || d.x < -60 || d.x > W + 60) G.debris.splice(i, 1);
+    }
+  }
+  function drawDebris() {
+    for (var i = 0; i < G.debris.length; i++) {
+      var d = G.debris[i];
+      GL.draw(GL.SPR.GLOW, d.x, d.y, 60, 60, 0, 1, 0.6, 0.3, 0.4);
+      GL.draw(GL.SPR.SHIP_MID, d.x, d.y, 46, 46, d.spin, 0.95, 0.55, 0.35, 0.95);
+    }
+  }
+
+  // THE APOSTATE — elite wielding two gods you didn't pick (enemy-side variants)
+  function unpickedGods() {
+    var all = ['zeus', 'poseidon', 'artemis', 'aphrodite', 'ares', 'demeter', 'ra', 'anubis', 'loki', 'odin', 'wukong', 'quetz', 'thor'];
+    var out = []; for (var i = 0; i < all.length; i++) if (all[i] !== G.attackGod && all[i] !== G.specialGod) out.push(all[i]);
+    return out;
+  }
+  function spawnApostate(rank) {
+    var pool = unpickedGods();
+    var g1 = pool[Math.floor(Math.random() * pool.length)];
+    var rest = pool.filter(function (x) { return x !== g1; });
+    var g2 = rest[Math.floor(Math.random() * rest.length)] || g1;
+    var e = newEnemy(28, W / 2, -220, 12000 * rank, GL.SPR.SHIP_BOSS, 260, 118, [0.8, 0.3, 0.9], 70, 150000, true); if (!e) return;
+    e.arch = 'apostate'; e.boss = true; e.g1 = g1; e.g2 = g2; e.name = 'THE APOSTATE'; G.boss = e;
+    var gn = function (g) { return Run.GODS[g] ? Run.GODS[g].name : g; };
+    announce('THE APOSTATE', 'renegade of ' + gn(g1) + ' & ' + gn(g2), 3.2);
+    e.onUpdate = updateApostate; e.onDeath = apostateDeath;
+  }
+  function updateApostate(e, dt) {
+    e.t += dt;
+    if (e.y < 420) { e.y += 150 * dt; return; }
+    e.x = W / 2 + Math.sin(e.t * 0.5) * 260; e.rot = Math.PI;
+    e.fireT -= dt;
+    if (e.fireT <= 0) { e.fireT = 1.4; apostateFire(e, (Math.floor(e.t / 3) % 2 === 0) ? e.g1 : e.g2); }
+  }
+  function apostateDeath(e) { G.boss = null; bigDeath(e, 80); announce('APOSTATE SILENCED', 'a boon is torn free', 2.4); Run.grantApostateDraft(); }
+  function apostateFire(e, god) {
+    var px = AIMX(e), py = AIMY(e), aim = Patterns.aimAngle(e.x, e.y, px, py);
+    switch (god) {
+      case 'zeus': Patterns.ring(e.x, e.y, 12, 200 * G.rank, { color: Patterns.CYAN, radius: 12 }); for (var i = 0; i < 6; i++) arcFx(e.x, e.y, e.x + Math.cos(i) * 130, e.y + Math.sin(i) * 130, [0.7, 0.9, 1]); break;
+      case 'poseidon': Patterns.aimedFan(e.x, e.y, px, py, 3, 0.4, 150 * G.rank, { color: Patterns.CYAN, radius: 16 }); break;
+      case 'artemis': Patterns.aimed(e.x, e.y, px, py, 640 * G.rank, { color: Patterns.LIME, shape: Patterns.NEEDLE, radius: 10 }); break;
+      case 'aphrodite': apostateCharmYours(e); break;
+      case 'ares': Patterns.spray(e.x, e.y, aim, 1.0, 8, 220 * G.rank, 340 * G.rank, { color: Patterns.ORANGE, radius: 11 }); break;
+      case 'demeter': apostateChillZone(e); break;
+      case 'ra': Patterns.fan(e.x, e.y, aim, 9, 0.9, 340 * G.rank, { color: Patterns.ORANGE, shape: Patterns.NEEDLE, radius: 9 }); break;
+      case 'anubis': apostateStealGold(e); break;
+      case 'loki': apostateDecoy(e); break;
+      case 'odin': Patterns.aimed(e.x, e.y, px, py, 240 * G.rank, { color: Patterns.VIOLET, angVel: 1.4, radius: 12 }); break;
+      case 'wukong': apostateClones(e); break;
+      case 'quetz': Patterns.whip(e.x, e.y, Math.PI / 2, 14, 240 * G.rank, { color: Patterns.LIME, swing: 1.2, curl: 1.6, radius: 11 }); break;
+      case 'thor': Patterns.bullet(e.x, e.y, aim - 0.3, 210 * G.rank, { color: Patterns.CYAN, radius: 18, angVel: 0.9, life: 6 }); break;
+      default: Patterns.ring(e.x, e.y, 16, 200 * G.rank, { color: Patterns.MAGENTA, radius: 12 });
+    }
+  }
+  function apostateCharmYours(e) {
+    if (G.clones.length) { var c = G.clones.pop(); spark(c.x, c.y, [1, 0.4, 0.8], 12, 260, 26); }
+    else if (G.ravens.length) G.ravens.pop();
+    flash(e.x, e.y, [1, 0.4, 0.8], 100, 0.2);
+  }
+  function apostateChillZone(e) {
+    var hz = allocHazard(); if (!hz) return;
+    hz.type = 'chillzone'; hz.x = G.player.x; hz.y = G.player.y; hz.r = 190; hz.timer = 3; hz.dur = 3;
+  }
+  function apostateStealGold(e) {
+    var n = 0;
+    Engine.gold.forEach(function (g) { if (n < 6 && g.value < 0.6 && !g.homing) { spark(g.x, g.y, [0.9, 0.7, 0.3], 3, 200, 18); Engine.gold.release(g); n++; } });
+  }
+  function apostateDecoy(e) {
+    var d = newEnemy(1, 200 + Math.random() * (W - 400), 300 + Math.random() * 320, 30, GL.SPR.SHIP_PLAYER, 60, 26, [0.5, 1, 0.6], 2, 200, false);
+    if (d) { d.arch = 'fakedecoy'; d.vy = 0; d.onUpdate = function (dd, ddt) { dd.t += ddt; dd.rot = 0; if (dd.t > 4) killEnemy(dd, false); }; }
+  }
+  function apostateClones(e) {
+    for (var i = 0; i < 2; i++) { var c = newEnemy(1, e.x + (i ? 120 : -120), e.y + 60, 40, GL.SPR.SHIP_POP, 60, 26, [1, 0.5, 0.3], 3, 300, false); if (c) { c.vy = 120; c.fireCd = 1.0; c.onUpdate = updateEscort; } }
+  }
+
+  // -------- bosses --------
+  function spawnWarden(rank) {
+    var e = newEnemy(5, W / 2, -160, 3000 * rank, GL.SPR.SHIP_MID, 210, 92, [0.8, 0.4, 1.0], 40, 40000, true); if (!e) return;
+    e.boss = true; e.name = 'WARDEN'; e.fireCd = 0.05; G.boss = e;
+    announce('WARDEN', 'midfield sentinel', 2.4);
+    e.onUpdate = function (e, dt) {
+      e.t += dt;
+      if (e.y < 360) { e.y += 180 * dt; return; }
+      e.x = W / 2 + Math.sin(e.t * 0.6) * 220; e.rot = Math.PI;
+      var hf = e.hp / e.maxhp; e.fireT -= dt;
+      if (hf > 0.5) {
+        if (e.fireT <= 0) { e.fireT = 0.06; e.s0 += 0.22; Patterns.doubleSpiral(e.x, e.y, e.s0, 200 * G.rank, { color: Patterns.MAGENTA, radius: 12, arms: 3 }); }
+      } else {
+        if (e.fireT <= 0) {
+          e.fireT = 0.9;
+          Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 9, 0.9, 300 * G.rank, { color: Patterns.CYAN, shape: Patterns.NEEDLE, radius: 10 });
+          Patterns.ring(e.x, e.y, 22, 170 * G.rank, { color: Patterns.MAGENTA, radius: 12, offset: e.t });
+        }
+      }
+    };
+    e.onDeath = function () { Run.onWardenKilled(); G.boss = null; bigDeath(e, 60); announce('WARDEN DOWN', '', 2.0); };
+  }
+  function spawnWarden2(rank) {
+    var e = newEnemy(5, W / 2, -160, 5400 * rank, GL.SPR.SHIP_MID, 230, 100, [1.0, 0.5, 0.2], 60, 70000, true); if (!e) return;
+    e.boss = true; e.name = 'WARDEN — REFORGED'; e.fireCd = 0.05; G.boss = e;
+    announce('WARDEN — REFORGED', 'it learned from the last', 2.6);
+    e.onUpdate = function (e, dt) {
+      e.t += dt;
+      if (e.y < 360) { e.y += 180 * dt; return; }
+      e.x = W / 2 + Math.sin(e.t * 0.8) * 250; e.rot = Math.PI;
+      var hf = e.hp / e.maxhp; e.fireT -= dt;
+      if (hf > 0.66) {
+        if (e.fireT <= 0) { e.fireT = 0.05; e.s0 += 0.27; Patterns.doubleSpiral(e.x, e.y, e.s0, 230 * G.rank, { color: Patterns.ORANGE, radius: 12, arms: 4 }); }
+      } else if (hf > 0.33) {
+        if (e.fireT <= 0) { e.fireT = 0.8; Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 11, 1.0, 320 * G.rank, { color: Patterns.CYAN, shape: Patterns.NEEDLE, radius: 10 }); Patterns.ring(e.x, e.y, 26, 180 * G.rank, { color: Patterns.MAGENTA, radius: 12, offset: e.t }); }
+      } else {
+        if (e.fireT <= 0) { e.fireT = 1.3; Patterns.flower(e.x, e.y, 24, 250 * G.rank, { color: Patterns.LIME, radius: 12, stall: 0.8, reaccel: 190 * G.rank, offset: e.t }); }
+        if (Math.floor(e.t * 2) !== Math.floor((e.t - dt) * 2)) Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 3, 0.2, 460 * G.rank, { color: Patterns.CYAN, shape: Patterns.NEEDLE, radius: 9 });
+      }
+    };
+    e.onDeath = function () { Run.onWardenKilled(); G.boss = null; bigDeath(e, 90); announce('REFORGED — SHATTERED', '', 2.2); };
+  }
+  function spawnBoss(rank) {
+    var e = newEnemy(6, W / 2, -260, 23000 * rank, GL.SPR.SHIP_BOSS, 300, 130, [1, 0.35, 0.75], 90, 200000, true); if (!e) return;
+    e.boss = true; e.name = 'GILDED SOVEREIGN'; e.phase = 0; G.boss = e;
+    announce('GILDED SOVEREIGN', 'final guardian', 3.0);
+    e.onUpdate = function (e, dt) {
+      e.t += dt;
+      if (e.y < 420) { e.y += 150 * dt; return; }
+      e.x = W / 2 + Math.sin(e.t * 0.5) * 240; e.rot = Math.PI;
+      var hf = e.hp / e.maxhp;
+      if (e.phase === 0 && hf <= 0.66) enterBossPhase(e, 1);
+      else if (e.phase === 1 && hf <= 0.33) enterBossPhase(e, 2);
+      e.fireT -= dt;
+      if (e.phase === 0) {
+        e.r = 1; e.g = 0.35; e.b = 0.75;
+        if (e.fireT <= 0) { e.fireT = 0.05; e.s0 += 0.16; Patterns.doubleSpiral(e.x, e.y, e.s0, 210 * G.rank, { color: Patterns.MAGENTA, radius: 12, arms: 2 }); }
+        if (Math.floor(e.t * 1.2) !== Math.floor((e.t - dt) * 1.2)) Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 5, 0.5, 340 * G.rank, { color: Patterns.CYAN, shape: Patterns.NEEDLE, radius: 10 });
+      } else if (e.phase === 1) {
+        e.r = 1; e.g = 0.55; e.b = 0.15;
+        if (e.fireT <= 0) { e.fireT = 1.5; Patterns.flower(e.x, e.y, 26, 260 * G.rank, { color: Patterns.ORANGE, radius: 13, stall: 0.9, reaccel: 200 * G.rank, offset: e.t }); }
+        if (Math.floor(e.t * 0.8) !== Math.floor((e.t - dt) * 0.8)) { var dd = (Math.floor(e.t * 0.8) % 2 === 0) ? 1 : -1; Patterns.whip(e.x, e.y, Math.PI / 2, 16, 240 * G.rank, { color: Patterns.MAGENTA, swing: 1.2, curl: 1.4 * dd, radius: 12 }); }
+      } else {
+        e.r = 1; e.g = 0.75; e.b = 0.2;
+        if (e.fireT <= 0) { e.fireT = 0.5; e.s0 += 0.5; Patterns.ring(e.x, e.y, 30 + Math.floor(6 * G.rank), 130 * G.rank, { color: Patterns.hue(e.s0 * 0.13), radius: 13, offset: e.s0 }); }
+        if (Math.floor(e.t * 2) !== Math.floor((e.t - dt) * 2)) Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 3, 0.18, 520 * G.rank, { color: Patterns.CYAN, shape: Patterns.NEEDLE, radius: 9 });
+      }
+    };
+    e.onDeath = function () {
+      G.boss = null;
+      for (var i = 0; i < 90; i++) spawnGold(e.x, e.y, 1, 1.4);
+      bigDeath(e, 160);
+      announce('SOVEREIGN FELLED', 'run complete', 3.4);
+      addScore(500000 * G.mult);
+      addPopup(W / 2, H * 0.4, 'CLEAR BONUS  +' + commas(Math.floor(500000 * G.mult)), UI_GOLD, 48);
+    };
+  }
+  function enterBossPhase(e, ph) {
+    e.phase = ph; e.fireT = 0; e.s0 = 0;
+    cancelBulletsToGold(false); homeAllGold();
+    ringShock(e.x, e.y, [1, 0.9, 0.4], 80, 3000, 0.7);
+    flash(e.x, e.y, [1, 0.9, 0.6], 320, 0.4);
+    addShake(6); announce('PHASE ' + (ph + 1), '', 1.6);
+  }
+  function bigDeath(e, goldN) {
+    spawnGold(e.x, e.y, goldN, 1.2);
+    for (var i = 0; i < 6; i++) ringShock(e.x, e.y, [1, 0.7, 0.3], 60 + i * 50, 2600, 0.9);
+    spark(e.x, e.y, [1, 0.85, 0.4], 80, 640, 60);
+    flash(e.x, e.y, [1, 0.9, 0.6], 500, 0.6);
+    SFX.explosion(true); addShake(8); homeAllGold();
+  }
+
+  function updateEnemies(dt) {
+    Engine.enemies.forEach(function (e) {
+      if (e.hitFlash > 0) e.hitFlash -= dt;
+      updateStatus(e, dt);
+      if (e.dying) return;
+      if (e.charmed) { updateCharmed(e, dt); return; }
+      // strip prior displacement so scripted movement runs from a clean base
+      e.x -= e.dispX; e.y -= e.dispY;
+      var terrified = e.terrorT > 0 && !e.boss;
+      if (!terrified && e.stunT <= 0) {                 // Stun / Terror: no move / fire
+        Patterns.setSource(e);
+        var slow = 1 - Math.min(0.7, e.chillStacks * (G.mods.demeterSlow ? 0.09 : 0.07));
+        var fr = e.aura === 'frenzied' ? 1.3 : 1;       // FRENZIED aura
+        if (e.onUpdate) e.onUpdate(e, dt * slow * fr);
+        Patterns.clearSource();
+        if (e.boss && e.confuseT > 0) confuseBossSelfHarm(e); // Loki: flipped bullets self-harm
+      }
+      if (terrified) {                                  // continued flee acceleration
+        var fx = e.x - G.player.x, fy = e.y - G.player.y, fd = Math.hypot(fx, fy) || 1;
+        e.dispVX += (fx / fd) * 260 * dt; e.dispVY += (fy / fd) * 260 * dt;
+      }
+      integrateDisp(e, dt);
+      if (!e.dying) { e.x += e.dispX; e.y += e.dispY; }
+    });
+  }
+  function confuseBossSelfHarm(e) {
+    var n = Patterns.consumeBossFlip();
+    if (n <= 0) return;
+    var dmg = Math.min(n * e.maxhp * 0.001, e.confuseBudget);
+    if (dmg <= 0) return;
+    e.confuseBudget -= dmg;
+    damageEnemy(e, dmg, false);
+    spark(e.x, e.y, [0.55, 1, 0.35], 3, 200, 20);
+  }
+
+  // central damage: applies Marked / Weak / crit, popups, kill.
+  function damageEnemy(e, dmg, isCrit) {
+    if (e.dying) return;
+    var m = 1;
+    if (e.marked) m *= (G.mods.odinMark ? 1.4 : 1.25);
+    if (e.weak) m *= 1.10;
+    if (e.terrorT > 0) m *= 1.20;                 // Ares Terror
+    if (e.shakenT > 0) m *= 1.10;                 // Ares Shaken (boss)
+    dmg *= m;
+    if (isCrit) dmg *= (G.mods.artemisMulti ? 4 : 3);
+    if (G.communion === 'KEMET' && hasStatus(e)) dmg *= 1.1;   // Rite of Two Suns
+    e.hp -= dmg;
+    e.hitFlash = isCrit ? 0.14 : 0.08;
+    if (isCrit) { addPopup(e.x, e.y - 30, commas(Math.round(dmg)) + '!', UI_GOLD, 30); SFX.crit(); spark(e.x, e.y, [0.8, 1, 0.4], 5, 320, 22); }
+    else if (Math.random() < 0.2) SFX.hit();
+    if (e.hp <= 0) { killEnemy(e, true); return; }
+    // DEATH SENTENCE duo: crits execute non-boss foes below 40%
+    if (isCrit && G.duos.deathSentence && !e.boss && e.hp < 0.40 * e.maxhp) { executeEnemy(e); return; }
+    // SILENT WINTER duo: crits on chilled foes trigger a full shatter
+    if (isCrit && G.duos.silentWinter && e.chillStacks > 0 && !e.dying) shatter(e);
+  }
+
+  function killEnemy(e, reward) {
+    if (e.dying) return;
+    e.dying = true;
+    if (reward) {
+      addScore(e.score * G.mult);
+      addCharge(SP_KILL);
+      var gN = e.gold * (e.elite ? G.aff.eliteGoldMul : 1) * killGoldMul;
+      spawnGold(e.x, e.y, Math.round(gN), 1);
+      if (G.attackGod === 'wukong' && Math.random() < (G.mods.wukongChance ? 0.35 : 0.20)) spawnClone();  // Body Beyond Body
+      if (G.mods.raSpread && e.burnT > 0) spreadBurn(e);
+      if (G.attackGod === 'ares') addFrenzy();                              // Bloodlust
+      if (G.mods.artemisSpread && e.marked) spreadMark(e);
+      if (G.mods.zeusField) spawnZapField(e.x, e.y);
+      ringShock(e.x, e.y, [1, 0.7, 0.4], 30, e.boss ? 2600 : 1400, 0.5);
+      spark(e.x, e.y, [1, 0.7, 0.35], e.boss ? 40 : 14, 420, 32);
+      flash(e.x, e.y, [1, 0.85, 0.5], e.boss ? 220 : 70, 0.22);
+      SFX.explosion(e.boss); addShake(e.boss ? 6 : 2);
+      addPopup(e.x, e.y, '+' + commas(Math.floor(e.score * G.mult)), UI_GOLD, e.boss ? 40 : 24);
+      if (G.aff.volatile) Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 3, 0.5, 300 * G.rank, { color: Patterns.LIME, radius: 11 });
+      if (G.vaunt.active) {
+        G.vaunt.killCount++;
+        G.mult = Math.min(effMultCap(), G.mult + 0.25);
+        G.vaunt.timer = Math.min(G.vaunt.duration, G.vaunt.timer + G.vaunt.duration * 0.02);
+      }
+    }
+    if (e.onDeath) e.onDeath(e);
+    Engine.enemies.release(e);
+  }
+
+  // ---------------------------------------------------------------------
+  // bullets / collisions
+  // ---------------------------------------------------------------------
+  function updateBullets(dt) {
+    var px = G.player.x, py = G.player.y, alive = G.player.alive;
+    var shielded = G.vaunt.active || G.player.invuln > 0 || G.vaunt.mercy > 0;
+    var hbR = PLAYER_R * G.up.hitboxMul;
+    var dec = G.decoy;
+    var flipDmg = 2.0 * G.attackR * G.stats.atkDmg;
+    Engine.bullets.forEach(function (b) {
+      Engine.updateBullet(b, dt);
+      if (b.x < -90 || b.x > W + 90 || b.y < -90 || b.y > H + 120 || b.life <= 0) { Engine.bullets.release(b); return; }
+      // Loki flipped (friendly) bullets: hit enemies, ignore the player
+      if (b.friendly) {
+        var hitF = false;
+        Engine.enemies.forEach(function (e) {
+          if (hitF || e.dying || e.charmed || e._i === b.srcId) return;
+          if (Engine.hit(b.x, b.y, b.radius, e.x, e.y, e.radius)) { damageEnemy(e, flipDmg, false); if (G.mods.lokiVaunt) addGauge(0.6); spark(b.x, b.y, [0.5, 1, 0.35], 3, 180, 16); hitF = true; }
+        });
+        if (hitF) Engine.bullets.release(b);
+        return;
+      }
+      // Loki decoy soaks bullets
+      if (dec.active) {
+        var ddx = b.x - dec.x, ddy = b.y - dec.y;
+        if (ddx * ddx + ddy * ddy < 52 * 52) { spark(b.x, b.y, [0.4, 1, 0.5], 1, 120, 12); Engine.bullets.release(b); dec.absorb++; if (dec.absorb >= 40) expireDecoy(); return; }
+      }
+      if (!alive) return;
+      var dx = b.x - px, dy = b.y - py, d2 = dx * dx + dy * dy;
+      var hitR = b.radius + hbR;
+      if (d2 <= hitR * hitR) { if (!shielded) playerHit(); return; }
+      var gr = b.radius + GRAZE_R;
+      if (!b.grazed && d2 <= gr * gr) {
+        b.grazed = true; G.graze++;
+        addGauge(GRAZE_GAUGE * (1 + G.hermes.graze));
+        addScore(GRAZE_SCORE * G.mult);
+        spark(px + dx * 0.4, py + dy * 0.4, [0.6, 0.95, 1], 3, 220, 18);
+        SFX.graze();
+      }
+    });
+  }
+  function hitEnemy(s, e) {
+    var dmg = s.damage;
+    // AEGIS / BULWARK front shield: blocks 80% of upward player/special fire unless spun open
+    if ((e.arch === 'aegis' || e.aura === 'bulwark') && e.shieldT <= 0 && (s.faction === 0 || s.faction === 1) && s.vy < 0) {
+      dmg *= 0.2; spark(s.x, s.y, [0.5, 0.85, 1.0], 2, 200, 16);
+    }
+    var isCrit = false;
+    if (s.faction === 0 && G.attackGod === 'artemis' && Math.random() < artemisCritChance()) isCrit = true;
+    if (s.forceCrit) isCrit = true;
+    if (G.duos.huntersEye && s.faction === 0 && e.marked) isCrit = true;   // HUNTER'S EYE: marked always crit
+    // Anubis: bosses take +10% (or +20% with mod) below 30% HP
+    if (s.faction === 0 && G.attackGod === 'anubis' && e.boss && e.hp < 0.3 * e.maxhp) dmg *= (G.mods.anubisBossDmg ? 1.2 : 1.1);
+    if (s.kind === 5) { // charm missile
+      if (e.boss) { e.weak = true; e.weakT = 6; damageEnemy(e, dmg, false); }
+      else { charmEnemy(e); flash(e.x, e.y, [1, 0.5, 0.85], 60, 0.2); }
+      return;
+    }
+    if (s.markHit) { e.marked = true; e.markT = 6; }
+    damageEnemy(e, dmg, isCrit);
+    if (isCrit && s.faction === 0 && G.mods.artemisRefund) addCharge(0.1);
+    if (s.cloneShot && G.duos.havocInHeaven && !e.dying) chainLightning(e, dmg * 0.5, false); // HAVOC IN HEAVEN (no re-chain)
+    if (s.faction === 0) applyAttackGod(e, s, dmg);
+    else if (s.kind === 3) chainLightning(e, dmg * 0.5, true); // storm lance chains
+  }
+  function artemisCritChance() { return Math.min(0.6, 0.18 + 0.03 * (G.attackR - 1) + G.mods.artemisCrit); }
+
+  function collideShots() {
+    Engine.shots.forEach(function (s) {
+      var maxHits = s.pierce + 1, hits = 0, done = false;
+      Engine.enemies.forEach(function (e) {
+        if (done || e.dying || e.charmed) return;
+        if (Engine.hit(s.x, s.y, s.radius, e.x, e.y, e.radius)) {
+          hitEnemy(s, e);
+          flash(s.x, s.y, s.faction === 2 ? [1, 0.5, 0.85] : [0.7, 1, 1], 26, 0.1);
+          hits++; if (hits >= maxHits) done = true;
+        }
+      });
+      if (hits >= maxHits) Engine.shots.release(s);
+    });
+  }
+  function collideBodies() {
+    if (!G.player.alive) return;
+    var px = G.player.x, py = G.player.y;
+    Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; if (Engine.hit(px, py, PLAYER_R * G.up.hitboxMul, e.x, e.y, e.radius * 0.7)) playerHit(); });
+  }
+
+  // ---------------------------------------------------------------------
+  // wave timers + clear detection
+  // ---------------------------------------------------------------------
+  var timers = [];
+  function setTimerSpawn(delay, fn) { timers.push({ t: delay, fn: fn }); }
+  function updateTimers(dt) {
+    for (var i = timers.length - 1; i >= 0; i--) { timers[i].t -= dt; if (timers[i].t <= 0) { var f = timers[i].fn; timers.splice(i, 1); f(); } }
+  }
+
+  Game.beginWave = function (fn, rank) {
+    G.rank = rank; G.waveKind = 'normal'; G.waveGrace = 0.6;
+    fn(Run.rng, rank);
+    G.mode = 'playing';
+  };
+  Game.beginBoss = function (fn, rank) {
+    G.rank = rank; G.waveKind = 'boss'; G.waveGrace = 0.6;
+    fn(rank);
+    G.mode = 'playing';
+  };
+
+  function detectClear() {
+    if (G.mode !== 'playing') return;   // an Apostate death may have opened a draft mid-frame
+    if (G.waveGrace > 0) G.waveGrace -= Engine.DT;
+    if (G.waveKind === 'boss') {
+      if (!G.boss) startClearBeat('boss');
+    } else {
+      if (G.waveGrace <= 0 && timers.length === 0 && Engine.enemies.count() === 0) startClearBeat('wave');
+    }
+  }
+  function startClearBeat(kind) {
+    cancelBulletsToGold(false); homeAllGold();
+    G.clearKind = kind; G.clearT = 1.1; G.mode = 'clearing';
+  }
+
+  // ---------------------------------------------------------------------
+  // combat sim
+  // ---------------------------------------------------------------------
+  function updateCombat(dt) {
+    G.time += dt;
+    if (Engine.pressed('KeyX')) doSpecial();
+    if (Engine.pressed('KeyC')) tryVaunt();
+    updateBackground(dt);
+    updateTimers(dt);
+    updateSpecial(dt);
+    updateFrenzy(dt);
+    updatePlayer(dt);
+    updateDecoy(dt);
+    refreshAim();               // decoy may redirect all aimed fire this frame
+    updateShots(dt);
+    updateRavens(dt);
+    updateGungnir(dt);
+    updateWraiths(dt);
+    updateHammers(dt);
+    updateDebris(dt);
+    updateClones(dt);
+    updateEnemies(dt);
+    updateHazards(dt);
+    updateBullets(dt);
+    updateGold(dt);
+    updateParticles(dt);
+    updateVaunt(dt);
+    collideShots();
+    collideBodies();
+    if (goldComboT > 0) { goldComboT -= dt; if (goldComboT <= 0) goldCombo = 0; }
+    G.chroma += (G.chromaTarget - G.chroma) * Math.min(1, dt * 8);
+    G.bloom += (G.bloomTarget - G.bloom) * Math.min(1, dt * 6);
+    if (G.flashAll > 0) G.flashAll -= dt;
+    if (G.shakeMag > 0) {
+      G.shakeX = (Math.random() - 0.5) * 2 * G.shakeMag;
+      G.shakeY = (Math.random() - 0.5) * 2 * G.shakeMag;
+      G.shakeMag -= dt * 26; if (G.shakeMag < 0) G.shakeMag = 0;
+    } else { G.shakeX = 0; G.shakeY = 0; }
+    if (G.announce.dur < 9000) G.announce.t += dt;
+    updatePopups(dt);
+  }
+  function updateParticles(dt) {
+    Engine.particles.forEach(function (p) { Engine.updateParticle(p, dt); if (p.age >= p.life) Engine.particles.release(p); });
+  }
+
+  // ---------------------------------------------------------------------
+  // main update dispatch
+  // ---------------------------------------------------------------------
+  function update(dt) {
+    var m = G.mode;
+    if (Engine.pressed('KeyM')) { var mu = SFX.toggleMute(); addPopup(W / 2, 120, mu ? 'MUTED' : 'SOUND ON', UI_CYAN, 30); }
+    if (Engine.pressed('KeyR')) { Run.startRun(Run.newSeed()); return; }
+    if (Engine.pressed('Escape')) {
+      if (m === 'playing' || m === 'clearing' || m === 'draft' || m === 'shop') { Run.toTitle(); return; }
+    }
+    if (Engine.pressed('KeyP') && (m === 'playing' || m === 'clearing')) G.paused = !G.paused;
+
+    if (m === 'title') Run.updateTitle(dt);
+    else if (m === 'sector') Run.updateSector(dt);
+    else if (m === 'playing') { if (!G.paused) { updateCombat(dt); detectClear(); } }
+    else if (m === 'clearing') { updateCombat(dt); G.clearT -= dt; if (G.clearT <= 0) Run.onCleared(G.clearKind); }
+    else if (m === 'draft') Run.updateDraft(dt);
+    else if (m === 'shop') Run.updateShop(dt);
+    else if (m === 'complete') Run.updateComplete(dt);
+    else if (m === 'over') Run.updateOver(dt);
+  }
+
+  // ---------------------------------------------------------------------
+  // Game API used by run.js
+  // ---------------------------------------------------------------------
+  Game.setAffix = function (aff) {
+    G.aff = {
+      name: aff.name || '', desc: aff.desc || '',
+      hpMul: aff.hpMul || 1, eliteGoldMul: aff.eliteGoldMul || 1,
+      popcornAdd: aff.popcornAdd || 0, volatile: !!aff.volatile, shopDiscount: aff.shopDiscount || 0
+    };
+    Patterns.setGlobal(aff.countMul || 1, aff.speedMul || 1);
+  };
+  Game.spendGold = function (n) { if (G.wallet >= n) { G.wallet -= n; return true; } return false; };
+
+  Game.applyBoon = function (b) {
+    var mag = b.rarity === 'epic' ? 2.25 : b.rarity === 'rare' ? 1.5 : 1;
+    switch (b.kind) {
+      // a SWAP keeps the slot's current tier (attackR/specialR) — only the god changes
+      case 'transformA': G.attackGod = b.god; if (!b.swap) G.attackR = mag; break;
+      case 'transformS': G.specialGod = b.god; if (!b.swap) G.specialR = mag; break;
+      case 'levelA': G.attackR = b.mag; break;   // pom: raise attack tier
+      case 'levelS': G.specialR = b.mag; break;  // pom: raise special tier
+      case 'duo': Game.applyDuo(b.id); break;
+      case 'mod': applyMod(b.id, mag); break;
+      case 'hermes':
+        G.hermes.speed += 0.12 * mag; G.hermes.focus += 0.15 * mag;
+        G.hermes.recharge += 0.25 * mag; G.hermes.graze += 0.5 * mag; break;
+      case 'scale': applyScale(b.id, mag); break;
+      case 'generic': applyGeneric(b.id, mag); break;
+    }
+    updateCommunion();
+  };
+  // Pantheon Communion — attack god + special god sharing a pantheon.
+  function updateCommunion() {
+    var prev = G.communion;
+    G.communion = null;
+    var A = G.attackGod && Run.GODS[G.attackGod], S = G.specialGod && Run.GODS[G.specialGod];
+    var names = { OLYMPUS: 'Accord of Olympus', ASGARD: 'Twilight Oath', KEMET: 'Rite of Two Suns' };
+    // only pantheons with a defined bonus commune (solo pantheons can't)
+    if (A && S && A.pantheon === S.pantheon && names[A.pantheon]) G.communion = A.pantheon;
+    if (G.communion && G.communion !== prev) {
+      announce('PANTHEON COMMUNION', G.communion + ' — ' + names[G.communion], 2.6);
+      G.flashAll = Math.max(G.flashAll, 0.25);
+    }
+  }
+  function effMultCap() { return G.up.multCap + (G.communion === 'OLYMPUS' ? 1 : 0); }
+  function hasStatus(e) { return e.marked || e.weak || e.charmed || e.burnT > 0 || e.chillStacks > 0 || e.confuseT > 0 || e.stunT > 0 || e.terrorT > 0 || e.shakenT > 0; }
+  function applyMod(id, mag) {
+    var M = G.mods;
+    switch (id) {
+      case 'zeusChain': M.zeusChain += Math.max(1, Math.round(mag)); break;
+      case 'zeusCrit': M.zeusCrit = true; break;
+      case 'zeusFork': M.zeusFork = true; break;
+      case 'zeusField': M.zeusField = true; break;
+      case 'poseidonBig': M.poseidonBig = true; break;
+      case 'poseidonDrag': M.poseidonDrag = true; break;
+      case 'poseidonSplash': M.poseidonSplash = true; break;
+      case 'poseidonForce': M.poseidonForce = true; break;
+      case 'artemisCrit': M.artemisCrit += 0.08 * mag; break;
+      case 'artemisRefund': M.artemisRefund = true; break;
+      case 'artemisSpread': M.artemisSpread = true; break;
+      case 'artemisMulti': M.artemisMulti = true; break;
+      case 'aphroLong': M.aphroLong = true; break;
+      case 'aphroExplode': M.aphroExplode = true; break;
+      case 'aphroTaunt': M.aphroTaunt = true; break;
+      case 'aphroFast': M.aphroFast = true; break;
+      case 'aresDecay': M.aresDecay = true; break;
+      case 'aresCharge': M.aresCharge = true; break;
+      case 'aresTerror': M.aresTerror = true; break;
+      case 'aresSpoils': M.aresSpoils = true; break;
+      case 'demeterFast': M.demeterFast = true; break;
+      case 'demeterShatter': M.demeterShatter = true; break;
+      case 'demeterAoE': M.demeterAoE = true; break;
+      case 'demeterSlow': M.demeterSlow = true; break;
+      case 'raRamp': M.raRamp = true; break;
+      case 'raSpread': M.raSpread = true; break;
+      case 'raSplit': M.raSplit = true; break;
+      case 'raBurn': M.raBurn = true; break;
+      case 'anubisThresh': M.anubisThresh = true; break;
+      case 'anubisRefund': M.anubisRefund = true; break;
+      case 'anubisShard': M.anubisShard = true; break;
+      case 'anubisBossDmg': M.anubisBossDmg = true; break;
+      case 'lokiLong': M.lokiLong = true; break;
+      case 'lokiBoom': M.lokiBoom = true; break;
+      case 'lokiVaunt': M.lokiVaunt = true; break;
+      case 'lokiChance': M.lokiChance = true; break;
+      case 'odinRaven': M.odinRaven = true; break;
+      case 'odinMark': M.odinMark = true; break;
+      case 'odinRavenMark': M.odinRavenMark = true; break;
+      case 'odinGungnir': M.odinGungnir = true; break;
+      case 'wukongClones': M.wukongClones = true; break;
+      case 'wukongStaff': M.wukongStaff = true; break;
+      case 'wukongSpecial': M.wukongSpecial = true; break;
+      case 'wukongChance': M.wukongChance = true; break;
+      case 'quetzBig': M.quetzBig = true; break;
+      case 'quetzGold': M.quetzGold = true; break;
+      case 'quetzCircle': M.quetzCircle = true; break;
+      case 'quetzPierce': M.quetzPierce = true; break;
+      case 'thorBelt': M.thorBelt = true; break;
+      case 'thorFast': M.thorFast = true; break;
+      case 'thorGauntlet': M.thorGauntlet = true; break;
+      case 'thorSkymark': M.thorSkymark = true; break;
+    }
+  }
+  Game.applyDuo = function (id) { G.duos[id] = true; };
+  function applyScale(id, mag) {
+    switch (id) {
+      case 'atkdmg': G.stats.atkDmg += 0.15 * mag; break;
+      case 'atkrate': G.stats.atkRate += 0.10 * mag; break;
+      case 'spdmg': G.stats.spDmg += 0.20 * mag; break;
+      case 'spcharge': G.sp.max = Math.min(5, G.sp.max + 1); G.sp.charge = Math.min(G.sp.max, G.sp.charge + 1); break;
+      case 'sprecharge': G.stats.spRecharge += 0.20 * mag; break;
+    }
+  }
+  function applyGeneric(id, mag) {
+    switch (id) {
+      case 'life': G.lives++; break;
+      case 'hitbox': G.up.hitboxMul = 0.75; break;
+      case 'magnet': G.up.magnet += 0.6 * mag; break;
+      case 'goldworth': G.up.goldWorth += 0.25 * mag; break;
+      case 'vdur': G.up.vdur += 1.5 * mag; break;
+      case 'vcap': G.up.multCap = Math.min(8, G.up.multCap + 1); break;
+    }
+  }
+
+  Game.hasAttackGod = function () { return !!G.attackGod; };
+  Game.hasSpecialGod = function () { return !!G.specialGod; };
+  Game.attackGod = function () { return G.attackGod; };
+  Game.specialGod = function () { return G.specialGod; };
+
+  Game.upgradeSummary = function () {
+    var out = [];
+    if (G.stats.atkDmg > 1.001) out.push('ATK x' + G.stats.atkDmg.toFixed(2));
+    if (G.stats.atkRate > 1.001) out.push('RATE x' + G.stats.atkRate.toFixed(2));
+    if (G.stats.spDmg > 1.001) out.push('SP.DMG x' + G.stats.spDmg.toFixed(2));
+    if (G.stats.spRecharge > 1.001) out.push('SP.RCH x' + G.stats.spRecharge.toFixed(2));
+    if (G.sp.max > 3) out.push('CHARGES ' + G.sp.max);
+    if (G.up.goldWorth > 1.001) out.push('GOLD +' + Math.round((G.up.goldWorth - 1) * 100) + '%');
+    if (G.up.magnet) out.push('MAGNET +' + Math.round(G.up.magnet * 100) + '%');
+    if (G.up.vdur) out.push('VAUNT +' + G.up.vdur.toFixed(1) + 's');
+    if (G.up.multCap > 5) out.push('CAP x' + G.up.multCap);
+    if (G.up.hitboxMul < 1) out.push('PINPOINT');
+    if (G.hermes.speed) out.push('HERMES');
+    return out;
+  };
+
+  // ---- wave pool -------------------------------------------------------
+  Game.wavePool = [
+    { name: 'dartsweep', weight: 10, fn: function (rng) {
+        var left = rng() < 0.5, n = 4 + (rng() * 2 | 0) + G.aff.popcornAdd;
+        for (var i = 0; i < n; i++) (function (i) {
+          setTimerSpawn(i * 0.32, function () {
+            if (left) spawnDarter(150 + i * 34, 260, W - 150);
+            else spawnDarter(W - 150 - i * 34, W - 260, 150);
+          });
+        })(i);
+      } },
+    { name: 'weaverfield', weight: 9, fn: function (rng) {
+        var n = 5 + (rng() * 2 | 0) + G.aff.popcornAdd;
+        for (var i = 0; i < n; i++) (function (i) {
+          setTimerSpawn(i * 0.45, function () { spawnWeaver(180 + i * (720 / Math.max(1, n)), 150 + (rng() * 90 | 0), i * 0.7); });
+        })(i);
+      } },
+    { name: 'turrets', weight: 6, fn: function (rng) {
+        var n = 2 + (rng() * 2 | 0);
+        for (var i = 0; i < n; i++) (function (i) {
+          setTimerSpawn(i * 0.5, function () { spawnTurret(220 + i * (640 / Math.max(1, n - 1)), 320 + (rng() * 120 | 0)); });
+        })(i);
+      } },
+    { name: 'gunships', weight: 5, fn: function (rng) {
+        spawnGunship(rng() < 0.5);
+        if (rng() < 0.6) setTimerSpawn(1.2, function () { spawnGunship(rng() < 0.5); });
+        for (var i = 0; i < 3; i++) (function (i) { setTimerSpawn(0.5 + i * 0.4, function () { spawnDarter(220 + i * 180, 300, W - 220 - i * 120); }); })(i);
+      } },
+    { name: 'pincer', weight: 7, fn: function (rng) {
+        var n = 3 + (rng() * 2 | 0) + G.aff.popcornAdd;
+        for (var i = 0; i < n; i++) (function (i) {
+          setTimerSpawn(i * 0.3, function () { spawnDarter(140 + i * 30, 260, W - 140); spawnDarter(W - 140 - i * 30, W - 260, 140); });
+        })(i);
+      } },
+    { name: 'turretweave', weight: 7, fn: function (rng) {
+        setTimerSpawn(0, function () { spawnTurret(W / 2, 340); });
+        var n = 4 + (rng() * 2 | 0) + G.aff.popcornAdd;
+        for (var i = 0; i < n; i++) (function (i) { setTimerSpawn(0.4 + i * 0.4, function () { spawnWeaver(200 + i * 130, 140, i); }); })(i);
+      } },
+    // phase-6 archetype waves
+    { name: 'aegiswall', weight: 6, minSector: 0, fn: function (rng) {
+        setTimerSpawn(0, function () { spawnAegis(W * 0.35); });
+        setTimerSpawn(0.4, function () { spawnAegis(W * 0.65); });
+        for (var i = 0; i < 4; i++) (function (i) { setTimerSpawn(1.0 + i * 0.4, function () { spawnDarter(200 + i * 180, 300, W - 200 - i * 120); }); })(i);
+      } },
+    { name: 'mimicnest', weight: 5, minSector: 0, fn: function (rng) {
+        var n = 2 + (G.aff.eliteGoldMul > 1 ? 2 : 0);   // more mimics under GILDED
+        for (var i = 0; i < n; i++) (function (i) { setTimerSpawn(i * 0.6, function () { spawnMimic(160 + rng() * (W - 320), -60 - i * 40); }); })(i);
+        for (var k = 0; k < 4; k++) (function (k) { setTimerSpawn(k * 0.4, function () { spawnWeaver(220 + k * 160, 140, k); }); })(k);
+      } },
+    { name: 'splitters', weight: 6, minSector: 0, fn: function (rng) {
+        var n = 3 + (rng() * 2 | 0);
+        for (var i = 0; i < n; i++) (function (i) { setTimerSpawn(i * 0.5, function () { spawnSplitter(200 + i * (680 / Math.max(1, n - 1)), -80, 0); }); })(i);
+      } },
+    { name: 'weaverpairs', weight: 6, minSector: 1, fn: function (rng) {
+        setTimerSpawn(0, spawnWeaverPair);
+        if (rng() < 0.6) setTimerSpawn(2.4, spawnWeaverPair);
+      } },
+    { name: 'acolyteguard', weight: 5, minSector: 1, fn: function (rng) {
+        setTimerSpawn(0, function () { spawnGunship(rng() < 0.5); });
+        setTimerSpawn(0.3, function () { spawnTurret(W / 2, 340); });
+        setTimerSpawn(0.8, function () { spawnAcolyte(W * 0.3); });
+        setTimerSpawn(1.0, function () { spawnAcolyte(W * 0.7); });
+      } },
+    { name: 'carrierwave', weight: 5, minSector: 1, fn: function (rng) {
+        setTimerSpawn(0, function () { spawnCarrier(G.rank); });
+        for (var i = 0; i < 3; i++) (function (i) { setTimerSpawn(1.0 + i * 0.6, function () { spawnDarter(200 + i * 180, 300, W - 200); }); })(i);
+      } },
+    { name: 'moths', weight: 5, minSector: 1, fn: function (rng) {
+        var n = 3 + (rng() * 2 | 0);
+        for (var i = 0; i < n; i++) (function (i) { setTimerSpawn(i * 0.5, function () { spawnMoth(180 + i * 160); }); })(i);
+      } },
+    { name: 'garden', weight: 5, minSector: 1, fn: function (rng) {
+        setTimerSpawn(0, function () { spawnGardener(W / 2); });
+        for (var i = 0; i < 4; i++) (function (i) { setTimerSpawn(0.8 + i * 0.5, function () { spawnWeaver(200 + i * 160, 150, i); }); })(i);
+      } },
+    { name: 'apostatewave', weight: 4, minSector: 2, fn: function (rng) {
+        setTimerSpawn(0.3, function () { spawnApostate(G.rank); });
+      } }
+  ];
+  Game.bosses = { warden: spawnWarden, warden2: spawnWarden2, sovereign: spawnBoss };
+
+  // ---------------------------------------------------------------------
+  // render
+  // ---------------------------------------------------------------------
+  function render() {
+    if (!G) return;
+    GL.setShake(G.shakeX, G.shakeY);
+    GL.beginScene();
+    drawBackground();
+    var m = G.mode;
+    if (m !== 'title') {
+      drawHazards();
+      drawGold(); drawEnemies(); drawShots(); drawBullets(); drawParticles();
+      drawDecoy(); drawClones(); drawRavens(); drawGungnir(); drawRaBeam(); drawWraiths(); drawHammers(); drawDebris();
+      if (G.player.alive) drawPlayer();
+      if (G.flashAll > 0) GL.draw(GL.SPR.GLOW, W / 2, H / 2, W * 2, H * 2, 0, 0.5, 0.7, 1.0, G.flashAll * 0.5);
+    }
+    GL.composite(G.chroma, G.bloom, 0.62);
+
+    var lb = GL.letterbox();
+    var scale = lb.w / W;
+    hud.setTransform(1, 0, 0, 1, 0, 0);
+    hud.clearRect(0, 0, hudCanvas.width, hudCanvas.height);
+    hud.setTransform(scale, 0, 0, scale, lb.x, lb.y);
+    hud.textBaseline = 'top';
+    if (m === 'playing' || m === 'clearing' || m === 'draft' || m === 'shop') drawCombatHUD();
+    Run.draw(hud);
+    if (G.paused && (m === 'playing' || m === 'clearing')) pauseOverlay();
+  }
+
+  function drawBackground() {
+    var b = G.bg, i;
+    for (i = 0; i < b.nebula.length; i++) { var n = b.nebula[i]; GL.draw(GL.SPR.GLOW, n.x, n.y, n.r, n.r, 0, n.col[0], n.col[1], n.col[2], n.a); }
+    for (i = 0; i < b.stars.length; i++) { var s = b.stars[i]; var tw = 0.7 + 0.3 * Math.sin(s.tw); GL.draw(GL.SPR.CORE, s.x, s.y, s.sz, s.sz, 0, 0.7, 0.85, 1.0, s.a * tw); }
+  }
+  function drawGold() {
+    Engine.gold.forEach(function (g) {
+      var fade = g.age > g.life - 1.5 ? Math.max(0, (g.life - g.age) / 1.5) : 1;
+      GL.draw(GL.SPR.GLOW, g.x, g.y, g.scale * 2.2, g.scale * 2.2, 0, 1, 0.7, 0.2, 0.5 * fade);
+      GL.draw(GL.SPR.GOLD, g.x, g.y, g.scale, g.scale * 1.2, g.rot, 1, 0.85, 0.35, fade);
+      GL.draw(GL.SPR.GOLD, g.x, g.y, g.scale * 0.5, g.scale * 0.6, g.rot, 1, 1, 0.9, fade);
+    });
+  }
+  function drawEnemies() {
+    Engine.enemies.forEach(function (e) {
+      var f = e.hitFlash > 0 ? 1 : 0;
+      var er = e.r, eg = e.g, eb = e.b;
+      if (e.charmed) { er = 1; eg = 0.4; eb = 0.8; }
+      else if (e.chillStacks > 0) { var c = Math.min(0.7, e.chillStacks * 0.07); er = er * (1 - c) + 0.6 * c; eg = eg * (1 - c) + 0.9 * c; eb = eb * (1 - c) + 1.0 * c; }
+      var r = er + (1 - er) * f, g = eg + (1 - eg) * f, bl = eb + (1 - eb) * f;
+      GL.draw(GL.SPR.GLOW, e.x, e.y, e.scale * 1.5, e.scale * 1.5, 0, er, eg, eb, e.boss ? 0.5 : 0.35);
+      GL.draw(e.spr, e.x, e.y, e.scale, e.scale, e.rot, r, g, bl, 1);
+      if (e.boss) GL.draw(e.spr, e.x, e.y, e.scale * 0.6, e.scale * 0.6, e.rot, 1, 1, 1, 0.4 + 0.2 * Math.sin(G.time * 4));
+      // elite aura rings
+      if (e.aura === 'gilded') GL.draw(GL.SPR.RING, e.x, e.y, e.scale * 1.7, e.scale * 1.7, G.time * 1.5, 1, 0.82, 0.3, 0.8);
+      else if (e.aura === 'bulwark') GL.draw(GL.SPR.RING, e.x, e.y, e.scale * 1.7, e.scale * 1.7, 0, 0.4, 0.8, 1, 0.7);
+      else if (e.aura === 'frenzied') GL.draw(GL.SPR.RING, e.x, e.y, e.scale * 1.7, e.scale * 1.7, -G.time * 3, 1, 0.3, 0.2, 0.8);
+      // aegis / bulwark front shield arc (front = below; spins open when displaced)
+      if ((e.arch === 'aegis' || e.aura === 'bulwark') && e.shieldT <= 0) {
+        GL.draw(GL.SPR.GLOW, e.x, e.y + e.scale * 0.5, e.scale * 1.5, e.scale * 0.7, 0, 0.4, 0.8, 1.0, 0.5);
+        GL.draw(GL.SPR.RING, e.x, e.y + e.scale * 0.35, e.scale * 1.6, e.scale * 1.6, 0, 0.5, 0.9, 1.0, 0.6);
+      }
+      // mimic disguise pulse (the tell)
+      if (e.arch === 'mimic' && e.s0 === 0) { var mp = 0.5 + 0.5 * Math.sin(G.time * 6); GL.draw(GL.SPR.GLOW, e.x, e.y, e.scale * 1.7, e.scale * 1.7, 0, 1, 0.85, 0.4, 0.22 + 0.2 * mp); }
+      // weaver-pair tether curtain
+      if (e.arch === 'weaver2' && e.s3 && e.link && e.link.active && !e.link.dying) {
+        for (var ti = 0; ti <= 8; ti++) { var tx = e.x + (e.link.x - e.x) * ti / 8, ty = e.y + (e.link.y - e.y) * ti / 8; GL.draw(GL.SPR.CORE, tx, ty, 15, 15, 0, 0.7, 0.4, 1.0, 0.55); }
+      }
+      // acolyte heal beam
+      if (e.arch === 'acolyte' && e.link && e.link.active && !e.link.dying) {
+        for (var hi = 0; hi <= 10; hi++) { var hx = e.x + (e.link.x - e.x) * hi / 10, hy = e.y + (e.link.y - e.y) * hi / 10; GL.draw(GL.SPR.CORE, hx, hy, 13, 13, 0, 0.4, 1.0, 0.6, 0.5); }
+      }
+      // apostate renegade aura
+      if (e.arch === 'apostate') GL.draw(GL.SPR.GLOW, e.x, e.y, e.scale * 1.9, e.scale * 1.9, 0, 0.8, 0.3, 0.95, 0.32 + 0.15 * Math.sin(G.time * 5));
+      // status tells
+      if (e.terrorT > 0) { var tp = 0.5 + 0.5 * Math.sin(G.time * 22); GL.draw(GL.SPR.GLOW, e.x, e.y, e.scale * 1.6, e.scale * 1.6, 0, 0.6, 0.05, 0.12, 0.4 + 0.3 * tp); }
+      if (e.shakenT > 0) { GL.draw(GL.SPR.RING, e.x, e.y, e.scale * 1.4, e.scale * 1.4, G.time * 8, 0.9, 0.2, 0.3, 0.6); }
+      if (e.marked) { GL.draw(GL.SPR.RING, e.x, e.y, e.scale * 1.5, e.scale * 1.5, -G.time * 2, 0.8, 1.0, 0.3, 0.7); }
+      if (e.weak) { GL.draw(GL.SPR.GLOW, e.x, e.y, e.scale * 1.7, e.scale * 1.7, 0, 1, 0.4, 0.8, 0.2); }
+      if (e.charmed) { GL.draw(GL.SPR.GLOW, e.x, e.y, e.scale * 1.8, e.scale * 1.8, 0, 1, 0.4, 0.8, 0.35); }
+      if (e.burnT > 0) { GL.draw(GL.SPR.GLOW, e.x, e.y, e.scale * 1.7, e.scale * 1.7, 0, 1, 0.45, 0.1, 0.33); }
+      if (e.confuseT > 0) { GL.draw(GL.SPR.RING, e.x, e.y, e.scale * 1.4, e.scale * 1.4, G.time * 6, 0.7, 1, 0.3, 0.6); }
+      if (e.stunT > 0) { GL.draw(GL.SPR.RING, e.x, e.y, e.scale * 1.6, e.scale * 1.6, -G.time * 4, 0.6, 0.9, 1, 0.7); }
+    });
+  }
+  function drawShots() {
+    Engine.shots.forEach(function (s) {
+      var ang = Math.atan2(s.vy, s.vx) + Math.PI / 2;
+      if (s.big) {
+        GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 1.4, s.scale * 3.2, ang, s.r, s.g, s.b, 0.6);
+        GL.draw(GL.SPR.STREAK, s.x, s.y, s.scale * 0.9, s.scale * 3.0, ang, s.r, s.g, s.b, 0.95);
+        GL.draw(GL.SPR.STREAK, s.x, s.y, s.scale * 0.45, s.scale * 2.2, ang, 1, 1, 1, 0.95);
+        GL.draw(GL.SPR.CORE, s.x, s.y, s.scale * 0.6, s.scale * 0.6, 0, 1, 1, 1, 0.9);
+      } else {
+        GL.draw(GL.SPR.STREAK, s.x, s.y, s.scale * 0.5, s.scale * 1.7, ang, s.r * 0.7, s.g, s.b, 0.5);
+        GL.draw(GL.SPR.STREAK, s.x, s.y, s.scale * 0.3, s.scale * 1.1, ang, s.r, s.g, s.b, 0.95);
+        GL.draw(GL.SPR.CORE, s.x, s.y, s.scale * 0.32, s.scale * 0.32, 0, 1, 1, 1, 0.9);
+      }
+    });
+  }
+  function drawBullets() {
+    Engine.bullets.forEach(function (b) {
+      var fl = b.flash > 0 ? b.flash / 0.1 : 0;
+      var sc = 1 + 0.6 * fl;
+      var slow = b.slowT > 0 ? 0.6 : 1; // tint frozen bullets slightly
+      var br = b.r, bg = b.g * (slow < 1 ? 1 : 1), bb = b.b;
+      if (b.shape === 1) {
+        var ang = b.dir + Math.PI / 2;
+        GL.draw(GL.SPR.GLOW, b.x, b.y, b.scale * 1.6 * sc, b.scale * 3.6 * sc, ang, br, bg, bb, 0.5);
+        GL.draw(GL.SPR.NEEDLE, b.x, b.y, b.scale * 1.1 * sc, b.scale * 3.0 * sc, ang, br, bg, bb, 1);
+        GL.draw(GL.SPR.NEEDLE, b.x, b.y, b.scale * 0.5 * sc, b.scale * 2.0 * sc, ang, 1, 1, 1, 0.9 + fl);
+      } else if (b.shape === 2) {
+        GL.draw(GL.SPR.GLOW, b.x, b.y, b.scale * 3.2 * sc, b.scale * 3.2 * sc, 0, br, bg, bb, 0.5);
+        GL.draw(GL.SPR.RINGBULLET, b.x, b.y, b.scale * 2.4 * sc, b.scale * 2.4 * sc, b.age * 2, br, bg, bb, 1);
+        GL.draw(GL.SPR.RINGBULLET, b.x, b.y, b.scale * 1.4 * sc, b.scale * 1.4 * sc, 0, 1, 1, 1, 0.5 + fl);
+      } else {
+        GL.draw(GL.SPR.GLOW, b.x, b.y, b.scale * 3.6 * sc, b.scale * 3.6 * sc, 0, br, bg, bb, 0.55 + fl * 0.4);
+        GL.draw(GL.SPR.CORE, b.x, b.y, b.scale * 1.5 * sc, b.scale * 1.5 * sc, 0, 1, 1, 1, 0.95);
+      }
+      if (b.slowT > 0) GL.draw(GL.SPR.RING, b.x, b.y, b.scale * 4 * sc, b.scale * 4 * sc, 0, 0.6, 0.9, 1.0, 0.25);
+    });
+  }
+  function drawParticles() {
+    Engine.particles.forEach(function (p) {
+      var lifeF = 1 - p.age / p.life; if (lifeF < 0) lifeF = 0;
+      var a = p.a * lifeF; if (p.kind === K_RING) a = p.a * lifeF * lifeF;
+      GL.draw(p.spr, p.x, p.y, p.size, p.size, p.rot, p.r, p.g, p.b, a);
+    });
+  }
+  function drawPlayer() {
+    var p = G.player;
+    var dim = (p.invuln > 0 && Math.floor(p.blink * 20) % 2 === 0) ? 0.35 : 1;
+    var kick = p.recoil > 0 ? p.recoil * 60 : 0;
+    GL.draw(GL.SPR.GLOW, p.x, p.y + 34 + kick, 60, 90 + kick * 2, 0, 0.3, 0.8, 1.0, 0.5 * dim + (p.recoil > 0 ? 0.4 : 0));
+    GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, 74, 74, 0, 0.7, 0.95, 1.0, dim);
+    GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, 46, 46, 0, 1, 1, 1, 0.8 * dim);
+    GL.draw(GL.SPR.GLOW, p.x, p.y, 26, 26, 0, 1, 1, 1, 0.9 * dim);
+    GL.draw(GL.SPR.CORE, p.x, p.y, 10, 10, 0, 1, 1, 1, dim);
+    if (Engine.focusHeld()) GL.draw(GL.SPR.RING, p.x, p.y, 60, 60, G.time * 2, 0.6, 1, 1, 0.9);
+  }
+
+  // ---------------------------------------------------------------------
+  // combat HUD
+  // ---------------------------------------------------------------------
+  function commas(n) { return Math.floor(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+
+  function drawCombatHUD() {
+    hud.fillStyle = UI_CYAN;
+    hud.font = '600 46px Consolas, monospace';
+    hud.textAlign = 'right';
+    hud.fillText(commas(G.score), W - 34, 26);
+    hud.font = '600 24px Consolas, monospace';
+    hud.fillStyle = UI_DIM();
+    hud.fillText('HI ' + commas(Run.meta.hi), W - 34, 82);
+    hud.fillStyle = UI_GOLD;
+    hud.font = '700 30px Consolas, monospace';
+    hud.fillText(commas(G.wallet) + ' g', W - 34, 116);
+
+    hud.textAlign = 'left';
+    hud.font = '700 42px Consolas, monospace';
+    hud.fillStyle = G.mult > 1.01 ? UI_GOLD : UI_DIM();
+    hud.fillText('x' + G.mult.toFixed(G.mult >= 3 ? 1 : 2), 40, 26);
+    hud.font = '600 24px Consolas, monospace';
+    hud.fillStyle = UI_CYAN;
+    hud.fillText('GRAZE ' + G.graze, 40, 78);
+
+    hud.textAlign = 'center';
+    hud.font = '600 26px Consolas, monospace';
+    hud.fillStyle = UI_CYAN;
+    var stxt = 'SECTOR ' + (Run.sectorIdx + 1) + '/3';
+    if (G.aff.name) stxt += '   ·   ' + G.aff.name;
+    hud.fillText(stxt, W / 2, 116);
+
+    drawGauge();
+    drawSpecialMeter();
+    drawLives();
+    if (G.boss) drawBossBar();
+    drawLoadout();
+    drawGodTags();
+    drawPopups();
+    drawAnnounce();
+  }
+
+  function drawGauge() {
+    var x = 26, y = 300, w = 20, h = H - 620;
+    var v = G.vaunt;
+    var frac = v.active ? (v.timer / v.duration) : (v.gauge / GAUGE_MAX);
+    hud.fillStyle = 'rgba(20,40,50,0.7)';
+    roundRect(hud, x, y, w, h, 8); hud.fill();
+    var fh = h * frac;
+    var grd = hud.createLinearGradient(0, y + h, 0, y + h - fh);
+    if (v.active) { grd.addColorStop(0, '#ffb020'); grd.addColorStop(1, '#fff0a0'); }
+    else if (v.ready) { grd.addColorStop(0, '#ffd050'); grd.addColorStop(1, '#fffff0'); }
+    else { grd.addColorStop(0, '#0a86b0'); grd.addColorStop(1, '#6fe6ff'); }
+    hud.fillStyle = grd;
+    roundRect(hud, x, y + h - fh, w, fh, 8); hud.fill();
+    hud.save();
+    hud.translate(x + w + 14, y + h); hud.rotate(-Math.PI / 2);
+    hud.textAlign = 'left'; hud.font = '700 22px Consolas, monospace';
+    if (v.active) { hud.fillStyle = UI_GOLD; hud.fillText('VAUNT ACTIVE', 0, 0); }
+    else if (v.ready) { var pl = 0.5 + 0.5 * Math.sin(G.time * 8); hud.fillStyle = 'rgba(255,225,110,' + (0.5 + 0.5 * pl) + ')'; hud.fillText('VAUNT — C', 0, 0); }
+    else { hud.fillStyle = UI_DIM(); hud.fillText('VAUNT', 0, 0); }
+    hud.restore();
+  }
+  // special charge meter: segmented pips beside the vaunt bar
+  function drawSpecialMeter() {
+    var x = 60, y = 300, w = 20, h = H - 620;
+    var max = G.sp.max, charge = G.sp.charge;
+    var gap = 6, segH = (h - gap * (max - 1)) / max;
+    for (var i = 0; i < max; i++) {
+      var sy = y + h - (i + 1) * segH - i * gap;
+      var full = charge >= i + 1;
+      var part = !full && charge > i ? (charge - i) : 0;
+      hud.fillStyle = 'rgba(30,20,50,0.7)';
+      roundRect(hud, x, sy, w, segH, 6); hud.fill();
+      if (full || part > 0) {
+        var gr = hud.createLinearGradient(0, sy + segH, 0, sy);
+        gr.addColorStop(0, '#8a2bff'); gr.addColorStop(1, '#d89bff');
+        hud.fillStyle = gr;
+        var ph = full ? segH : segH * part;
+        roundRect(hud, x, sy + segH - ph, w, ph, 6); hud.fill();
+      }
+    }
+    hud.save();
+    hud.translate(x + w + 14, y + h); hud.rotate(-Math.PI / 2);
+    hud.textAlign = 'left'; hud.font = '700 22px Consolas, monospace';
+    hud.fillStyle = G.sp.charge >= 1 ? '#d89bff' : UI_DIM();
+    hud.fillText('SPECIAL — X', 0, 0);
+    hud.restore();
+  }
+  function drawLives() {
+    var y = H - 70;
+    for (var i = 0; i < G.lives; i++) {
+      var x = 46 + i * 56;
+      hud.save(); hud.translate(x, y); hud.fillStyle = UI_CYAN;
+      hud.beginPath(); hud.moveTo(0, -20); hud.lineTo(16, 16); hud.lineTo(0, 6); hud.lineTo(-16, 16); hud.closePath(); hud.fill();
+      hud.restore();
+    }
+  }
+  function drawBossBar() {
+    var e = G.boss, x = 120, y = 40, w = W - 240, h = 16;
+    var frac = Math.max(0, e.hp / e.maxhp);
+    hud.textAlign = 'center'; hud.font = '700 30px Consolas, monospace'; hud.fillStyle = UI_GOLD;
+    hud.fillText(e.name, W / 2, 60);
+    hud.fillStyle = 'rgba(40,10,25,0.7)'; roundRect(hud, x, y + 60, w, h, 6); hud.fill();
+    var grd = hud.createLinearGradient(x, 0, x + w, 0); grd.addColorStop(0, '#ff3b7b'); grd.addColorStop(1, '#ffd766');
+    hud.fillStyle = grd; roundRect(hud, x, y + 60, w * frac, h, 6); hud.fill();
+  }
+  function tierStars(R) {
+    var t = R >= 3.5 ? 5 : R >= 2.9 ? 4 : R >= 2.25 ? 3 : R >= 1.5 ? 2 : 1;
+    var s = ''; for (var i = 0; i < t; i++) s += '★'; return s;
+  }
+  function drawGodTags() {
+    var gods = Run.GODS;
+    hud.textAlign = 'right'; hud.font = '700 24px Consolas, monospace';
+    var y = 150;
+    if (G.attackGod && gods[G.attackGod]) { hud.fillStyle = gods[G.attackGod].css; hud.fillText('ATK ▸ ' + gods[G.attackGod].name + ' ' + tierStars(G.attackR), W - 34, y); y += 30; }
+    if (G.specialGod && gods[G.specialGod]) { hud.fillStyle = gods[G.specialGod].css; hud.fillText('SPC ▸ ' + gods[G.specialGod].name + ' ' + tierStars(G.specialR), W - 34, y); y += 30; }
+    // Ares frenzy pips
+    if (G.frenzy.stacks > 0) {
+      hud.textAlign = 'right';
+      for (var i = 0; i < 10; i++) {
+        hud.fillStyle = i < G.frenzy.stacks ? '#ff4030' : 'rgba(120,40,40,0.4)';
+        hud.beginPath(); hud.arc(W - 40 - i * 16, y + 6, 5, 0, Math.PI * 2); hud.fill();
+      }
+      y += 20;
+    }
+    // Pantheon Communion badge
+    if (G.communion) {
+      hud.textAlign = 'right'; hud.font = '700 22px Consolas, monospace';
+      var cc = { OLYMPUS: '#9fd8ff', ASGARD: '#cfd6e0', KEMET: '#ffe89a' };
+      hud.fillStyle = cc[G.communion] || '#ffd766';
+      hud.fillText('✦ COMMUNION · ' + G.communion, W - 34, y + 8);
+    }
+  }
+  function drawLoadout() {
+    var lines = Game.upgradeSummary();
+    hud.textAlign = 'right';
+    var y = 244;
+    hud.font = '500 22px Consolas, monospace';
+    for (var i = 0; i < lines.length; i++) { hud.fillStyle = 'rgba(150,220,235,0.7)'; hud.fillText(lines[i], W - 34, y + i * 26); }
+    var dy = y + lines.length * 26 + 6;
+    if (Run.DUOS) {
+      hud.font = '700 20px Consolas, monospace';
+      for (var k in G.duos) {
+        if (G.duos[k] && Run.DUOS[k]) { hud.fillStyle = '#ffd766'; hud.fillText('◆ ' + Run.DUOS[k].name, W - 34, dy); dy += 24; }
+      }
+    }
+  }
+  function drawPopups() {
+    hud.textAlign = 'center'; var arr = G.popups;
+    for (var i = 0; i < arr.length; i++) {
+      var p = arr[i]; if (!p.active) continue;
+      hud.globalAlpha = 1 - p.age / p.life; hud.fillStyle = p.col; hud.font = '700 ' + p.size + 'px Consolas, monospace';
+      hud.fillText(p.text, p.x, p.y);
+    }
+    hud.globalAlpha = 1;
+  }
+  function drawAnnounce() {
+    var an = G.announce;
+    if (an.dur >= 9000 || an.t >= an.dur) return;
+    var f = an.t / an.dur;
+    var a = f < 0.15 ? f / 0.15 : (f > 0.7 ? Math.max(0, (1 - f) / 0.3) : 1);
+    hud.globalAlpha = a; hud.textAlign = 'center';
+    hud.fillStyle = UI_GOLD; hud.font = '700 66px Consolas, monospace';
+    drawSpaced(an.text, W / 2, H * 0.30, 10 + (1 - a) * 30);
+    if (an.sub) { hud.fillStyle = UI_CYAN; hud.font = '500 30px Consolas, monospace'; hud.fillText(an.sub, W / 2, H * 0.30 + 66); }
+    hud.globalAlpha = 1;
+  }
+  function drawSpaced(text, cx, y, spacing) {
+    var total = 0, i;
+    hud.textAlign = 'left';
+    for (i = 0; i < text.length; i++) total += hud.measureText(text[i]).width + spacing;
+    total -= spacing;
+    var x = cx - total / 2;
+    for (i = 0; i < text.length; i++) { hud.fillText(text[i], x, y); x += hud.measureText(text[i]).width + spacing; }
+    hud.textAlign = 'center';
+  }
+  function pauseOverlay() {
+    hud.fillStyle = 'rgba(0,0,0,0.55)'; hud.fillRect(0, 0, W, H);
+    hud.textAlign = 'center'; hud.fillStyle = UI_CYAN; hud.font = '700 80px Consolas, monospace';
+    drawSpaced('PAUSED', W / 2, H * 0.42, 12);
+    hud.fillStyle = UI_DIM(); hud.font = '500 34px Consolas, monospace';
+    hud.fillText('P resume   ·   Z attack  X special  C vaunt   ·   Esc abandon', W / 2, H * 0.42 + 90);
+  }
+  function roundRect(ctx, x, y, w, h, r) {
+    if (w < 2 * r) r = w / 2; if (h < 2 * r) r = h / 2;
+    ctx.beginPath(); ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+
+  // ---------------------------------------------------------------------
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', Game.boot);
+  else Game.boot();
+
+})();
