@@ -300,9 +300,9 @@
   // Readability law: the background loses every conflict with bullets. As live
   // enemy-bullet count crosses thresholds, scale layer alpha down (cheap).
   function bgDimFor(n) {
-    if (n <= 30) return 1;
-    if (n >= 120) return 0.32;
-    return 1 - (n - 30) / 90 * 0.68;
+    if (n <= 60) return 1;
+    if (n >= 220) return 0.32;
+    return 1 - (n - 60) / 160 * 0.68;
   }
   Game.bgDimFor = bgDimFor;
 
@@ -571,7 +571,7 @@
     ringShock(G.player.x, G.player.y, [0.4, 0.95, 1], 40, 2400, 0.45);
     flash(G.player.x, G.player.y, [1, 0.95, 0.7], 260, 0.3);
     addShake(7);
-    G.chromaTarget = 0.02; G.bloomTarget = 1.9;
+    G.chromaTarget = 0.009; G.bloomTarget = 1.9;   // POLISH: chroma capped so bullet color families survive the burst
     announce('APOTHEOSIS', '', 1.2);
     SFX.vaunt();
     if (window.MUSIC) MUSIC.apotheosis(true);   // open the filter / lift the key — the payday sounds golden
@@ -717,7 +717,12 @@
       v.timer -= dt;
       v.gauge = Math.max(0, (v.timer / v.duration) * GAUGE_MAX);
       if (Math.random() < dt * 7) spawnGold(100 + Math.random() * (W - 200), -40, 1, 0.6);
-      G.chromaTarget = 0.012 + 0.010 * (0.5 + 0.5 * Math.sin(G.time * 14));
+      // POLISH (ART.md combat color law > juice): cap the chroma offset at ~45%
+      // of the old peak AND scale it DOWN as the screen fills, so rainbow fringing
+      // never breaks bullet family colors exactly when density is highest.
+      var _cn = Engine.bullets.count();
+      var _dens = 1 - Math.min(0.6, _cn / 260 * 0.6);
+      G.chromaTarget = (0.006 + 0.004 * (0.5 + 0.5 * Math.sin(G.time * 14))) * _dens;
       G.bloomTarget = 1.9;
       if (v.timer <= 0) endVaunt();
     } else { G.chromaTarget = 0; G.bloomTarget = 1.0; }
@@ -1996,6 +2001,11 @@
   var POP_COL = [1.0, 0.42, 0.5], MID_COL = [1.0, 0.5, 0.2], TURR_COL = [0.96, 0.42, 0.7];
   var P = Patterns, DOWN = Math.PI / 2;
   function rankSpd(base) { var m = 1 + 0.10 * (G.rank - 1); if (m > 1.5) m = 1.5; return base * m; }
+  // POLISH: sector escalation of bullet COUNT (complexity-first, numbers-second —
+  // small per-rank additive bump so S3 crests out-mass S1 without flattening the
+  // authored geometry). base + perRank*(rank-1), clamped to a generous ceiling so
+  // gap/lane widths (scaled in step-units at each call site) never collapse.
+  function rankCnt(base, perRank, cap) { var n = Math.round(base + (perRank || 0) * (G.rank - 1)); if (cap && n > cap) n = cap; return n < 1 ? 1 : n; }
   function clampX(x, m) { m = m || 160; return x < m ? m : x > W - m ? W - m : x; }
   function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
   function qbez(a, c, b, t) { var u = 1 - t; return u * u * a + 2 * u * t * c + t * t * b; }
@@ -2153,9 +2163,9 @@
     P_swoopHold(e, startX, holdX, 470, exX);
     setScript(e, [
       { t: 0.0, fn: function (e) { e.poseT = 0.32; muzzle(e, [1, 0.55, 0.28]); } },
-      { t: 0.38, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.05, 7, rankSpd(P.SPD.slow), { laneAt: ((e.s1 % 3) - 1) * 0.24, laneWidth: 2.6, fam: P.FAM.PELLET, tier: 'M', color: P.ORANGE }); } },
-      { t: 0.92, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.05, 7, rankSpd(P.SPD.slow), { laneAt: ((e.s1 % 3) - 1) * 0.24, laneWidth: 2.6, fam: P.FAM.PELLET, tier: 'M', color: P.ORANGE }); } }
-    ], 1.8, 0);
+      { t: 0.4, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.1, 7, rankSpd(P.SPD.slow), { laneAt: ((e.s1 % 3) - 1) * 0.24, laneWidth: 2.8, fam: P.FAM.PELLET, tier: 'M', color: P.ORANGE }); } },
+      { t: 1.0, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.1, 7, rankSpd(P.SPD.slow), { laneAt: ((e.s1 % 3) - 1) * 0.24, laneWidth: 2.8, fam: P.FAM.PELLET, tier: 'M', color: P.ORANGE }); } }
+    ], 2.0, 0);
     e.onUpdate = pathEnemyUpdate; maybeAura(e);
   }
   function spawnWeaver(cx, amp, phase) {
@@ -2164,8 +2174,8 @@
     P_sCurve(e, side, 560);
     setScript(e, [
       { t: 0.0, fn: function (e) { e.poseT = 0.26; muzzle(e, [1, 0.5, 0.2]); } },
-      { t: 0.4, fn: function (e) { P.fan(e.x, e.y, DOWN, 5, 0.9, rankSpd(P.SPD.mid), { fam: P.FAM.PELLET, tier: 'S', color: P.ORANGE }); } }
-    ], 1.1, (phase || 0) * 0.2);
+      { t: 0.4, fn: function (e) { P.fan(e.x, e.y, DOWN, 6, 1.0, rankSpd(P.SPD.mid), { fam: P.FAM.PELLET, tier: 'S', color: P.ORANGE }); } }
+    ], 1.2, (phase || 0) * 0.2);
     e.onUpdate = pathEnemyUpdate; maybeAura(e);
   }
   function spawnTurret(x, targetY) {
@@ -2174,9 +2184,9 @@
     P_pendulum(e, xA, xB, targetY || 360);
     setScript(e, [
       { t: 0.0, fn: function (e) { e.poseT = 0.4; muzzle(e, [0.96, 0.4, 0.7]); } },
-      { t: 0.5, fn: function (e) { e.s1++; P.ringGap(e.x, e.y, 16, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 2.0, offset: e.s1 * 0.5, fam: P.FAM.ORB, tier: 'M', color: P.MAGENTA }); } },
-      { t: 1.4, fn: function (e) { e.s0 += 0.5; P.wheel(e.x, e.y, e.s0, 10, rankSpd(P.SPD.mid), { gapEvery: 5, fam: P.FAM.ORB, tier: 'S', color: P.MAGENTA }); } }
-    ], 2.2, 0);
+      { t: 0.5, fn: function (e) { e.s1++; P.ringGap(e.x, e.y, rankCnt(15, 6, 24), rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 2.5, offset: e.s1 * 0.5, fam: P.FAM.ORB, tier: 'M', color: P.MAGENTA }); } },
+      { t: 1.4, fn: function (e) { e.s0 += 0.5; P.wheel(e.x, e.y, e.s0, 11, rankSpd(P.SPD.mid), { gapEvery: 5, fam: P.FAM.ORB, tier: 'S', color: P.MAGENTA }); } }
+    ], 2.4, 0);
     e.onUpdate = pathEnemyUpdate; maybeAura(e);
   }
   function spawnGunship(fromLeft) {
@@ -2185,9 +2195,9 @@
     P_flankRail(e, side, 420);
     setScript(e, [
       { t: 0.0, fn: function (e) { e.poseT = 0.35; muzzle(e, [1, 0.5, 0.2]); } },
-      { t: 0.5, fn: function (e) { P.arcWall(e.x, e.y, DOWN, 1.3, 10, rankSpd(P.SPD.slow), { laneAt: 0, laneWidth: 3.0, fam: P.FAM.PELLET, tier: 'M', color: P.ORANGE }); } },
-      { t: 1.3, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 4, { spread: 0.14, speed: rankSpd(P.SPD.fast) }); } }
-    ], 2.0, 0);
+      { t: 0.5, fn: function (e) { P.arcWall(e.x, e.y, DOWN, 1.4, rankCnt(11, 5, 18), rankSpd(P.SPD.slow), { laneAt: 0, laneWidth: 3.8, fam: P.FAM.PELLET, tier: 'M', color: P.ORANGE }); } },
+      { t: 1.3, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.16, speed: rankSpd(P.SPD.fast) }); } }
+    ], 2.2, 0);
     e.onUpdate = pathEnemyUpdate; maybeAura(e);
   }
 
@@ -2202,11 +2212,12 @@
     P_pendulum(e, xA, xB, 380);
     setScript(e, [
       { t: 0.0, fn: function (e) { e.poseT = 0.45; muzzle(e, [1, 0.5, 0.2]); } },
-      { t: 0.5, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 22, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 2.2, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: P.MAGENTA }); } },
-      { t: 1.4, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.5, 13, rankSpd(P.SPD.mid), { laneAt: ((e.s1 % 3) - 1) * 0.2, laneWidth: 3.2, fam: P.FAM.PELLET, tier: 'M', color: P.ORANGE }); } },
+      { t: 0.5, fn: function (e) { e.s0 += 0.4; var gc = rankCnt(23, 9, 34); P.ringGap(e.x, e.y, gc, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 2.9, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: P.MAGENTA });
+        P.ringGap(e.x, e.y, gc, rankSpd(P.SPD.slow) + 70, { gaps: 2, gapWidth: 2.9, offset: e.s0 + 0.11, fam: P.FAM.PELLET, tier: 'S', color: P.ORANGE }); } },   // S-pellet filler threads between the anchor orbs (tier mix, same lane)
+      { t: 1.4, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.5, rankCnt(14, 6, 22), rankSpd(P.SPD.mid), { laneAt: ((e.s1 % 3) - 1) * 0.2, laneWidth: 4.0, fam: P.FAM.PELLET, tier: 'M', color: P.ORANGE }); } },
       { t: 2.3, fn: function (e) { e.poseT = 0.35; muzzle(e, [1, 0.85, 0.35]); } },
-      { t: 2.7, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.2, speed: rankSpd(P.SPD.fast) }); } }
-    ], 3.4, 0);
+      { t: 2.7, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 6, { spread: 0.22, speed: rankSpd(P.SPD.fast) }); } }
+    ], 3.2, 0);
     e.onUpdate = pathEnemyUpdate;
   }
 
@@ -2218,7 +2229,7 @@
     P_loop(e, clampX(cx, 220), 460, 200);
     setScript(e, [
       { t: 0.0, fn: function (e) { e.poseT = 0.28; muzzle(e, [1, 0.6, 0.3]); } },
-      { t: 1.6, fn: function (e) { P.fan(e.x, e.y, DOWN, 6, 1.0, rankSpd(P.SPD.mid), { fam: P.FAM.PELLET, tier: 'S', color: P.ORANGE }); } }   // ~loop bottom; unaimed (drifting popcorn law)
+      { t: 1.6, fn: function (e) { P.fan(e.x, e.y, DOWN, 7, 1.1, rankSpd(P.SPD.mid), { fam: P.FAM.PELLET, tier: 'S', color: P.ORANGE }); } }   // ~loop bottom; unaimed (drifting popcorn law)
     ], 2.6, 0);
     e.onUpdate = pathEnemyUpdate; maybeAura(e);
   }
@@ -2229,7 +2240,7 @@
     P_diveBrake(e, clampX(formerX, 120), brakeY || 520);
     setScript(e, [
       { t: 0.0, fn: function (e) { e.poseT = 0.22; muzzle(e, [1, 0.5, 0.3]); } },
-      { t: 0.6, fn: function (e) { e.s1++; P.ring(e.x, e.y, 10, rankSpd(P.SPD.slow), { fam: P.FAM.ORB, tier: 'S', color: P.ORANGE, offset: e.s1 * 0.31 }); } }   // unaimed burst at the brake
+      { t: 0.6, fn: function (e) { e.s1++; P.ring(e.x, e.y, 11, rankSpd(P.SPD.slow), { fam: P.FAM.ORB, tier: 'S', color: P.ORANGE, offset: e.s1 * 0.31 }); } }   // unaimed burst at the brake
     ], 1.6, 0);
     e.onUpdate = pathEnemyUpdate; maybeAura(e);
   }
@@ -2242,7 +2253,7 @@
     P_orbitPoint(e, cx, cy, rad, 1.5, from);
     setScript(e, [
       { t: 0.0, fn: function (e) { e.poseT = 0.3; muzzle(e, [0.96, 0.42, 0.7]); } },
-      { t: 0.5, fn: function (e) { e.s0 += 0.4; P.wheel(e.x, e.y, e.s0, 8, rankSpd(P.SPD.mid), { gapEvery: 4, fam: P.FAM.ORB, tier: 'S', color: P.MAGENTA }); } }
+      { t: 0.5, fn: function (e) { e.s0 += 0.4; P.wheel(e.x, e.y, e.s0, 10, rankSpd(P.SPD.mid), { gapEvery: 4, fam: P.FAM.ORB, tier: 'S', color: P.MAGENTA }); } }
     ], 1.4, phase || 0);
     e.onUpdate = pathEnemyUpdate; maybeAura(e);
   }
@@ -2254,8 +2265,8 @@
     P_retreatReturn(e, clampX(ax, 220), 420, 0.5);
     setScript(e, [
       { t: 0.0, fn: function (e) { e.poseT = 0.4; muzzle(e, [1, 0.5, 0.85]); } },
-      { t: 0.5, fn: function (e) { e.s0 += 0.45; P.ringGap(e.x, e.y, 18, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 2.0, offset: e.s0, fam: P.FAM.ORB, tier: 'M', color: P.MAGENTA }); } },
-      { t: 1.4, fn: function (e) { if (e.didRetreat) P.pulse(e.x, e.y, { rings: 3, count: 16, speed: rankSpd(P.SPD.slow), speedStep: 60, offset: e.s0, colorA: P.MAGENTA, colorB: P.ORANGE }); } }   // the denser return volley
+      { t: 0.5, fn: function (e) { e.s0 += 0.45; P.ringGap(e.x, e.y, 18, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 2.4, offset: e.s0, fam: P.FAM.ORB, tier: 'M', color: P.MAGENTA }); } },
+      { t: 1.4, fn: function (e) { if (e.didRetreat) P.pulse(e.x, e.y, { rings: 3, count: 18, speed: rankSpd(P.SPD.slow), speedStep: 60, offset: e.s0, colorA: P.MAGENTA, colorB: P.ORANGE }); } }   // the denser return volley
     ], 2.2, 0);
     e.onUpdate = pathEnemyUpdate; maybeAura(e);
   }
@@ -2266,8 +2277,8 @@
     P_sCurve(e, side, 520);
     setScript(e, [
       { t: 0.0, fn: function (e) { e.poseT = 0.24; muzzle(e, [1, 0.5, 0.25]); } },
-      { t: 0.4, fn: function (e) { e.s1++; P.snake(e.x, e.y, DOWN + side * 0.6, 7, rankSpd(P.SPD.mid), { amp: 42, freq: 0.9, phase: e.s1 * 0.5, fam: P.FAM.SHARD, tier: 'M', color: P.MAGENTA }); } }
-    ], 1.2, 0);
+      { t: 0.4, fn: function (e) { e.s1++; P.snake(e.x, e.y, DOWN + side * 0.6, 9, rankSpd(P.SPD.mid), { amp: 46, freq: 0.85, phase: e.s1 * 0.5, fam: P.FAM.SHARD, tier: 'M', color: P.MAGENTA }); } }
+    ], 1.3, 0);
     e.onUpdate = pathEnemyUpdate; maybeAura(e);
   }
   // FLANKER — mirrored pair hugging the side rails, firing crossing diagonal
@@ -2278,8 +2289,8 @@
     P_flankRail(e, side, 360);
     setScript(e, [
       { t: 0.0, fn: function (e) { e.poseT = 0.32; muzzle(e, [1, 0.5, 0.3]); } },
-      { t: 0.5, fn: function (e) { P.crossfire(e.x, W - e.x, e.y, 5, rankSpd(P.SPD.mid), { angle: 0.42, spacing: 34, fam: P.FAM.KUNAI, tier: 'M', color: P.MAGENTA }); } }
-    ], 1.6, phase || 0);
+      { t: 0.5, fn: function (e) { P.crossfire(e.x, W - e.x, e.y, 6, rankSpd(P.SPD.mid), { angle: 0.42, spacing: 34, fam: P.FAM.KUNAI, tier: 'M', color: P.MAGENTA }); } }
+    ], 1.7, phase || 0);
     e.onUpdate = pathEnemyUpdate; maybeAura(e);
   }
   // RAINMAKER — parks near the top and lays a drifting top-edge rain curtain as
@@ -2295,8 +2306,8 @@
     initPath(e);
     setScript(e, [
       { t: 0.0, fn: function (e) { e.poseT = 0.3; muzzle(e, [1, 0.55, 0.3]); } },
-      { t: 0.6, fn: function (e) { e.s0 += 0.7; P.rain(20, { speed: rankSpd(P.SPD.slow), waves: 3, phase: e.s0, gapThresh: 0.1, fam: P.FAM.PELLET, tier: 'S', color: P.ORANGE }); } }
-    ], 1.3, 0);
+      { t: 0.6, fn: function (e) { e.s0 += 0.7; P.rain(24, { speed: rankSpd(P.SPD.slow), waves: 3, phase: e.s0, gapThresh: 0.1, fam: P.FAM.PELLET, tier: 'S', color: P.ORANGE }); } }
+    ], 1.4, 0);
     e.onUpdate = pathEnemyUpdate;
   }
   // cancel an emitter's own in-flight bullets to gold (midship death payoff).
@@ -2736,39 +2747,42 @@
         pose(BRZ),
         { t: 0.5, fn: function (e) { e.s0 += 0.4; P.pulse(e.x, e.y, { rings: 3, count: 16, speed: rankSpd(P.SPD.slow), speedStep: 58, offset: e.s0, colorA: BRZ, colorB: HOT }); } },
         { t: 1.7, fn: function (e) { e.poseT = 0.42; muzzle(e, HOT); } },
-        { t: 2.2, fn: function (e) { e.s0 += 0.4; P.pulse(e.x, e.y, { rings: 4, count: 14, speed: rankSpd(P.SPD.slow), speedStep: 64, offset: -e.s0, colorA: HOT, colorB: MAG }); } }
+        { t: 2.2, fn: function (e) { e.s0 += 0.4; P.pulse(e.x, e.y, { rings: 3, count: 14, speed: rankSpd(P.SPD.slow), speedStep: 64, offset: -e.s0, colorA: HOT, colorB: MAG }); } }
       ] },
       // II Piston Lances — arcWall columns slamming alternate lanes (geometry: arcWall)
       { name: 'PISTON LANCES', hp: 0.18, timeout: 32, path: bp_pendulum, loop: 2.6, script: [
         pose(BRZ),
-        { t: 0.4, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.6, 17, rankSpd(P.SPD.slow), { laneAt: (e.s1 % 2 ? -0.28 : 0.28), laneWidth: 3.6, fam: P.FAM.PELLET, tier: 'M', color: BRZ }); } },
-        { t: 1.3, fn: function (e) { e.poseT = 0.4; muzzle(e, HOT); } },
-        { t: 1.7, fn: function (e) { P.arcWall(e.x, e.y, DOWN, 1.6, 17, rankSpd(P.SPD.mid), { laneAt: (e.s1 % 2 ? 0.28 : -0.28), laneWidth: 3.6, fam: P.FAM.PELLET, tier: 'M', color: HOT }); } }
+        { t: 0.4, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.7, 24, rankSpd(P.SPD.slow), { laneAt: (e.s1 % 2 ? -0.28 : 0.28), laneWidth: 5.2, fam: P.FAM.PELLET, tier: 'M', color: BRZ }); } },
+        { t: 1.2, fn: function (e) { e.poseT = 0.4; muzzle(e, HOT); } },
+        { t: 1.6, fn: function (e) { P.arcWall(e.x, e.y, DOWN, 1.7, 24, rankSpd(P.SPD.mid), { laneAt: (e.s1 % 2 ? 0.28 : -0.28), laneWidth: 5.2, fam: P.FAM.PELLET, tier: 'M', color: HOT }); } }
       ] },
       // III The Bronze Wheel — rotating gap-wheel + aimed accent, pendulum-strafe (LAYER)
       { name: 'THE BRONZE WHEEL', hp: 0.20, timeout: 34, path: bp_pendulum, loop: 2.4, script: [
         pose(BRZ),
-        { t: 0.35, fn: function (e) { e.s0 += 0.5; P.wheel(e.x, e.y, e.s0, 16, rankSpd(P.SPD.slow), { gapEvery: 6, fam: P.FAM.ORB, tier: 'M', color: MAG }); } },
-        { t: 1.0, fn: function (e) { e.s0 += 0.5; P.wheel(e.x, e.y, e.s0, 16, rankSpd(P.SPD.mid), { gapEvery: 6, fam: P.FAM.ORB, tier: 'S', color: BRZ }); } },
+        { t: 0.35, fn: function (e) { e.s0 += 0.5; P.wheel(e.x, e.y, e.s0, 24, rankSpd(P.SPD.slow), { gapEvery: 6, fam: P.FAM.ORB, tier: 'M', color: MAG }); } },
+        { t: 1.0, fn: function (e) { e.s0 += 0.5; P.wheel(e.x, e.y, e.s0, 24, rankSpd(P.SPD.mid), { gapEvery: 6, fam: P.FAM.ORB, tier: 'S', color: BRZ }); } },
         { t: 1.6, fn: function (e) { e.poseT = 0.34; muzzle(e, ACC); } },
         { t: 1.95, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.2, speed: rankSpd(P.SPD.whip), color: ACC }); } }
       ] },
       // IV Molten Veins — mirrored snake ribbons + kunai accent (LAYER: snake)
       { name: 'MOLTEN VEINS', hp: 0.22, timeout: 34, path: bp_holdCenter, loop: 2.6, script: [
         pose(BRZ),
-        { t: 0.35, fn: function (e) { e.s1++; P.snake(e.x, e.y, DOWN - 0.5, 8, rankSpd(P.SPD.mid), { amp: 46, freq: 0.9, phase: e.s1 * 0.5, fam: P.FAM.SHARD, tier: 'M', color: BRZ }); } },
-        { t: 0.75, fn: function (e) { P.snake(e.x, e.y, DOWN + 0.5, 8, rankSpd(P.SPD.mid), { amp: 46, freq: 0.9, phase: e.s1 * 0.5 + 1.6, fam: P.FAM.SHARD, tier: 'M', color: HOT }); } },
-        { t: 1.5, fn: function (e) { e.poseT = 0.34; muzzle(e, ACC); } },
-        { t: 1.9, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.22, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+        { t: 0.35, fn: function (e) { e.s1++; P.snake(e.x, e.y, DOWN - 0.5, 13, rankSpd(P.SPD.mid), { amp: 48, freq: 0.82, phase: e.s1 * 0.5, fam: P.FAM.SHARD, tier: 'M', color: BRZ }); } },
+        { t: 0.7, fn: function (e) { P.snake(e.x, e.y, DOWN + 0.5, 13, rankSpd(P.SPD.mid), { amp: 48, freq: 0.82, phase: e.s1 * 0.5 + 1.6, fam: P.FAM.SHARD, tier: 'M', color: HOT }); } },
+        { t: 1.3, fn: function (e) { e.s1++; P.snake(e.x, e.y, DOWN, 11, rankSpd(P.SPD.slow), { amp: 60, freq: 0.7, phase: e.s1 * 0.7, fam: P.FAM.SHARD, tier: 'S', color: BRZ }); } },
+        { t: 1.7, fn: function (e) { e.poseT = 0.34; muzzle(e, ACC); } },
+        { t: 2.05, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.22, speed: rankSpd(P.SPD.whip), color: ACC }); } }
       ] },
       // V Colossus Falls — ringGap terrain (gaps tightening) + arcWall lances + accent,
       // emitter rushing the rails (signature: two-speed geometry + one aimed).
-      { name: 'COLOSSUS FALLS', hp: 0.24, timeout: 38, path: bp_rails, loop: 2.8, script: [
+      { name: 'COLOSSUS FALLS', hp: 0.24, timeout: 38, path: bp_rails, loop: 3.0, script: [
         pose(BRZ, 0.36),
-        { t: 0.3, fn: function (e) { e.s0 += 0.5; e.s2++; var gw = Math.max(2.0, 3.4 - e.s2 * 0.14); P.ringGap(e.x, e.y, 26, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: gw, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: MAG }); } },
-        { t: 1.0, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.7, 18, rankSpd(P.SPD.mid), { laneAt: ((e.s1 % 3) - 1) * 0.24, laneWidth: 3.6, fam: P.FAM.PELLET, tier: 'M', color: HOT }); } },
-        { t: 1.7, fn: function (e) { e.poseT = 0.32; muzzle(e, ACC); } },
-        { t: 2.05, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 6, { spread: 0.26, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+        { t: 0.3, fn: function (e) { e.s0 += 0.5; e.s2++; var gw = Math.max(3.8, 5.8 - e.s2 * 0.14); P.ringGap(e.x, e.y, 44, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: gw, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: MAG });
+          P.ringGap(e.x, e.y, 44, rankSpd(P.SPD.slow) + 56, { gaps: 2, gapWidth: gw, offset: e.s0 + 0.09, fam: P.FAM.PELLET, tier: 'S', color: HOT }); } },   // anchor orbs + pellet filler = terrain
+        { t: 1.0, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.8, 30, rankSpd(P.SPD.mid), { laneAt: ((e.s1 % 3) - 1) * 0.24, laneWidth: 6.2, fam: P.FAM.PELLET, tier: 'M', color: HOT }); } },
+        { t: 1.6, fn: function (e) { e.s0 += 0.5; P.ringGap(e.x, e.y, 38, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 4.2, offset: -e.s0 * 1.3, fam: P.FAM.ORB, tier: 'M', color: MAG }); } },   // second terrain volley sustains the slow layer (rotated lane)
+        { t: 2.1, fn: function (e) { e.poseT = 0.32; muzzle(e, ACC); } },
+        { t: 2.4, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 6, { spread: 0.26, speed: rankSpd(P.SPD.whip), color: ACC }); } }
       ] }
     ];
     startBoss(e, phases, cfg);
@@ -2788,49 +2802,52 @@
       // I Scent of Sin — drifting rain curtains + LIME shard petals (rain; the green counterpoint)
       { name: 'SCENT OF SIN', hp: 0.14, timeout: 30, path: bp_holdCenter, loop: 3.0, script: [
         pose(MAG),
-        { t: 0.4, fn: function (e) { e.s0 += 0.6; P.rain(24, { speed: rankSpd(P.SPD.slow), waves: 3, phase: e.s0, gapThresh: 0.05, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } },
-        { t: 1.2, fn: function (e) { e.s0 += 0.6; P.rain(24, { speed: rankSpd(P.SPD.slow), waves: 3, phase: e.s0, gapThresh: 0.05, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } },
-        { t: 2.0, fn: function (e) { e.poseT = 0.4; muzzle(e, LIME); } },
-        { t: 2.4, fn: function (e) { e.s1 += 0.5; P.ring(e.x, e.y, 14, rankSpd(P.SPD.slow), { fam: P.FAM.SHARD, tier: 'M', color: LIME, offset: e.s1, accel: -150, accel2: 130, accelSwitchT: 0.8, minSpeed: 8 }); } }
+        { t: 0.4, fn: function (e) { e.s0 += 0.6; P.rain(32, { speed: rankSpd(P.SPD.slow), waves: 3, phase: e.s0, gapThresh: 0.05, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } },
+        { t: 1.1, fn: function (e) { e.s0 += 0.6; P.rain(32, { speed: rankSpd(P.SPD.slow), waves: 3, phase: e.s0, gapThresh: 0.05, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } },
+        { t: 1.9, fn: function (e) { e.poseT = 0.4; muzzle(e, LIME); } },
+        { t: 2.3, fn: function (e) { e.s1 += 0.5; P.ring(e.x, e.y, 20, rankSpd(P.SPD.slow), { fam: P.FAM.SHARD, tier: 'M', color: LIME, offset: e.s1, accel: -150, accel2: 130, accelSwitchT: 0.8, minSpeed: 8 }); } }
       ] },
       // II The Jaws — mirrored crossfire closing like bites; boss lunges (crossfire)
       { name: 'THE JAWS', hp: 0.15, timeout: 30, path: bp_lunge, loop: 2.4, script: [
         pose(MAG),
-        { t: 0.4, fn: function (e) { e.s1++; P.crossfire(220, W - 220, cfg.holdY - 40, 7, rankSpd(P.SPD.mid), { angle: (e.s1 % 2 ? 0.5 : 0.34), spacing: 34, fam: P.FAM.KUNAI, tier: 'M', color: MAG }); } },
+        { t: 0.4, fn: function (e) { e.s1++; P.crossfire(220, W - 220, cfg.holdY - 40, 11, rankSpd(P.SPD.mid), { angle: (e.s1 % 2 ? 0.5 : 0.34), spacing: 32, fam: P.FAM.KUNAI, tier: 'M', color: MAG }); } },
         { t: 1.2, fn: function (e) { e.poseT = 0.36; muzzle(e, ROSE); } },
-        { t: 1.5, fn: function (e) { P.crossfire(220, W - 220, cfg.holdY - 40, 7, rankSpd(P.SPD.mid), { angle: (e.s1 % 2 ? 0.34 : 0.5), spacing: 34, fam: P.FAM.KUNAI, tier: 'M', color: ROSE }); } }
+        { t: 1.5, fn: function (e) { P.crossfire(220, W - 220, cfg.holdY - 40, 11, rankSpd(P.SPD.mid), { angle: (e.s1 % 2 ? 0.34 : 0.5), spacing: 32, fam: P.FAM.KUNAI, tier: 'M', color: ROSE }); } }
       ] },
       // III Weighing of the Heart — alternating left/right arcWalls, the scales (arcWall)
       { name: 'WEIGHING OF THE HEART', hp: 0.16, timeout: 32, path: bp_pendulum, loop: 2.6, script: [
         pose(MAG),
-        { t: 0.4, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.5, 16, rankSpd(P.SPD.slow), { laneAt: -0.3, laneWidth: 3.4, fam: P.FAM.PELLET, tier: 'M', color: MAG }); } },
-        { t: 1.3, fn: function (e) { e.poseT = 0.4; muzzle(e, ROSE); } },
-        { t: 1.7, fn: function (e) { P.arcWall(e.x, e.y, DOWN, 1.5, 16, rankSpd(P.SPD.mid), { laneAt: 0.3, laneWidth: 3.4, fam: P.FAM.PELLET, tier: 'M', color: ROSE }); } }
+        { t: 0.4, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.6, 24, rankSpd(P.SPD.slow), { laneAt: -0.3, laneWidth: 5.0, fam: P.FAM.PELLET, tier: 'M', color: MAG }); } },
+        { t: 1.2, fn: function (e) { e.poseT = 0.4; muzzle(e, ROSE); } },
+        { t: 1.6, fn: function (e) { P.arcWall(e.x, e.y, DOWN, 1.6, 24, rankSpd(P.SPD.mid), { laneAt: 0.3, laneWidth: 5.0, fam: P.FAM.PELLET, tier: 'M', color: ROSE }); } }
       ] },
       // IV Heart-Seekers — pulse orb terrain threaded by aimed seeker bursts (LAYER)
       { name: 'HEART-SEEKERS', hp: 0.17, timeout: 34, path: bp_holdCenter, loop: 2.6, script: [
         pose(MAG),
-        { t: 0.3, fn: function (e) { e.s0 += 0.35; P.pulse(e.x, e.y, { rings: 3, count: 16, speed: rankSpd(P.SPD.slow), speedStep: 55, offset: e.s0, colorA: MAG, colorB: ROSE }); } },
-        { t: 1.0, fn: function (e) { e.s0 += 0.35; P.pulse(e.x, e.y, { rings: 2, count: 14, speed: rankSpd(P.SPD.slow), speedStep: 60, offset: -e.s0, colorA: ROSE, colorB: MAG }); } },
+        { t: 0.3, fn: function (e) { e.s0 += 0.35; P.pulse(e.x, e.y, { rings: 3, count: 22, speed: rankSpd(P.SPD.slow), speedStep: 55, offset: e.s0, colorA: MAG, colorB: ROSE }); } },
+        { t: 1.0, fn: function (e) { e.s0 += 0.35; P.pulse(e.x, e.y, { rings: 2, count: 18, speed: rankSpd(P.SPD.slow), speedStep: 60, offset: -e.s0, colorA: ROSE, colorB: MAG }); } },
         { t: 1.6, fn: function (e) { e.poseT = 0.34; muzzle(e, ACC); } },
-        { t: 1.95, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.2, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+        { t: 1.95, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 6, { spread: 0.2, speed: rankSpd(P.SPD.whip), color: ACC }); } }
       ] },
       // V Devourer — rotating ringGap terrain + seekers, lunging between bites (LAYER)
       { name: 'DEVOURER', hp: 0.18, timeout: 36, path: bp_lunge, loop: 2.8, script: [
         pose(MAG),
-        { t: 0.3, fn: function (e) { e.s0 += 0.55; P.ringGap(e.x, e.y, 24, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 3.0, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: MAG }); } },
-        { t: 1.0, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 22, rankSpd(P.SPD.mid), { gaps: 2, gapWidth: 2.8, offset: -e.s0, fam: P.FAM.ORB, tier: 'M', color: ROSE }); } },
+        { t: 0.3, fn: function (e) { e.s0 += 0.55; P.ringGap(e.x, e.y, 32, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 4.0, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: MAG });
+          P.ringGap(e.x, e.y, 32, rankSpd(P.SPD.slow) + 60, { gaps: 2, gapWidth: 4.0, offset: e.s0 + 0.1, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } },   // pellet filler
+        { t: 1.0, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 28, rankSpd(P.SPD.mid), { gaps: 2, gapWidth: 3.6, offset: -e.s0, fam: P.FAM.ORB, tier: 'M', color: ROSE }); } },
         { t: 1.6, fn: function (e) { e.poseT = 0.34; muzzle(e, ACC); } },
         { t: 1.95, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 6, { spread: 0.24, speed: rankSpd(P.SPD.whip), color: ACC }); } }
       ] },
       // VI The Second Death — everything at once, one drifting lane (snake + ringGap + accent)
       { name: 'THE SECOND DEATH', hp: 0.20, timeout: 40, path: bp_rails, loop: 3.0, script: [
         pose(MAG, 0.36),
-        { t: 0.3, fn: function (e) { e.s2++; P.snake(e.x, e.y, DOWN - 0.4, 8, rankSpd(P.SPD.mid), { amp: 44, freq: 0.9, phase: e.s2 * 0.5, fam: P.FAM.SHARD, tier: 'M', color: MAG }); } },
-        { t: 0.7, fn: function (e) { P.snake(e.x, e.y, DOWN + 0.4, 8, rankSpd(P.SPD.mid), { amp: 44, freq: 0.9, phase: e.s2 * 0.5 + 1.6, fam: P.FAM.SHARD, tier: 'M', color: ROSE }); } },
-        { t: 1.3, fn: function (e) { e.s0 += 0.5; P.ringGap(e.x, e.y, 22, rankSpd(P.SPD.slow), { gaps: 1, gapWidth: 3.6, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: MAG }); } },
-        { t: 2.0, fn: function (e) { e.poseT = 0.32; muzzle(e, ACC); } },
-        { t: 2.4, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 6, { spread: 0.26, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+        { t: 0.3, fn: function (e) { e.s2++; P.snake(e.x, e.y, DOWN - 0.4, 16, rankSpd(P.SPD.mid), { amp: 46, freq: 0.85, phase: e.s2 * 0.5, fam: P.FAM.SHARD, tier: 'M', color: MAG }); } },
+        { t: 0.6, fn: function (e) { P.snake(e.x, e.y, DOWN + 0.4, 16, rankSpd(P.SPD.mid), { amp: 46, freq: 0.85, phase: e.s2 * 0.5 + 1.6, fam: P.FAM.SHARD, tier: 'M', color: ROSE }); } },
+        { t: 1.1, fn: function (e) { e.s0 += 0.5; P.ringGap(e.x, e.y, 46, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 5.4, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: MAG });
+          P.ringGap(e.x, e.y, 46, rankSpd(P.SPD.slow) + 54, { gaps: 2, gapWidth: 5.4, offset: e.s0 + 0.1, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } },   // anchor orbs + pellet filler
+        { t: 1.7, fn: function (e) { e.s0 += 0.5; P.ringGap(e.x, e.y, 38, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 4.6, offset: -e.s0 * 1.3, fam: P.FAM.ORB, tier: 'M', color: MAG }); } },   // second terrain volley (the drifting lane)
+        { t: 2.2, fn: function (e) { e.poseT = 0.32; muzzle(e, ACC); } },
+        { t: 2.5, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 7, { spread: 0.26, speed: rankSpd(P.SPD.whip), color: ACC }); } }
       ] }
     ];
     startBoss(e, phases, cfg);
@@ -2852,49 +2869,51 @@
       // I Coronation — interleaved ringGap lattice whose gaps spell a drifting lane (ringGap)
       { name: 'CORONATION', hp: 0.14, timeout: 32, path: bp_holdCenter, loop: 2.8, script: [
         pose(AMB),
-        { t: 0.4, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 26, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 3.2, offset: e.s0, fam: P.FAM.ORB, tier: 'M', color: AMB }); } },
-        { t: 1.1, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 26, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 3.2, offset: e.s0 + 0.2, fam: P.FAM.RING, tier: 'M', color: ROSE }); } },
-        { t: 1.9, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 26, rankSpd(P.SPD.mid), { gaps: 2, gapWidth: 3.2, offset: e.s0 + 0.4, fam: P.FAM.ORB, tier: 'S', color: AMB }); } }
+        { t: 0.4, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 34, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 4.2, offset: e.s0, fam: P.FAM.ORB, tier: 'M', color: AMB }); } },
+        { t: 1.0, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 34, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 4.2, offset: e.s0 + 0.2, fam: P.FAM.RING, tier: 'M', color: ROSE }); } },
+        { t: 1.7, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 34, rankSpd(P.SPD.mid), { gaps: 2, gapWidth: 4.2, offset: e.s0 + 0.4, fam: P.FAM.ORB, tier: 'S', color: AMB }); } }
       ] },
       // II Tribute of Gold — drifting rain curtains, two speeds (rain)
       { name: 'TRIBUTE OF GOLD', hp: 0.15, timeout: 32, path: bp_pendulum, loop: 2.6, script: [
         pose(AMB),
-        { t: 0.4, fn: function (e) { e.s0 += 0.7; P.rain(26, { speed: rankSpd(P.SPD.slow), waves: 4, phase: e.s0, gapThresh: 0.02, fam: P.FAM.PELLET, tier: 'S', color: AMB }); } },
-        { t: 1.1, fn: function (e) { e.s0 += 0.7; P.rain(26, { speed: rankSpd(P.SPD.mid), waves: 4, phase: -e.s0, gapThresh: 0.02, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } }
+        { t: 0.4, fn: function (e) { e.s0 += 0.7; P.rain(36, { speed: rankSpd(P.SPD.slow), waves: 4, phase: e.s0, gapThresh: 0.02, fam: P.FAM.PELLET, tier: 'S', color: AMB }); } },
+        { t: 1.0, fn: function (e) { e.s0 += 0.7; P.rain(36, { speed: rankSpd(P.SPD.mid), waves: 4, phase: -e.s0, gapThresh: 0.02, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } }
       ] },
       // III Wheel of Thrones — rotating spoke wheel + aimed accent, orbiting core (LAYER)
       { name: 'WHEEL OF THRONES', hp: 0.16, timeout: 34, path: bp_orbit, loop: 2.4, script: [
         pose(AMB),
-        { t: 0.35, fn: function (e) { e.s0 += 0.5; P.wheel(e.x, e.y, e.s0, 18, rankSpd(P.SPD.slow), { gapEvery: 6, fam: P.FAM.ORB, tier: 'M', color: AMB }); } },
-        { t: 1.0, fn: function (e) { e.s0 += 0.5; P.wheel(e.x, e.y, e.s0, 18, rankSpd(P.SPD.mid), { gapEvery: 6, fam: P.FAM.ORB, tier: 'S', color: ROSE }); } },
+        { t: 0.35, fn: function (e) { e.s0 += 0.5; P.wheel(e.x, e.y, e.s0, 26, rankSpd(P.SPD.slow), { gapEvery: 6, fam: P.FAM.ORB, tier: 'M', color: AMB }); } },
+        { t: 1.0, fn: function (e) { e.s0 += 0.5; P.wheel(e.x, e.y, e.s0, 26, rankSpd(P.SPD.mid), { gapEvery: 6, fam: P.FAM.ORB, tier: 'S', color: ROSE }); } },
         { t: 1.6, fn: function (e) { e.poseT = 0.34; muzzle(e, ACC); } },
-        { t: 1.95, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.2, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+        { t: 1.95, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 6, { spread: 0.2, speed: rankSpd(P.SPD.whip), color: ACC }); } }
       ] },
       // IV Edict Walls — alternating arcWall edicts + aimed accent (LAYER)
       { name: 'EDICT WALLS', hp: 0.16, timeout: 34, path: bp_pendulum, loop: 2.6, script: [
         pose(AMB),
-        { t: 0.35, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.7, 18, rankSpd(P.SPD.slow), { laneAt: (e.s1 % 2 ? -0.26 : 0.26), laneWidth: 3.6, fam: P.FAM.PELLET, tier: 'M', color: AMB }); } },
-        { t: 1.0, fn: function (e) { P.arcWall(e.x, e.y, DOWN, 1.4, 12, rankSpd(P.SPD.mid), { laneAt: (e.s1 % 2 ? 0.26 : -0.26), laneWidth: 3.4, fam: P.FAM.ORB, tier: 'S', color: ROSE }); } },
+        { t: 0.35, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.8, 26, rankSpd(P.SPD.slow), { laneAt: (e.s1 % 2 ? -0.26 : 0.26), laneWidth: 5.2, fam: P.FAM.PELLET, tier: 'M', color: AMB }); } },
+        { t: 1.0, fn: function (e) { P.arcWall(e.x, e.y, DOWN, 1.5, 18, rankSpd(P.SPD.mid), { laneAt: (e.s1 % 2 ? 0.26 : -0.26), laneWidth: 5.1, fam: P.FAM.ORB, tier: 'S', color: ROSE }); } },
         { t: 1.7, fn: function (e) { e.poseT = 0.32; muzzle(e, ACC); } },
-        { t: 2.05, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.22, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+        { t: 2.05, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 6, { spread: 0.22, speed: rankSpd(P.SPD.whip), color: ACC }); } }
       ] },
       // V Regalia — concentric pulse terrain + aimed seekers, rushing the rails (LAYER)
       { name: 'REGALIA', hp: 0.17, timeout: 36, path: bp_rails, loop: 2.7, script: [
         pose(AMB),
-        { t: 0.35, fn: function (e) { e.s0 += 0.32; P.pulse(e.x, e.y, { rings: 3, count: 18, speed: rankSpd(P.SPD.slow), speedStep: 56, offset: e.s0, colorA: AMB, colorB: ROSE }); } },
-        { t: 1.1, fn: function (e) { e.s0 += 0.32; P.pulse(e.x, e.y, { rings: 2, count: 16, speed: rankSpd(P.SPD.slow), speedStep: 62, offset: -e.s0, colorA: ROSE, colorB: MAG }); } },
+        { t: 0.35, fn: function (e) { e.s0 += 0.32; P.pulse(e.x, e.y, { rings: 3, count: 24, speed: rankSpd(P.SPD.slow), speedStep: 56, offset: e.s0, colorA: AMB, colorB: ROSE }); } },
+        { t: 1.1, fn: function (e) { e.s0 += 0.32; P.pulse(e.x, e.y, { rings: 2, count: 22, speed: rankSpd(P.SPD.slow), speedStep: 62, offset: -e.s0, colorA: ROSE, colorB: MAG }); } },
         { t: 1.7, fn: function (e) { e.poseT = 0.32; muzzle(e, ACC); } },
-        { t: 2.05, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 6, { spread: 0.24, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+        { t: 2.05, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 7, { spread: 0.24, speed: rankSpd(P.SPD.whip), color: ACC }); } }
       ] },
       // VI The Gilded Verdict — full-screen finale lattice with one readable path
       // (snake + ringGap two-speed geometry + one aimed accent; max articulation).
       { name: 'THE GILDED VERDICT', hp: 0.22, timeout: 42, path: bp_rails, loop: 3.0, script: [
         pose(AMB, 0.36),
-        { t: 0.3, fn: function (e) { e.s2++; P.snake(e.x, e.y, DOWN - 0.35, 9, rankSpd(P.SPD.mid), { amp: 42, freq: 0.85, phase: e.s2 * 0.5, fam: P.FAM.SHARD, tier: 'M', color: AMB }); } },
-        { t: 0.7, fn: function (e) { P.snake(e.x, e.y, DOWN + 0.35, 9, rankSpd(P.SPD.mid), { amp: 42, freq: 0.85, phase: e.s2 * 0.5 + 1.6, fam: P.FAM.SHARD, tier: 'M', color: ROSE }); } },
-        { t: 1.3, fn: function (e) { e.s0 += 0.45; P.ringGap(e.x, e.y, 24, rankSpd(P.SPD.slow), { gaps: 1, gapWidth: 3.8, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: MAG }); } },
-        { t: 2.0, fn: function (e) { e.poseT = 0.3; muzzle(e, ACC); } },
-        { t: 2.4, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 7, { spread: 0.28, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+        { t: 0.3, fn: function (e) { e.s2++; P.snake(e.x, e.y, DOWN - 0.35, 18, rankSpd(P.SPD.mid), { amp: 44, freq: 0.8, phase: e.s2 * 0.5, fam: P.FAM.SHARD, tier: 'M', color: AMB }); } },
+        { t: 0.6, fn: function (e) { P.snake(e.x, e.y, DOWN + 0.35, 18, rankSpd(P.SPD.mid), { amp: 44, freq: 0.8, phase: e.s2 * 0.5 + 1.6, fam: P.FAM.SHARD, tier: 'M', color: ROSE }); } },
+        { t: 1.0, fn: function (e) { e.s0 += 0.45; P.ringGap(e.x, e.y, 52, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 6.6, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: MAG });
+          P.ringGap(e.x, e.y, 52, rankSpd(P.SPD.slow) + 58, { gaps: 2, gapWidth: 6.6, offset: e.s0 + 0.09, fam: P.FAM.PELLET, tier: 'S', color: AMB }); } },   // anchor orbs + full-lattice pellet filler
+        { t: 1.6, fn: function (e) { e.s0 += 0.45; P.ringGap(e.x, e.y, 44, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 5.4, offset: -e.s0 * 1.2, fam: P.FAM.RING, tier: 'M', color: ROSE }); } },   // second terrain layer — the densest screen in the game
+        { t: 2.2, fn: function (e) { e.poseT = 0.3; muzzle(e, ACC); } },
+        { t: 2.5, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 8, { spread: 0.3, speed: rankSpd(P.SPD.whip), color: ACC }); } }
       ] }
     ];
     startBoss(e, phases, cfg);
@@ -3609,8 +3628,7 @@
     // ---- BREATHERS — short, sparse, gold-heavy; the valley ----
     { name: 'breatherGold', weight: 7, minSector: 0, roles: ['breather'], fn: function (rng) {
         for (var g = 0; g < 10; g++) spawnGold(150 + rng() * (W - 300), 200 + rng() * 500, 1, 0.7);
-        setTimerSpawn(0.3, function () { spawnDarter(300, 0, W + 160); });
-        setTimerSpawn(0.9, function () { spawnDarter(W - 300, 0, -160); });
+        setTimerSpawn(0.5, function () { spawnDarter(rng() < 0.5 ? 300 : W - 300, 0, W + 160); });   // a single straggler — the valley stays sparse (density must breathe)
       } },
     { name: 'breatherStragglers', weight: 5, minSector: 1, roles: ['breather'], fn: function (rng) {
         for (var g = 0; g < 8; g++) spawnGold(180 + rng() * (W - 360), 220 + rng() * 400, 1, 0.6);
@@ -3623,7 +3641,7 @@
         setTimerSpawn(0.0, function () { spawnMidship(clampX(ax, 260)); });
         setTimerSpawn(0.5, function () { spawnTurret(clampX(ax - 220, 180), 320); });
         setTimerSpawn(0.7, function () { spawnTurret(clampX(ax + 220, 180), 320); });
-        for (var i = 0; i < 4; i++) (function (i) { setTimerSpawn(1.2 + i * 0.3, function () { spawnDarter(160 + i * 30, 0, W + 160); spawnDarter(W - 160 - i * 30, 0, -160); }); })(i);
+        for (var i = 0; i < 3; i++) (function (i) { setTimerSpawn(1.2 + i * 0.35, function () { spawnDarter(160 + i * 30, 0, W + 160); spawnDarter(W - 160 - i * 30, 0, -160); }); })(i);
       } },
     { name: 'crescendoCarrier', weight: 5, minSector: 1, roles: ['crescendo'], fn: function (rng) {
         setTimerSpawn(0, function () { spawnCarrier(G.rank); });
@@ -3876,7 +3894,7 @@
     hud.fillText('x' + G.mult.toFixed(G.mult >= 3 ? 1 : 2), 40, 26);
     hud.font = '600 24px Consolas, monospace';
     hud.fillStyle = UI_CYAN;
-    hud.fillText('GRAZE ' + G.graze, 40, 78);
+    hud.fillText('GRAZE ' + G.graze, 40, 74);
     drawHubris();
 
     hud.textAlign = 'center';
@@ -3901,16 +3919,18 @@
   // playfield. Small footprint (Bounds, binding). Hubris-gold tint.
   function drawHubris() {
     var h = G.hubris, mult = HUBRIS_MULT[h.step];
-    var x = 40, y = 122;
+    // Stacked BELOW the GRAZE counter with clear spacing so the label + pips no
+    // longer collide with the graze cluster (score / graze / hubris read cleanly).
+    var x = 40, y = 152;
     hud.textAlign = 'left';
     hud.font = '600 18px Consolas, monospace';
     hud.fillStyle = UI_DIM();
-    hud.fillText('HUBRIS', x, y - 26);
+    hud.fillText('HUBRIS', x, y - 28);
     hud.font = '700 32px Consolas, monospace';
     hud.fillStyle = h.step > 0 ? HUBRIS_COL : UI_DIM();
     hud.fillText('x' + mult.toFixed(1), x, y);
     // five step pips: lit for steps gained, the next pip fills by partial progress.
-    var px = x + 108, py = y - 20, pw = 24, ph = 13, gap = 6;
+    var px = x + 108, py = y - 22, pw = 24, ph = 13, gap = 6;
     for (var i = 0; i < HUBRIS_MAX; i++) {
       var sx = px + i * (pw + gap);
       hud.fillStyle = 'rgba(52,40,12,0.75)';
