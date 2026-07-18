@@ -44,8 +44,19 @@
   var GUNGNIR_DMG = 18;          // Odin spear per-pierce damage
   var SERPENT_DMG = 55;          // Quetzalcoatl serpent DPS
   var killGoldMul = 1;           // transient gold multiplier for execute / judgment kills
+  // HUBRIS meter — a persistent stepped multiplier on ALL gold + score, composed
+  // multiplicatively with the transient APOTHEOSIS burst (G.mult). Homage layer
+  // (DANMAKU.md "Score as homage"): built by graze, point-blank kills, and named
+  // skill events; a hit knocks it down one step (never below x1.0). Tuned so a
+  // skilled sector raises ~2 steps, an average one ~1.
+  var HUBRIS_MULT = [1.0, 1.2, 1.4, 1.6, 1.8, 2.0];
+  var HUBRIS_MAX = 5;                          // top step index (x2.0)
+  var HUBRIS_GRAZE = 0.008;                    // step-progress per graze
+  var HUBRIS_PB = 0.03, HUBRIS_PB_R = 140;     // point-blank kill: progress + radius (px)
+  Game.HUBRIS_MULT = HUBRIS_MULT;              // single source of truth (run.js end-screen reads this)
 
   var UI_CYAN = '#5fe6ff', UI_GOLD = '#ffd766', UI_RED = '#ff5a6e';
+  var HUBRIS_COL = '#ffc24a';    // hubris gold tint (distinct from loot UI_GOLD)
   function UI_DIM() { return '#6fa9b8'; }
 
   // ---------------------------------------------------------------------
@@ -84,6 +95,7 @@
     timers.length = 0;
     Patterns.setGlobal(1, 1);
     goldCombo = 0; goldComboT = 0;
+    resetForms(); curFormId = 0;
     for (var h = 0; h < hazards.length; h++) hazards[h].active = false;
     return {
       mode: 'title',
@@ -91,6 +103,13 @@
       lives: opts.lives != null ? opts.lives : 3,
       graze: 0,
       mult: 1, multFrom: 1, multDecayT: 0,
+      // HUBRIS meter: persistent stepped multiplier (step index -> HUBRIS_MULT).
+      // prog = 0..1 toward the next step; peak = highest step reached this run.
+      hubris: { step: 0, prog: 0, peak: 0 },
+      // arcade run tally (grazes read from G.graze, peak from G.hubris.peak).
+      tally: { waves: 0, wipes: 0, phases: 0, untouched: 0 },
+      waveHits: 0,   // player hits taken in the current wave (for UNTOUCHED)
+      skillEvtT: null, skillEvtSlot: 0,   // skillEvent anti-overlap stacking (fix #5)
       rank: 1,
       paused: false,
       time: 0,
@@ -323,6 +342,7 @@
     addScore(GOLD_VALUE * g.value * G.mult * gw);
     addGauge(GOLD_GAUGE * g.value);
     var bank = g.bank > 0 ? g.bank : Math.round(BANK_PER_SHARD * g.value * gw);
+    bank = Math.round(bank * hMult());   // HUBRIS multiplies all gold earned
     G.wallet += bank;
     Run.addCareerGold(bank);
     SFX.gold(goldCombo);
@@ -332,7 +352,40 @@
   // ---------------------------------------------------------------------
   // scoring / gauge / vaunt
   // ---------------------------------------------------------------------
-  function addScore(n) { G.score += Math.floor(n); Run.reportScore(G.score); }
+  // HUBRIS multiplies ALL score (here) and gold (collectGold), composing with the
+  // transient burst G.mult that callers already fold into n.
+  function hMult() { return HUBRIS_MULT[G.hubris.step]; }
+  // returns the amount actually granted (post-HUBRIS) so callers can show the
+  // real number in floaties/announces instead of the pre-HUBRIS base.
+  function addScore(n) { var d = Math.floor(n * hMult()); G.score += d; Run.reportScore(G.score); return d; }
+  // build step-progress; carry across step boundaries, cap at the top step.
+  function addHubris(amt) {
+    var h = G.hubris;
+    if (h.step >= HUBRIS_MAX) { h.prog = 1; return; }
+    h.prog += amt;
+    while (h.prog >= 1 && h.step < HUBRIS_MAX) { h.prog -= 1; h.step++; SFX.hubrisUp(); }
+    if (h.step >= HUBRIS_MAX) h.prog = 1;
+    if (h.step > h.peak) h.peak = h.step;
+  }
+  // taking a hit: drop one step (never below x1.0) and clear partial progress.
+  function dropHubris() {
+    var h = G.hubris;
+    if (h.step > 0) { h.step--; SFX.hubrisDrop(); }
+    h.prog = 0;
+  }
+  // named skill event: small gold popup + sting + a full step of progress. The
+  // shared helper for FORMATION WIPE / UNTOUCHED / PHASE SEIZED (spellcard homage).
+  // If another skill popup fired within ~1s (e.g. WIPE + UNTOUCHED on the same
+  // clear frame), stack this one ~70px lower so both stay readable; the slot
+  // resets per wave (beginWave) and whenever the gap exceeds 1s.
+  function skillEvent(x, y, text, size) {
+    if (G.skillEvtT != null && G.time - G.skillEvtT < 1.0) G.skillEvtSlot++;
+    else G.skillEvtSlot = 0;
+    G.skillEvtT = G.time;
+    addPopup(x, y + G.skillEvtSlot * 70, text, HUBRIS_COL, size || 34);
+    SFX.skillEvent();
+    addHubris(1.0);
+  }
   function addGauge(n) {
     if (G.vaunt.active) return;
     G.vaunt.gauge = Math.min(GAUGE_MAX, G.vaunt.gauge + n);
@@ -512,8 +565,8 @@
     var v = G.vaunt; v.active = false;
     var payout = v.killCount * G.mult * VAUNT_BASE * G.vauntBonusMul;   // IMPERIAL SEAL charm boosts payout
     if (payout > 0) {
-      addScore(payout);
-      addPopup(W / 2, H * 0.42, 'APOTHEOSIS BONUS  +' + commas(Math.floor(payout)), UI_GOLD, 46);
+      var _payGain = addScore(payout);
+      addPopup(W / 2, H * 0.42, 'APOTHEOSIS BONUS  +' + commas(_payGain), UI_GOLD, 46);   // post-HUBRIS (fix #3)
       announce('APOTHEOSIS BONUS', v.killCount + ' kills  x' + G.mult.toFixed(1), 2.2);
       SFX.vauntBonus();
     }
@@ -1021,6 +1074,7 @@
     if (e.dying) return;
     // ETERNAL DEVOTION: the executed rise as charmed ghost allies instead of dying
     if (G.duos.eternalDevotion && !e.boss && !e.charmed) {
+      creditForm(e);   // execute-conversion still counts as defeating the member (fix #1)
       e.charmed = true; e.charmMeter = 0; e.charmT = 4; e.ghost = true; e.fireHold = 0;
       flash(e.x, e.y, [0.85, 0.3, 0.7], 80, 0.3); spark(e.x, e.y, [0.85, 0.3, 0.7], 12, 280, 26);
       return;
@@ -1516,6 +1570,8 @@
     if (!p.alive || p.invuln > 0 || G.vaunt.active || G.vaunt.mercy > 0) return;
     p.alive = false; p.dead = true; p.respawnT = 1.4;
     G.lives--;
+    G.waveHits++;                                         // breaks UNTOUCHED for this wave
+    dropHubris();                                         // a hit knocks HUBRIS down one step + clears progress
     if (!G.keepMult) { G.mult = 1; G.multDecayT = 0; }   // OATH TABLET charm: multiplier survives death
     G.vaunt.gauge = Math.max(0, G.vaunt.gauge * 0.3);
     SFX.death();
@@ -1571,6 +1627,11 @@
     e.holdX = 0; e.holdY = 0; e.retreatAt = 0; e.didRetreat = false;
     e.arrived = false; e.phaseT = 0; e.breathT = 0; e.segFloorHp = 0; e.segBounds = null;
     e.onDeath = null; e.onUpdate = null;
+    // formation membership: stamped with the current wave's squadron id (0 = none,
+    // e.g. boss waves) and counted once toward FORMATION WIPE tracking. formCounted
+    // MUST reset on pooled reuse or a fresh member is treated as already-defeated.
+    e.formId = curFormId; e.formCounted = false;
+    if (curFormId) { var _f = findForm(curFormId); if (_f) _f.count++; }
     return e;
   }
 
@@ -1684,6 +1745,7 @@
 
   function charmEnemy(e) {
     if (e.boss || e.charmed) return;
+    creditForm(e);   // charming a squadron member counts as defeating it (fix #1)
     e.charmed = true; e.charmMeter = 0;
     e.charmT = CHARM_TIME * (G.mods.aphroLong ? 1.6 : 1);
     spark(e.x, e.y, [1, 0.5, 0.85], 10, 260, 28);
@@ -2175,7 +2237,7 @@
     if (e.fireT <= 0 && e.y > 100 && e.y < H - 400) { e.fireT = 1.4; Patterns.ring(e.x, e.y, 6 + e.gen * 2, 180 * G.rank, { color: Patterns.LIME, radius: 11 }); }
     if (e.y > H + 120) killEnemy(e, false);
   }
-  function splitterDeath(e) { if (e.gen < 2) { spawnSplitter(e.x - 32, e.y, e.gen + 1); spawnSplitter(e.x + 32, e.y, e.gen + 1); } }
+  function splitterDeath(e) { if (e.gen < 2) spawnLoose(function () { spawnSplitter(e.x - 32, e.y, e.gen + 1); spawnSplitter(e.x + 32, e.y, e.gen + 1); }); }   // children don't join the squadron (fix #2)
 
   // CHORUS ACOLYTE — heals nearest elite/boss; skitters from the player
   function spawnAcolyte(x) {
@@ -2212,7 +2274,7 @@
     e.t += dt;
     if (e.y < 300) e.y += e.vy * dt; else e.x = W / 2 + Math.sin(e.t * 0.4) * 260;
     e.rot = Math.PI; e.fireT -= dt;
-    if (e.fireT <= 0) { e.fireT = e.fireCd; spawnEscort(e.x, e.y); }
+    if (e.fireT <= 0) { e.fireT = e.fireCd; spawnLoose(function () { spawnEscort(e.x, e.y); }); }   // escorts don't join the squadron (fix #2)
     if (e.t > 40) killEnemy(e, false);
   }
   function carrierDeath(e) { var n = 3 + (Math.random() < 0.5 ? 1 : 0); for (var i = 0; i < n; i++) spawnDebris(e.x, e.y, Math.random() * TAU); }
@@ -2349,11 +2411,15 @@
     Engine.gold.forEach(function (g) { if (n < 6 && g.value < 0.6 && !g.homing) { spark(g.x, g.y, [0.9, 0.7, 0.3], 3, 200, 18); Engine.gold.release(g); n++; } });
   }
   function apostateDecoy(e) {
-    var d = newEnemy(1, 200 + Math.random() * (W - 400), 300 + Math.random() * 320, 30, GL.SPR.SHIP_PLAYER, 60, 26, [0.5, 1, 0.6], 2, 200, false);
+    // fakedecoy is a summon — spawn loose so its self-destruct (killEnemy false)
+    // doesn't mark the wave's squadron as escaped and block a WIPE (fix #2).
+    var d = spawnLoose(function () { return newEnemy(1, 200 + Math.random() * (W - 400), 300 + Math.random() * 320, 30, GL.SPR.SHIP_PLAYER, 60, 26, [0.5, 1, 0.6], 2, 200, false); });
     if (d) { d.arch = 'fakedecoy'; d.vy = 0; d.onUpdate = function (dd, ddt) { dd.t += ddt; dd.rot = 0; if (dd.t > 4) killEnemy(dd, false); }; }
   }
   function apostateClones(e) {
-    for (var i = 0; i < 2; i++) { var c = newEnemy(1, e.x + (i ? 120 : -120), e.y + 60, 40, GL.SPR.SHIP_POP, 60, 26, [1, 0.5, 0.3], 3, 300, false); if (c) { c.vy = 120; c.fireCd = 1.0; c.onUpdate = updateEscort; } }
+    spawnLoose(function () {   // apostate clones are summons — never squadron members (fix #2)
+      for (var i = 0; i < 2; i++) { var c = newEnemy(1, e.x + (i ? 120 : -120), e.y + 60, 40, GL.SPR.SHIP_POP, 60, 26, [1, 0.5, 0.3], 3, 300, false); if (c) { c.vy = 120; c.fireCd = 1.0; c.onUpdate = updateEscort; } }
+    });
   }
 
   // ==================================================================
@@ -2465,7 +2531,7 @@
     if (e.phase < phases.length - 1) {
       var timedOut = e.phaseT >= phases[e.phase].timeout;
       if (e.hp <= e.segFloorHp || timedOut) {
-        if (!timedOut) addPopup(e.x, e.y - 40, 'PHASE SEIZED', UI_GOLD, 30);   // homage: beaten on damage
+        if (!timedOut) { skillEvent(e.x, e.y - 40, 'PHASE SEIZED', 30); G.tally.phases++; }   // homage: beaten on damage — grants a HUBRIS step
         bossEnterPhase(e, phases, cfg, e.phase + 1, true);
       }
     }
@@ -2668,8 +2734,8 @@
       for (var i = 0; i < 90; i++) spawnGold(e.x, e.y, 1, 1.4);
       bigDeath(e, 160);
       announce('SOVEREIGN FELLED', 'run complete', 3.4);
-      addScore(500000 * G.mult);
-      addPopup(W / 2, H * 0.4, 'CLEAR BONUS  +' + commas(Math.floor(500000 * G.mult)), UI_GOLD, 48);
+      var _clearGain = addScore(500000 * G.mult);
+      addPopup(W / 2, H * 0.4, 'CLEAR BONUS  +' + commas(_clearGain), UI_GOLD, 48);   // post-HUBRIS (fix #3)
     };
   }
   function bigDeath(e, goldN) {
@@ -2756,8 +2822,20 @@
   function killEnemy(e, reward) {
     if (e.dying) return;
     e.dying = true;
+    // formation accounting: a rewarded kill credits the squadron (once, deduped);
+    // a reward=false release (path exit / despawn) marks it escaped (no wipe) —
+    // unless the member was already credited (e.g. charmed, then flew off).
+    if (reward) creditForm(e);
+    else if (e.formId && !e.formCounted) { var _ff = findForm(e.formId); if (_ff) _ff.exited = true; }
     if (reward) {
-      addScore(e.score * G.mult);
+      // point-blank kill (flying closer than you need to) feeds the HUBRIS meter —
+      // only off a LIVE player position (a burn/hazard kill while dead sits on a
+      // stale death spot, which would grant a bogus point-blank; fix #4).
+      if (G.player.alive) {
+        var _pdx = e.x - G.player.x, _pdy = e.y - G.player.y;
+        if (_pdx * _pdx + _pdy * _pdy <= HUBRIS_PB_R * HUBRIS_PB_R) addHubris(HUBRIS_PB);
+      }
+      var _gain = addScore(e.score * G.mult);
       addCharge(SP_KILL);
       var gN = e.gold * (e.elite ? G.aff.eliteGoldMul : 1) * killGoldMul * ((G.mods.jadeTribute && e.weak) ? 1.3 : 1);
       spawnGold(e.x, e.y, Math.round(gN), 1);
@@ -2771,7 +2849,7 @@
       spark(e.x, e.y, [1, 0.7, 0.35], e.boss ? 40 : 14, 420, 32);
       flash(e.x, e.y, [1, 0.85, 0.5], e.boss ? 220 : 70, 0.22);
       SFX.explosion(e.boss); addShake(e.boss ? 6 : 2);
-      addPopup(e.x, e.y, '+' + commas(Math.floor(e.score * G.mult)), UI_GOLD, e.boss ? 40 : 24);
+      addPopup(e.x, e.y, '+' + commas(_gain), UI_GOLD, e.boss ? 40 : 24);   // show the post-HUBRIS grant (fix #3)
       if (G.aff.volatile) Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 3, 0.5, 300 * G.rank, { color: Patterns.LIME, radius: 11 });
       if (G.vaunt.active) {
         G.vaunt.killCount++;
@@ -2821,6 +2899,7 @@
       var gr = b.radius + GRAZE_R;
       if (!b.grazed && d2 <= gr * gr) {
         b.grazed = true; G.graze++;
+        addHubris(HUBRIS_GRAZE);                    // graze feeds the HUBRIS meter (b.grazed prevents double-count)
         addGauge(GRAZE_GAUGE * (1 + G.hermes.graze));
         addScore(GRAZE_SCORE * G.mult);
         if (G.communion === 'CELESTIAL COURT') addCharge(0.01);   // Harmony of Heaven: grazes feed special charge
@@ -2908,8 +2987,40 @@
     for (var i = timers.length - 1; i >= 0; i--) { timers[i].t -= dt; if (timers[i].t <= 0) { var f = timers[i].fn; timers.splice(i, 1); f(); } }
   }
 
+  // ---- formation registry (FORMATION WIPE homage) ----------------------
+  // Each normal wave is one squadron: every enemy spawned during it is stamped
+  // with the wave's formation id (newEnemy) and counted. A wipe = all members
+  // killed by the player before ANY exits (killEnemy reward=false = an exit).
+  // Cleared per wave; created once per wave, never per frame.
+  var forms = [], formSeq = 0, curFormId = 0;
+  function resetForms() { forms.length = 0; }
+  function beginForm() { var id = ++formSeq; forms.push({ id: id, count: 0, killed: 0, exited: false, done: false }); return id; }
+  function findForm(id) { if (!id) return null; for (var i = 0; i < forms.length; i++) if (forms[i].id === id) return forms[i]; return null; }
+  // Count a live squadron member as DEFEATED exactly once, no matter how it left
+  // the hostile pool — a rewarded kill OR a charm/execute conversion (the player
+  // earned it either way). Deduped by e.formCounted so a later expiry/release of
+  // a converted ally can't double-credit.
+  function creditForm(e) { if (!e.formId || e.formCounted) return; var f = findForm(e.formId); if (f) { f.killed++; e.formCounted = true; } }
+  // Run a summon/child spawn OUTSIDE the wave's authored arrangement: the spawned
+  // enemy gets formId 0, so a mid-wave summon (fakedecoy, splitter child, carrier
+  // escort, apostate clone) neither pads the count nor blocks a WIPE by exiting.
+  function spawnLoose(fn) { var prev = curFormId; curFormId = 0; try { return fn(); } finally { curFormId = prev; } }
+  // Evaluated once all spawn timers have drained (membership final): a squadron
+  // of >=2 with every member player-killed and none escaped earns FORMATION WIPE.
+  function checkFormWipe() {
+    if (timers.length !== 0) return;              // still spawning — membership not final
+    for (var i = 0; i < forms.length; i++) {
+      var f = forms[i];
+      if (f.done) continue;
+      if (f.exited) { f.done = true; continue; }
+      if (f.count >= 2 && f.killed >= f.count) { f.done = true; skillEvent(W / 2, H * 0.42, 'FORMATION WIPE', 40); G.tally.wipes++; }
+    }
+  }
+
   Game.beginWave = function (fn, rank) {
     G.rank = rank; G.waveKind = 'normal'; G.waveGrace = 0.6;
+    resetForms(); curFormId = beginForm(); G.waveHits = 0;
+    G.skillEvtT = null; G.skillEvtSlot = 0;   // fresh skill-popup stack per wave
     // alternate the crest anchor between successive waves so a sector's waves
     // don't blur together (center → left → right → …).
     G.waveN = (G.waveN || 0) + 1;
@@ -2922,12 +3033,15 @@
   Game.waveAnchor = function () { return { x: G.anchorX, side: G.anchorSide, n: G.waveN }; };
   Game.beginBoss = function (fn, rank) {
     G.rank = rank; G.waveKind = 'boss'; G.waveGrace = 0.6;
+    resetForms(); curFormId = 0; G.waveHits = 0;   // boss/escorts are not a squadron
+    G.skillEvtT = null; G.skillEvtSlot = 0;        // fresh skill-popup stack (PHASE SEIZED)
     fn(rank);
     G.mode = 'playing';
   };
 
   function detectClear() {
     if (G.mode !== 'playing') return;   // an Apostate death may have opened a draft mid-frame
+    checkFormWipe();
     if (G.waveGrace > 0) G.waveGrace -= Engine.DT;
     if (G.waveKind === 'boss') {
       if (!G.boss) startClearBeat('boss');
@@ -2936,6 +3050,9 @@
     }
   }
   function startClearBeat(kind) {
+    G.tally.waves++;
+    // UNTOUCHED: a normal wave cleared with zero player hits (spellcard-capture homage).
+    if (kind === 'wave' && G.waveHits === 0) { skillEvent(W / 2, H * 0.42, 'UNTOUCHED', 40); G.tally.untouched++; }
     cancelBulletsToGold(false); homeAllGold();
     // drop transient special timers so a pending edict volley / Ra surge / horn
     // echo / peach window can't freeze through the draft and fire into next wave
@@ -3541,6 +3658,7 @@
     hud.font = '600 24px Consolas, monospace';
     hud.fillStyle = UI_CYAN;
     hud.fillText('GRAZE ' + G.graze, 40, 78);
+    drawHubris();
 
     hud.textAlign = 'center';
     hud.font = '600 26px Consolas, monospace';
@@ -3557,6 +3675,30 @@
     drawGodTags();
     drawPopups();
     drawAnnounce();
+  }
+
+  // HUBRIS meter — the persistent multiplier + a thin stepped progress bar, sat
+  // under the score/graze cluster so it reads at a glance and stays out of the
+  // playfield. Small footprint (Bounds, binding). Hubris-gold tint.
+  function drawHubris() {
+    var h = G.hubris, mult = HUBRIS_MULT[h.step];
+    var x = 40, y = 122;
+    hud.textAlign = 'left';
+    hud.font = '600 18px Consolas, monospace';
+    hud.fillStyle = UI_DIM();
+    hud.fillText('HUBRIS', x, y - 26);
+    hud.font = '700 32px Consolas, monospace';
+    hud.fillStyle = h.step > 0 ? HUBRIS_COL : UI_DIM();
+    hud.fillText('x' + mult.toFixed(1), x, y);
+    // five step pips: lit for steps gained, the next pip fills by partial progress.
+    var px = x + 108, py = y - 20, pw = 24, ph = 13, gap = 6;
+    for (var i = 0; i < HUBRIS_MAX; i++) {
+      var sx = px + i * (pw + gap);
+      hud.fillStyle = 'rgba(52,40,12,0.75)';
+      roundRect(hud, sx, py, pw, ph, 3); hud.fill();
+      var f = i < h.step ? 1 : (i === h.step ? h.prog : 0);
+      if (f > 0) { hud.fillStyle = HUBRIS_COL; roundRect(hud, sx, py, pw * f, ph, 3); hud.fill(); }
+    }
   }
 
   function drawGauge() {

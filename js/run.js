@@ -39,7 +39,9 @@
   // was renamed to HUBRIS (display only) and keeping the key preserves existing
   // meta progress. Do not rename it.
   // ---------------------------------------------------------------------
-  Run.meta = { hi: 0, bestSector: 0, careerGold: 0, killedWarden: false, completedRun: false };
+  // peakHubris = best HUBRIS multiplier ever reached (additive field; legacy blobs
+  // without it fall back to 1.0). Key stays 'goldwake_meta' — never rename.
+  Run.meta = { hi: 0, bestSector: 0, careerGold: 0, killedWarden: false, completedRun: false, peakHubris: 1 };
   Run.loadMeta = function () {
     try {
       var raw = localStorage.getItem('goldwake_meta');
@@ -47,9 +49,21 @@
         var m = JSON.parse(raw);
         Run.meta.hi = m.hi | 0; Run.meta.bestSector = m.bestSector | 0; Run.meta.careerGold = m.careerGold | 0;
         Run.meta.killedWarden = !!m.killedWarden; Run.meta.completedRun = !!m.completedRun;
+        Run.meta.peakHubris = +m.peakHubris || 1;   // additive: legacy blob -> 1.0
       }
     } catch (e) {}
   };
+  // HUBRIS multiplier from a peak step index — read the Game-side table so there's
+  // a single source of truth; fall back to the linear form for a legacy/absent table.
+  function hubrisMultOf(step) {
+    var s = step | 0, t = Game.HUBRIS_MULT;
+    if (t && t[s] != null) return t[s];
+    return 1 + 0.2 * s;
+  }
+  function recordPeakHubris() {
+    var pk = hubrisMultOf(Game.st().hubris.peak);
+    if (pk > Run.meta.peakHubris) Run.meta.peakHubris = pk;
+  }
   Run.saveMeta = function () { try { localStorage.setItem('goldwake_meta', JSON.stringify(Run.meta)); } catch (e) {} };
   Run.unlocks = function () {
     return {
@@ -532,13 +546,16 @@
   function finalizeRun(win) {
     Run.meta.bestSector = Math.max(Run.meta.bestSector, 3);
     if (win) Run.meta.completedRun = true;
-    Run.reportScore(Game.st().score); Run.saveMeta();
+    Run.reportScore(Game.st().score); recordPeakHubris(); Run.saveMeta();
+    Run.endT0 = perfNow();
     Game.setMode('complete');
   }
   Run.onGameOver = function () {
     Run.reportScore(Game.st().score);
     Run.meta.bestSector = Math.max(Run.meta.bestSector, Run.sectorIdx);
-    Run.saveMeta(); Game.setMode('over');
+    recordPeakHubris(); Run.saveMeta();
+    Run.endT0 = perfNow();
+    Game.setMode('over');
   };
   Run.toTitle = function () { Run.reportScore(Game.st().score); Run.saveMeta(); Game.setMode('title'); };
 
@@ -715,7 +732,7 @@
     ctx.fillStyle = COL_GOLD; ctx.font = '600 34px Consolas, monospace';
     ctx.fillText('HI  ' + commas(Run.meta.hi) + '     BEST SECTOR  ' + Run.meta.bestSector + '/3', W / 2, H * 0.575);
     ctx.fillStyle = COL_DIM; ctx.font = '500 26px Consolas, monospace';
-    ctx.fillText('career gold  ' + commas(Run.meta.careerGold), W / 2, H * 0.575 + 42);
+    ctx.fillText('career gold  ' + commas(Run.meta.careerGold) + '     peak hubris  x' + Run.meta.peakHubris.toFixed(1), W / 2, H * 0.575 + 42);
 
     var un = Run.unlocks(), ux = W / 2, uy = H * 0.66;
     ctx.font = '600 28px Consolas, monospace'; ctx.fillStyle = COL_CYAN;
@@ -907,6 +924,32 @@
     ctx.fillStyle = COL_COMMON; ctx.font = '500 32px Consolas, monospace';
     ctx.fillText('reached sector ' + Math.min(3, Run.sectorIdx + 1) + '/3', W / 2, H * 0.36 + 108);
     ctx.fillText('banked this run  ' + commas(st.wallet) + ' g', W / 2, H * 0.36 + 150);
+
+    // ---- arcade run tally: line-by-line reveal, classic stagger, then the
+    // final score (which already folded every multiplied gain and persists as HI).
+    var tl = st.tally || { waves: 0, wipes: 0, phases: 0, untouched: 0 };
+    var rows = [
+      ['WAVES CLEARED', '' + (tl.waves | 0)],
+      ['GRAZES', '' + (st.graze | 0)],
+      ['FORMATION WIPES', '' + (tl.wipes | 0)],
+      ['PHASES SEIZED', '' + (tl.phases | 0)],
+      ['UNTOUCHED WAVES', '' + (tl.untouched | 0)],
+      ['PEAK HUBRIS', 'x' + hubrisMultOf(st.hubris.peak).toFixed(1)]
+    ];
+    var elapsed = perfNow() - (Run.endT0 || 0);
+    var lx = W * 0.30, rx = W * 0.70, ty = H * 0.47;
+    ctx.font = '600 28px Consolas, monospace';
+    for (var ti = 0; ti < rows.length; ti++) {
+      if (elapsed < (ti + 1) * 220) break;   // staggered reveal
+      var ry = ty + ti * 30;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = COL_DIM; ctx.fillText(rows[ti][0], lx, ry);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = ti === rows.length - 1 ? COL_GOLD : COL_COMMON;
+      ctx.fillText(rows[ti][1], rx, ry);
+    }
+    ctx.textAlign = 'center';
+
     ctx.fillStyle = COL_DIM; ctx.font = '600 30px Consolas, monospace';
     ctx.fillText('SEED  ' + Run.seed.toString(16).toUpperCase(), W / 2, H * 0.56);
     var pulse = 0.5 + 0.5 * Math.sin(perfNow() * 0.005);

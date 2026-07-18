@@ -370,6 +370,63 @@
     n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
   };
 
+  // HUBRIS meter step-up: bright, short two-note rise (a rung climbed).
+  SFX.hubrisUp = function () {
+    if (!ready || muted) return;
+    var t = now();
+    var notes = [880, 1318.5];
+    for (var i = 0; i < notes.length; i++) {
+      var tt = t + i * 0.05;
+      var o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(notes[i], tt);
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, tt);
+      g.gain.exponentialRampToValueAtTime(0.07, tt + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.14);
+      o.connect(g); g.connect(master);
+      o.start(tt); o.stop(tt + 0.16);
+    }
+  };
+
+  // HUBRIS meter drop: dull, short descending blip (a rung lost — no despair).
+  SFX.hubrisDrop = function () {
+    if (!ready || muted) return;
+    var t = now();
+    var o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(360, t);
+    o.frequency.exponentialRampToValueAtTime(150, t + 0.14);
+    var f = ctx.createBiquadFilter();
+    f.type = 'lowpass'; f.frequency.setValueAtTime(900, t);
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.09, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    o.connect(f); f.connect(g); g.connect(master);
+    o.start(t); o.stop(t + 0.2);
+  };
+
+  // Named skill event (FORMATION WIPE / UNTOUCHED / PHASE SEIZED): a bright gold
+  // sting — a quick rising arpeggio in the vauntBonus family, shorter + tighter.
+  SFX.skillEvent = function () {
+    if (!ready || muted) return;
+    var t = now();
+    var notes = [659.25, 987.77, 1318.5];
+    for (var i = 0; i < notes.length; i++) {
+      var tt = t + i * 0.045;
+      var o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(notes[i], tt);
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, tt);
+      g.gain.exponentialRampToValueAtTime(0.08, tt + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.2);
+      o.connect(g); g.connect(master);
+      o.start(tt); o.stop(tt + 0.22);
+    }
+  };
+
   SFX.powerup = function () {
     if (!ready || muted) return;
     var t = now();
