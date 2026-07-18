@@ -68,8 +68,9 @@ on an authored sprite, by its self-luminous rim (doctrine, third clause).
 hooks, coils, shields, slabs. Never "same hull, different tint" as the primary
 tell. The roster reads by shape first: AEGIS shield-plate, WEAVER tether,
 GILDED MIMIC (masquerades as gold — deliberately), CARRIER hulk, BLINK moth.
-Bosses get **one iconic silhouette + one secondary motif**: WARDEN — sentinel
-ring + turning core; GILDED SOVEREIGN — throne-crown + three-phase regalia.
+Bosses get **one iconic silhouette + one secondary motif**: TALOS — bronze
+sentinel ring + molten core; AMMIT — tri-beast coil + tipped judgment scales;
+GILDED SOVEREIGN — throne-crown + three-phase regalia.
 
 **God portraits, emblems, cards (STORYBOOK).** Slightly warped, hand-drawn
 geometry; straight lines are rare and purposeful. Each god must be knowable as a
@@ -125,9 +126,9 @@ against that pantheon's base/midtone.
 
 | Pantheon | Tradition | Materials & motifs | God accents (from `Run.GODS`) |
 | --- | --- | --- | --- |
-| **OLYMPUS** | Marble frieze, black-figure pottery | Laurel, column, terracotta, sea-foam, veined marble | Zeus `#9fd8ff` · Poseidon `#4fe0e0` · Artemis `#b6ff5a` · Aphrodite `#ff77c8` · Ares `#ff5a6e` · Demeter `#bfefff` |
+| **OLYMPUS** | Marble frieze, black-figure pottery | Laurel, column, terracotta, sea-foam, veined marble | Zeus `#9fd8ff` · Poseidon `#4fe0e0` · Artemis `#b6ff5a` · Aphrodite `#ff77c8` · Ares `#ff5a6e` |
 | **KEMET** | Papyrus & tomb-wall painting | Flat profile poses, gold-leaf on lapis, hieroglyph bands, sun-disc | Ra `#ffe89a` · Anubis `#e8c46a` |
-| **ASGARD** | Runestone knotwork, carved wood | Interlace, cold iron, weathered timber, frost, spear/raven/hammer | Loki `#8cff5a` · Odin `#cfd6e0` · Thor `#8fb4d8` |
+| **ASGARD** | Runestone knotwork, carved wood | Interlace, cold iron, weathered timber, frost, spear/raven/hammer | Loki `#8cff5a` · Odin `#cfd6e0` · Thor `#8fb4d8` · Heimdall `#ffe3c2` (dawn-gold; horn + prism) |
 | **CELESTIAL COURT** | Ming court scroll painting | Gold-on-jade, cloud bands, imperial seals, edict talismans, judgment curtain | Wukong `#ff6a3d` · Guan Yu `#3be089` (crescent blade, Red Hare) · Jade Emperor `#c99aff` (edicts, imperial violet) |
 | **FIFTH SUN** | Codex glyph flatness | Feathered serpents, obsidian, turquoise, stepped glyphs, flat blocked color | Quetzalcoatl `#5affc0` |
 

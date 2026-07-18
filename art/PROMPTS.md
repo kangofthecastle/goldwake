@@ -220,22 +220,24 @@ traditions (Greek only), no pure black #000000, no gore, no text or lettering, n
 busy particle noise, no watermark.
 ```
 
-### 12. DEMETER — the Frost
+### 12. HEIMDALL — the Watchman
 
 ```
-Painted card portrait, storybook style: Demeter in her winter aspect, waist-up,
-cupping a blooming frost-flower whose petals slow everything around it (her iconic
-prop — the Winter Bloom); wheat-crown rimed with ice, humble woolen shawl with one
-gilded sickle pin, imperfect asymmetry — one frozen braid. Drawn in the manner of
-Greek black-figure pottery and marble frieze; broad painted planes; face in 2-3
-marks, serene and cold. Must read by silhouette + frost-flower + accent color at
-thumbnail size. Palette: near-black ground #05080b, frost accent #bfefff, gold
-#ffd766 on the pin, warm near-black outline #231A20 with the outer contour 3x the
-weight of interior lines, restrained gold-leaf grain. Deliver: PNG, 2:3 portrait,
-on a transparent or near-black #05080b ground — never white or light gray.
-Negative: no photorealism, no airbrushed or plastic gradients, no glossy 3D
-render, no mixed mythological traditions (Greek only), no pure black #000000, no
-text or lettering, no busy particle noise, no watermark.
+Painted card portrait, storybook style: Heimdall the ever-watching, waist-up,
+raising the Gjallarhorn to his lips while his other hand holds a shard of prism
+splitting one ray of dawn into a small rainbow fan (his iconic props — horn and
+prism); far-seeing pale eyes, dawn-gold mail, weathered watch-cloak, imperfect
+asymmetry — one horn-strap frayed. Drawn in the manner of Norse runestone
+knotwork and carved wood; broad painted planes; face in 2-3 marks, vigilant and
+calm. Must read by silhouette + horn + rainbow shard at thumbnail size. Palette:
+near-black ground #05080b, dawn-gold accent #ffe3c2, a thin refracted rainbow
+thread on the prism only, gold #ffd766 on the horn rim, warm near-black outline
+#231A20 with the outer contour 3x the weight of interior lines, restrained
+gold-leaf grain. Deliver: PNG, 2:3 portrait, on a transparent or near-black
+#05080b ground — never white or light gray. Negative: no photorealism, no
+airbrushed or plastic gradients, no glossy 3D render, no mixed mythological
+traditions (Norse only), no pure black #000000, no text or lettering, no busy
+particle noise, no watermark.
 ```
 
 ### 13. RA — the Radiant
@@ -427,48 +429,50 @@ text or lettering, no busy particle noise, no watermark.
 
 ## Section 4 — Boss portraits (2:3, game-native, tradition-neutral)
 
-### 22. THE WARDEN — midfield sentinel
+### 22. TALOS — the bronze sentinel
 
 ```
-Painted card portrait, storybook style: THE WARDEN, a colossal gilded sentinel
-construct — one iconic silhouette (a ring-shaped sentinel frame) plus one
-secondary motif (a slowly turning core-eye of light at its center); burnished
-bronze-gold plates over dark iron, ceremonial engraving, no face — the core-eye
-is the face, read in 2-3 marks. Game-native gilded machinery only, belonging to
-no real-world mythology. Human scale against impossible scale: a tiny glowing
-ship silhouette dwarfed beneath it. Imperfect asymmetry — one cracked plate,
-gold leaf flaking. Broad painted planes, sacred and ceremonial, a reliquary that
+Painted card portrait, storybook style: TALOS, the colossal bronze automaton of
+Greek myth — one iconic silhouette (a ring-shaped bronze sentinel frame, the
+giant's guarding circuit) plus one secondary motif (a single molten core-eye,
+the ichor-vein plug at its center); burnished molten-bronze plates over dark
+iron, drawn in the manner of Greek black-figure pottery and cast bronze votive
+figures, ceremonial engraving, no face — the core-eye is the face, read in 2-3
+marks. Human scale against impossible scale: a tiny glowing ship silhouette
+dwarfed beneath it. Imperfect asymmetry — one cracked plate weeping a thread of
+ichor-light. Broad painted planes, sacred and ceremonial, a reliquary that
 fights. Must read as a flat silhouette at thumbnail size. Palette: near-black
-ground #05080b, gold #ffd766 dominant, cyan glints #5fe6ff on the ship, danger
-red #ff5a6e in the core-eye only, warm near-black outline #231A20 with the outer
-contour 3x the weight of interior lines, restrained gold-leaf grain. Deliver:
-PNG, 2:3 portrait, on a transparent or near-black #05080b ground — never white
-or light gray. Negative: no photorealism, no airbrushed or plastic gradients, no
-glossy 3D render, no mixed mythological traditions, no real-world religious
-motifs, no pure black #000000, no text or lettering, no busy particle noise, no
-watermark.
+ground #05080b, molten bronze-gold (hotter and redder than loot gold #ffd766)
+dominant, cyan glints #5fe6ff on the ship, danger red #ff5a6e in the core-eye
+only, warm near-black outline #231A20 with the outer contour 3x the weight of
+interior lines, restrained gold-leaf grain. Deliver: PNG, 2:3 portrait, on a
+transparent or near-black #05080b ground — never white or light gray. Negative:
+no photorealism, no airbrushed or plastic gradients, no glossy 3D render, no
+mixed mythological traditions (Greek only), no pure black #000000, no text or
+lettering, no busy particle noise, no watermark.
 ```
 
-### 23. THE WARDEN — REFORGED
+### 23. AMMIT — devourer of hearts
 
 ```
-Painted card portrait, storybook style: THE WARDEN REFORGED — the same colossal
-ring-shaped gilded sentinel construct, but rebuilt harder: the ring now doubled
-and counter-rotating (iconic silhouette), the central core-eye split into three
-smaller burning eyes (secondary motif); seams of fresh raw gold weld over old
-cracked bronze plates — visibly repaired, angrier, heavier. Game-native gilded
-machinery only, no real-world mythology. Impossible scale, framed tighter and
-more oppressive than before; imperfect asymmetry — mismatched new plates against
-scorched old ones. Broad painted planes, ceremonial not grimy. Must read as a
-flat silhouette at thumbnail size and read as "the Warden, remade" beside the
-original. Palette: near-black ground #05080b, gold #ffd766 dominant with hotter
-weld-gold seams, danger red #ff5a6e in the three eyes only, warm near-black
-outline #231A20 with the outer contour 3x the weight of interior lines,
-restrained gold-leaf grain. Deliver: PNG, 2:3 portrait, on a transparent or
-near-black #05080b ground — never white or light gray. Negative: no
-photorealism, no airbrushed or plastic gradients, no glossy 3D render, no mixed
-mythological traditions, no real-world religious motifs, no pure black #000000,
-no text or lettering, no busy particle noise, no watermark.
+Painted card portrait, storybook style: AMMIT the devourer of hearts, the
+composite beast of Kemet judgment — crocodile jaws, lion forequarters, hippo
+hindquarters — coiled around a set of golden judgment scales (iconic silhouette:
+the tri-beast coil; secondary motif: the scales with one pan tipped); drawn in
+strict flat profile in the manner of Egyptian tomb-wall painting and papyrus,
+flat blocked color, hieroglyphic banding at the frame edge. Sacred and
+ceremonial menace, never gory — she is a verdict, not a monster. Human scale
+against impossible scale: a tiny glowing ship silhouette small before her jaws.
+Imperfect asymmetry — one chipped gilded scale-pan. Broad painted planes. Must
+read as a flat silhouette at thumbnail size. Palette: near-black ground #05080b,
+bruised magenta dominant with sickly green undertones on the beast, gold #ffd766
+on the scales only, cyan glints #5fe6ff on the ship, warm near-black outline
+#231A20 with the outer contour 3x the weight of interior lines, restrained
+gold-leaf grain. Deliver: PNG, 2:3 portrait, on a transparent or near-black
+#05080b ground — never white or light gray. Negative: no photorealism, no
+airbrushed or plastic gradients, no glossy 3D render, no mixed mythological
+traditions (Egyptian only), no gore, no pure black #000000, no text or
+lettering, no busy particle noise, no watermark.
 ```
 
 ### 24. THE GILDED SOVEREIGN — final boss
@@ -654,7 +658,7 @@ Substitutions:
 | 30.3 | SILVER FLETCHING of Artemis — a single arrow fletching of moonlit feather | Greek black-figure pottery and carved marble frieze | `#b6ff5a` |
 | 30.4 | DOVE TOKEN of Aphrodite — a small carved dove charm on a silk cord | Greek black-figure pottery and carved marble frieze | `#ff77c8` |
 | 30.5 | SPEAR SPLINTER of Ares — a broken spearhead fragment bound in leather | Greek black-figure pottery and carved marble frieze | `#ff5a6e` |
-| 30.6 | GOLDEN SHEAF of Demeter — a tied sheaf of wheat rimed with frost | Greek black-figure pottery and carved marble frieze | `#bfefff` |
+| 30.6 | WATCHMAN'S EYE of Heimdall — an unblinking eye of dawn-glass set in a horn-rim bezel | Norse runestone knotwork and carved wood | `#ffe3c2` |
 | 30.7 | SUNSTONE of Ra — a faceted stone holding a captive sliver of sunlight | Egyptian tomb-wall painting and papyrus, gold leaf on lapis | `#ffe89a` |
 | 30.8 | HEART SCARAB of Anubis — a lapis scarab amulet inlaid with gold | Egyptian tomb-wall painting and papyrus, gold leaf on lapis | `#e8c46a` |
 | 30.9 | TANGLED THREAD of Loki — an impossibly knotted loop of green thread | Norse runestone knotwork and carved weathered wood | `#8cff5a` |
@@ -740,6 +744,6 @@ Substitutions:
 | 32.8 | CARRIER HULK — a slow escort-spawning mass | a huge broken reliquary slab with open hangar notches along both flanks | `#ff8a5a` |
 | 32.9 | BLINK MOTH — a teleporting skirmisher | two wide serrated moth wings around a barely-there body | `#ff5ae0` |
 | 32.10 | BULLET GARDENER — a seeder of bullet gardens | a coiled thorned planter form trailing three seed-pod stems | `#ff77c8` |
-| 32.11 | THE WARDEN — field sprite of the sentinel boss | a great open sentinel ring with a single core-eye hub at its center | `#ff5a6e` |
+| 32.11 | TALOS — field sprite of the bronze sentinel boss | a great open bronze ring with a single molten core-eye hub at its center | `#ff8a5a` |
 | 32.12 | THE GILDED SOVEREIGN — field sprite of the final boss | a crowned throne-slab, coin-armored, three regalia spikes | `#ffd766` (white-hot core reserved for its unavoidable attacks) |
 | 32.13 | THE APOSTATE — field sprite of the renegade elite | a lean asymmetric duelist dart carrying two mismatched relic pods, one glowing warm and one cool (its stolen boons — the sole enemy permitted a cool glint) | `#ff5ae0` |

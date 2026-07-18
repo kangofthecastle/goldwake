@@ -2,7 +2,7 @@
 
 **HUBRIS** (working title; repo: `goldwake`) is a vertical-monitor
 **bullet-hell roguelite** — the neon-additive, bloom-drenched
-look of *Danmaku Unlimited 3* crossed with the gold-and-**Vaunt** economy of
+look of *Danmaku Unlimited 3* crossed with the gold-and-**Apotheosis** economy of
 *Jamestown: Legend of the Lost Colony*, wrapped in a seeded 3-sector run with
 draft cards, shops, sector affixes, and a tiny permanent-unlock meta layer.
 Pure static web: no build step, no server, no dependencies. WebGL2 for the
@@ -40,14 +40,13 @@ overridable — they stay procedural by doctrine.
 | **Shift** (tap) + direction | **Ghost dodge** — a short dash with brief i-frames (~0.9s cooldown) |
 | **Z / Space** (hold) | Attack  ·  also **confirm** in menus / drafts / shops |
 | **X** | **SPECIAL** weapon (spends a charge)  ·  also **leave shop / back** in menus |
-| **C** | **VAUNT** (when the gauge is full) |
+| **C** | **APOTHEOSIS** (when the gauge is full) |
 | **Left / Right** | Move the selection in drafts and shops (or click) |
-| **P** | Pause |
+| **P / Esc** | Pause in combat (on the pause screen: Z/P/Esc resume, X abandons to title); Esc also backs out of end screens |
 | **R** | Restart the run (fresh seed) |
-| **Esc** | Abandon to title (from a run); title from the end screens |
 | **M** | Mute / unmute |
 
-Three offensive tools, distinct roles: **Attack** (Z) is your constant fire — deliberately modest on its own. **Special** (X) is a burst/panic tool on a 3-charge meter (the purple pips beside the vaunt bar) that refills over time and faster on kills; its base form is the **Lance Volley** (fat piercing energy lances). **Vaunt** (C) is the defensive/scoring bullet-cancel. On defense there's also the **Ghost dodge** — tap **Shift** while holding a direction to dash a short hop with brief invulnerability (grazing still counts mid-dash), on a ~0.9s cooldown. The power spike comes from **god boons**, below.
+Three offensive tools, distinct roles: **Attack** (Z) is your constant fire — deliberately modest on its own. **Special** (X) is a burst/panic tool on a 3-charge meter (the purple pips beside the apotheosis bar) that refills over time and faster on kills; its base form is the **Lance Volley** (fat piercing energy lances). **Apotheosis** (C) is the defensive/scoring bullet-cancel — and with an attack god equipped, its activation fires that god's **rider** (below). On defense there's also the **Ghost dodge** — tap **Shift** while holding a direction to dash a short hop with brief invulnerability (grazing still counts mid-dash), on a ~0.9s cooldown. The power spike comes from **god boons**, below.
 
 ## The run
 
@@ -55,8 +54,8 @@ A **run** is 3 sectors generated from one seed (shown on the end screen). Each
 sector is 4–6 semi-random waves drawn from the wave pool, ending in a fixed
 anchor boss:
 
-- **Sector 1 → WARDEN** (midfield sentinel, 2 patterns)
-- **Sector 2 → WARDEN — REFORGED** (remixed, 3 patterns, much tougher)
+- **Sector 1 → TALOS** (the bronze sentinel, 2 patterns)
+- **Sector 2 → AMMIT** (devourer of hearts — 3 patterns, much tougher)
 - **Sector 3 → GILDED SOVEREIGN** (the 3-phase boss)
 
 Beat the Sovereign for **RUN COMPLETE**, then **DESCEND DEEPER** into an endless
@@ -79,22 +78,26 @@ guaranteed-epic boon). Any enemy may carry an **elite aura**: GILDED, BULWARK, o
 FRENZIED.
 
 **Pantheon Communion:** run an attack god + special god from the same pantheon for a
-set bonus — **Accord of Olympus** (+1 mult cap, +2s vaunt), **Twilight Oath** (ASGARD:
+set bonus — **Accord of Olympus** (+1 mult cap, +2s apotheosis), **Twilight Oath** (ASGARD:
 a life lost auto-fires your special free), **Rite of Two Suns** (KEMET: +10% damage to
 status-afflicted foes, +15% gold), **Harmony of Heaven** (CELESTIAL COURT: grazing a
 bullet also feeds your special charge).
 
-### The Vaunt loop (core combat)
+### The Apotheosis loop (core combat)
 
 Your hitbox is the tiny bright dot at your ship's center (radius 4). Kill enemies
-→ they drop **gold**, which homes to you (always during Vaunt, and everything on
-screen rushes in when a wave clears). Gold feeds the **Vaunt gauge** *and* banks
-into your **run wallet**. **Graze** bullets for sparks + gauge. Fill the gauge and
-press **X**: a shockwave **cancels every enemy bullet into gold**, shields you
-~1.2s, and jumps your multiplier to ×3 (climbing per kill, cap ×5, higher with
-upgrades). When the gauge drains you get the **VAUNT BONUS**. No bombs — a full
-gauge is your panic button. 3 lives; death spills **25% of your banked wallet** as
-re-collectable shards (~4s) and resets your multiplier.
+→ they drop **gold**, which homes to you (always during Apotheosis, and everything
+on screen rushes in when a wave clears). Gold feeds the **Apotheosis gauge** *and*
+banks into your **run wallet**. **Graze** bullets for sparks + gauge. Fill the
+gauge and press **C**: a shockwave **cancels every enemy bullet into gold**,
+shields you ~1.2s, and jumps your multiplier to ×3 (climbing per kill, cap ×5,
+higher with upgrades) — and your **attack god answers with a rider**, a one-shot
+god-flavor kicker fired at activation (Zeus strikes every foe with lightning,
+Poseidon tidal-slams the field, Wukong summons his full clone court, Guan Yu
+throws a nova of eight crescents, Heimdall Marks everything and shoves the
+bullet field back…). When the gauge drains you get the **APOTHEOSIS BONUS**. No
+bombs — a full gauge is your panic button. 3 lives; death spills **25% of your
+banked wallet** as re-collectable shards (~4s) and resets your multiplier.
 
 ### God boons (the main power source)
 
@@ -107,45 +110,61 @@ special transform, and two mod cards:
   impact / tidal wall that eats bullets into gold), **ARTEMIS** (+18% crit, ×3 /
   Marking arrow), **APHRODITE** (**Charm** foes to your side / charm missile),
   **ARES** (**Bloodlust** — kills stack frenzy fire-rate / **Phobos & Deimos** dread-
-  wraiths that inflict **Terror**), **DEMETER** (**Chill** → shatter / Winter Bloom
-  that slows every bullet on screen).
+  wraiths that **dive-bomb** foes, sowing **Terror** with every strike).
 - **HELIOPOLIS** — **RA** (attack fuses into a ramping **solar beam** / Solar Flare
   ignites all with **Burn**).
-- **DUAT** — **ANUBIS** (**execute** weakened foes for bonus gold / Hall of Judgment
-  escalating zone).
-- **ASGARD** — **LOKI** (**Confuse** faction-flips the foe's bullets / Shadow-Twin
-  decoy that draws all aimed fire), **ODIN** (orbiting ravens / **Gungnir** the
-  never-miss piercing spear), **THOR** (**Mjölnir** returning kinetic hammer /
-  **Giant's Bane** colossal crush — pure force, never lightning).
+- **DUAT** — **ANUBIS** (**Weigher of Hearts** — +25% damage below half health,
+  **executes** non-bosses below 25% for bonus gold / **Judgment of Duat** — an
+  instant strike on every foe for a share of its missing health).
+- **ASGARD** — **LOKI** (**Confuse** faction-flips the foe's bullets, and the
+  Confused take +15% from you / Shadow-Twin decoy that draws all aimed fire and
+  soaks bullet streams — by design the twin never attacks: pure deception, the
+  one sanctioned exception to the every-special-deals-damage rule), **ODIN**
+  (orbiting ravens / **Gungnir** the never-miss piercing spear), **THOR**
+  (**Mjölnir** returning kinetic hammer / **Giant's Bane** colossal crush — pure
+  force, never lightning), **HEIMDALL** (**Bifröst Prism** — every 4th volley
+  refracts into a piercing rainbow fan / **Gjallarhorn** — a horn blast that
+  wounds and **Marks** every foe and shoves the whole bullet field away).
 - **CELESTIAL COURT** — **WUKONG** (kills spawn **hair-clones** that copy your fire /
   Ruyi Jingu Bang staff pillar that can **Stun**), **GUAN YU** (shots become cleaving
-  **crescent blades** that gain power per foe pierced / **Red Hare Charge** — a spectral
-  rider carves a lane and hurls foes aside), **JADE EMPEROR** (attacks issue homing
-  imperial **edicts** that **Stun** / **Mandate of Heaven** — a judgment curtain descends
-  from the top, Weakening all it touches).
+  **crescent blades** that gain power per foe pierced / **Crescent Moon Sweep** — one
+  colossal blade sweeps the full field upward, hurling foes aside), **JADE EMPEROR**
+  (attacks issue homing imperial **edicts** that **Stun** / **Heaven's Verdict** — a
+  volley of homing edicts, one per foe, Stunning each; the strongest takes a
+  double-size edict).
 - **FIFTH SUN** — **QUETZALCOATL** (serpentine +pierce shots / Sky Serpent that eats
-  bullets into your **vaunt gauge**).
+  bullets into your **apotheosis gauge**).
 **Charms** (passive, one per god) — collected through the run in drafts and shops,
 each **CHARM** is tied to a god but **needs no god slot**: it's how the fifteen gods you
 *didn't* pick still touch your run. Each is acquirable once (e.g. EAGLE FEATHER +damage
 to elites/bosses, SUNSTONE +special recharge, OATH TABLET keeps your multiplier through
-death, IMPERIAL SEAL +vaunt bonus). Numeric charms scale with rarity; a few surface per run.
+death, IMPERIAL SEAL +apotheosis bonus). Numeric charms scale with rarity; a few surface per run.
 
 Each god has **four** mod cards (at least one a build-fork), each transform
 **levels up** along a ★–★★★★★ tier ladder via own-god pom cards, and 15 gods × pairs
-unlock **26 DUO boons** (rainbow one-shot cards; e.g. STORMFATHERS, RAGNARÖK,
-FROZEN STORM, ECLIPSE, DEATH SENTENCE, ETERNAL DEVOTION, SWORN BROTHERS, SAINT OF WAR,
-TWO THRONES, GODS OF WAR, PEACH BANQUET).
+unlock **25 DUO boons** (rainbow one-shot cards; e.g. STORMFATHERS, RAGNARÖK,
+ECLIPSE, DEATH SENTENCE, ETERNAL DEVOTION, SWORN BROTHERS, SAINT OF WAR,
+TWO THRONES, GODS OF WAR, PEACH BANQUET, THE ALLSEEING, HERALD OF RAGNARÖK,
+FALSE DAWN).
 
 Statuses: **Marked/Weak** (bonus damage taken), **Charm** (fights for you),
-**Terror/Shaken** (Ares — flee + take more), **Chill** (slow → shatter), **Burn**
-(DoT), **Confuse** (Loki flips the foe's bullets to your side), **Stun** (frozen).
-Bosses are immune to full Charm/Terror/Stun and execute. Poseidon, Thor and Terror
-shove enemies with real spring-damped **displacement** — visible lurch, wall-slams,
-and enemy pile-ups.
+**Terror/Shaken** (Ares — flee + take more), **Burn** (DoT), **Confuse** (Loki
+flips the foe's bullets to your side), **Stun** (frozen). Poseidon, Thor, Guan Yu
+and Terror shove enemies with real spring-damped **displacement** — visible
+lurch, wall-slams, and enemy pile-ups.
+
+**VS BOSSES.** Bosses are immune to full Charm, Terror, Stun and execute — but
+every such source pays a defined substitute, never nothing: Charm sources
+**Weaken** them, Terror sources apply **Shaken** (+damage taken, no flee), Stun
+sources deal bonus damage instead, and Anubis' execute line becomes a flat
+below-half damage bonus. Unspent multitarget always collapses onto the boss —
+chain-lightning jumps with no second target strike the origin again at 50% each,
+and per-foe volleys (Verdict edicts, Gungnir storm, hammer cyclone) land every
+shot on a lone boss. The Shadow-Twin's boss value is soaking: park it in a
+pattern stream and it visibly thins it.
 
 Plus scaling cards (attack damage/rate, special damage/charge/recharge) and a few
-generic ones (life, hitbox, magnet, gold value, vaunt duration/cap). Rarity is
+generic ones (life, hitbox, magnet, gold value, apotheosis duration/cap). Rarity is
 **Common / Rare / Epic** (white / blue / gold border; ×1 / ×1.5 / ×2.25 magnitude).
 
 ### Draft & shop composition
@@ -162,9 +181,10 @@ generic ones (life, hitbox, magnet, gold value, vaunt duration/cap). Rarity is
 ### Meta layer (permanent, capped)
 
 Stored in `localStorage`: high score, best sector, career gold, and exactly three
-unlocks shown on the title screen — kill the Warden once → **+1 starting life**;
-complete a run → **start with 25% Vaunt**; career gold ≥ 40,000 → **+10% base
-damage**.
+unlocks shown on the title screen — kill Talos once → **+1 starting life**;
+complete a run → **start with 25% Apotheosis**; career gold ≥ 40,000 → **+10%
+base damage**. (Internals keep their legacy `killedWarden`/`goldwake_meta` names
+so old saves survive.)
 
 ## Architecture
 
@@ -176,25 +196,26 @@ tags — each hangs one namespace on `window`.
 | --- | --- | --- |
 | `index.html` | — | Black fullscreen page; WebGL canvas + overlaid 2D HUD canvas; scripts in order. |
 | `js/sfx.js` | `window.SFX` | WebAudio-synthesized SFX (no files). Master → lowpass → compressor; lazy context resumed on first gesture. |
-| `js/gl.js` | `window.GL` | WebGL2 renderer. Procedural sprite atlas, instanced additive quad batcher, threshold + separable-gaussian **bloom** at ½/¼ res, chromatic-offset composite (the Vaunt pulse). |
+| `js/gl.js` | `window.GL` | WebGL2 renderer. Procedural sprite atlas, instanced additive quad batcher, threshold + separable-gaussian **bloom** at ½/¼ res, chromatic-offset composite (the Apotheosis pulse). |
 | `js/engine.js` | `window.Engine` | Fixed-timestep loop (60 Hz, dt clamped), keyboard input, preallocated **object pools** (4096 bullets / 256 shots / 128 enemies / 2048 particles / 512 gold), circle collision. |
 | `js/patterns.js` | `window.Patterns` | Danmaku emitter toolkit (aimed / fan / ring / spiral / whip / flower / spray), plus global affix scalars (`setGlobal` for DENSE VEIL etc.). |
 | `js/run.js` | `window.Run` | **Roguelite structure**: seeded PRNG (mulberry32) + run generation, sector affixes, the **god-boon** draft + shop card UI and composition rules, the god metadata (`Run.GODS`), title / end screens, the localStorage meta layer, and the run-flow state machine. Drives Game; no combat sim. |
-| `js/game.js` | `window.Game` | **Combat / stage layer**: player, the **SPECIAL** weapon + charge meter, enemies, bosses, bullets, the **god-boon effects + enemy status system** (chain/knockback/crit/charm/doom/chill), Vaunt, scoring, FX, the wave pool, hazards (rift/wave), and all in-combat HUD. Exposes the `Game.*` API that `run.js` calls (incl. `applyBoon`). |
+| `js/game.js` | `window.Game` | **Combat / stage layer**: player, the **SPECIAL** weapon + charge meter, enemies, bosses, bullets, the **god-boon effects + enemy status system** (chain/knockback/crit/charm/burn/stun), Apotheosis, scoring, FX, the wave pool, hazards, and all in-combat HUD. Exposes the `Game.*` API that `run.js` calls (incl. `applyBoon`). |
 
-**Status-effect architecture.** Enemies carry status fields (`doomT/doomDmg`,
-`chillStacks/chillT`, `charmMeter/charmed/charmT`, `marked/weak`). Attack hits route
-through `hitEnemy → damageEnemy(e, dmg, crit)` (which applies Marked/Weak/crit
-multipliers) then `applyAttackGod` (which stacks the status). `updateStatus` ticks
-doom bursts, chill decay/shatter and charm/mark/weak timers each frame. **Charmed
+**Status-effect architecture.** Enemies carry status fields
+(`charmMeter/charmed/charmT`, `marked/weak`, `burnT`, `stunT`, `terrorT/shakenT`).
+Attack hits route through `hitEnemy → damageEnemy(e, dmg, crit)` (which applies
+Marked/Weak/crit multipliers) then `applyAttackGod` (which stacks the status).
+`updateStatus` ticks burn and charm/mark/weak timers each frame. **Charmed
 foes** skip their `onUpdate` (no enemy fire), are excluded from all enemy→player
 collision and from being targeted by shots/hazards, run `updateCharmed` (seek the
-nearest foe, fire player-faction shots at it), and expire in a heart-burst. Winter
-Bloom uses a per-bullet `timeScale`/`slowT` in `Engine.updateBullet`.
+nearest foe, fire player-faction shots at it), and expire in a heart-burst.
+Tidal carries and horn shoves use a per-bullet `timeScale`/`slowT` in
+`Engine.updateBullet`.
 
 **God entities** are pooled/singletons on `G`: Ra's beam is stateless (per-frame in
 `updatePlayer`); Loki's `decoy`, Odin's `gungnir`, and the raven/clone arrays are
-small fixed collections; the staff pillar, Anubis judgment zone and Quetzalcoatl
+small fixed collections; the staff pillar, Guan Yu's sweep and the Quetzalcoatl
 serpent extend the shared `hazards` pool (8 slots). Every enemy aimed pattern
 targets `Game.aimPoint()` — which returns the Loki decoy while it lives, else the
 player — and Confuse reflects an enemy's aim through itself (`+π`). `Run.GODS` is
@@ -236,9 +257,9 @@ future pantheon is a data-only addition.
 ```
 
 Menus (`title / sector / draft / shop / complete / over`) freeze the combat sim
-entirely — no bullet motion, timers, firing, Vaunt drain, or SFX — while the
-frozen field stays visible behind the neon card UI. **Pause** (P) freezes
-`playing`/`clearing` the same way.
+entirely — no bullet motion, timers, firing, Apotheosis drain, or SFX — while the
+frozen field stays visible behind the neon card UI. **Pause** (P or Esc) freezes
+`playing`/`clearing` the same way; X from the pause screen abandons to title.
 
 ### Rendering notes
 
@@ -246,6 +267,6 @@ frozen field stays visible behind the neon card UI. **Pause** (P) freezes
   so additive neon sings. Every sprite is one instanced quad from a boot-time
   procedural atlas; shaders are JS template-string constants.
 - Bloom runs on half/quarter-res targets; the composite adds a chromatic split
-  that pulses during Vaunt plus a gentle tonemap so highlights roll off.
+  that pulses during Apotheosis plus a gentle tonemap so highlights roll off.
 - Player fire is cool cyan/white, enemy fire warm/magenta, UI neon cyan + gold —
   the screen reads at a glance even when it's full of bullets.

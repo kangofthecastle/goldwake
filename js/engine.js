@@ -75,7 +75,7 @@
       oriented: false,
       flash: 0, age: 0, grazed: false,
       life: 1e9,
-      timeScale: 1, slowT: 0,         // Demeter Winter Bloom bullet slow
+      timeScale: 1, slowT: 0,         // bullet time-slow (tidal carry, horn shoves)
       carried: false,                 // Poseidon tidal wave
       friendly: false, srcId: -1,     // Loki faction-flip (Confuse)
       gardenerId: -1                  // Bullet Gardener ownership
@@ -113,7 +113,6 @@
       invuln: false, dying: false, elite: false,
       // status effects (Phase 3 god boons)
       terrorT: 0, shakenT: 0,
-      chillStacks: 0, chillT: 0,
       charmMeter: 0, charmed: false, charmT: 0,
       marked: false, markT: 0,
       weak: false, weakT: 0, ghost: false,
