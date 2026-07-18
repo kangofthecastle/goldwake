@@ -112,6 +112,8 @@
 
   // throttle constantly-fired shot so it never machine-guns the mixer
   var lastShot = 0;
+  var lastGraze = 0;   // graze whisper rate-limit (grazing a wall must not machine-gun)
+  var lastPop = 0;     // popcorn tick anti-stack (a formation wipe shouldn't clip)
 
   SFX.shot = function () {
     if (!ready || muted) return;
@@ -172,6 +174,90 @@
     o.start(t); o.stop(t + dur + 0.02);
   };
 
+  // popcorn kill: a light, bright tick — the kill-cadence filler. Short, mid-band
+  // (music sits low; SFX carry the top). Gently anti-stacked so a formation wipe
+  // ticks without clipping into a wall of noise.
+  SFX.pop = function () {
+    if (!ready || muted) return;
+    var t = now();
+    if (t - lastPop < 0.022) return;
+    lastPop = t;
+    var o = ctx.createOscillator();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(680, t);
+    o.frequency.exponentialRampToValueAtTime(300, t + 0.05);
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.05, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.075);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + 0.09);
+    // tiny bandpassed noise transient — the "pop"
+    var n = noiseSource(t, 0.035, null);
+    var nf = ctx.createBiquadFilter();
+    nf.type = 'bandpass'; nf.Q.value = 0.9; nf.frequency.setValueAtTime(1900, t);
+    n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
+    n.g.gain.setValueAtTime(0.055, t);
+    n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
+  };
+
+  // midship / elite death: a deep, layered boom (heavier than SFX.explosion) —
+  // lowpassed noise body + a sub thump + a mid saw crack. Kept under ~0.4s.
+  SFX.boom = function () {
+    if (!ready || muted) return;
+    var t = now();
+    var dur = 0.4;
+    var n = noiseSource(t, dur, null);
+    var nf = ctx.createBiquadFilter();
+    nf.type = 'lowpass';
+    nf.frequency.setValueAtTime(2400, t);
+    nf.frequency.exponentialRampToValueAtTime(170, t + dur);
+    n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
+    n.g.gain.setValueAtTime(0.36, t);
+    n.g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    var o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(180, t);
+    o.frequency.exponentialRampToValueAtTime(46, t + dur * 0.8);
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.5, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.02);
+    var o2 = ctx.createOscillator();
+    o2.type = 'sawtooth';
+    o2.frequency.setValueAtTime(320, t);
+    o2.frequency.exponentialRampToValueAtTime(90, t + 0.12);
+    var g2 = ctx.createGain();
+    g2.gain.setValueAtTime(0.12, t);
+    g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    o2.connect(g2); g2.connect(master);
+    o2.start(t); o2.stop(t + 0.18);
+  };
+
+  // cancel-to-gold cascade (APOTHEOSIS / boss phase). Note count scales with the
+  // number of bullets cancelled — a denser screen sounds like a bigger payday —
+  // but is capped at 6 so it stays a short golden shimmer layered under the
+  // whoosh/gong, not a machine-gun. `n` = bullets cancelled.
+  SFX.cancelCascade = function (n) {
+    if (!ready || muted) return;
+    var t = now();
+    var scale = [523.25, 659.25, 783.99, 987.77, 1174.7, 1567.98];
+    var voices = Math.max(2, Math.min(6, Math.round((n || 0) / 12)));
+    for (var i = 0; i < voices; i++) {
+      var tt = t + i * 0.035;
+      var o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(scale[i], tt);
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, tt);
+      g.gain.exponentialRampToValueAtTime(0.055, tt + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.15);
+      o.connect(g); g.connect(master);
+      o.start(tt); o.stop(tt + 0.17);
+    }
+  };
+
   // gold pickup: rising blip; pitch climbs with combo index
   SFX.gold = function (combo) {
     if (!ready || muted) return;
@@ -190,18 +276,23 @@
     o.start(t); o.stop(t + 0.13);
   };
 
+  // barely-audible whisper tick. Rate-limited to ~8/s: grazing 20 bullets in a
+  // wall must not machine-gun the mixer (the throttle returns before scheduling,
+  // so the number of scheduled voices — not just the call count — is capped).
   SFX.graze = function () {
     if (!ready || muted) return;
     var t = now();
+    if (t - lastGraze < 0.12) return;   // ~8 grazes/s max
+    lastGraze = t;
     var o = ctx.createOscillator();
     o.type = 'sine';
-    o.frequency.setValueAtTime(2000, t);
-    o.frequency.exponentialRampToValueAtTime(3200, t + 0.03);
+    o.frequency.setValueAtTime(2400, t);
+    o.frequency.exponentialRampToValueAtTime(3400, t + 0.025);
     var g = ctx.createGain();
-    g.gain.setValueAtTime(0.03, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    g.gain.setValueAtTime(0.022, t);   // quieter than before — a whisper under the mix
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
     o.connect(g); g.connect(master);
-    o.start(t); o.stop(t + 0.06);
+    o.start(t); o.stop(t + 0.05);
   };
 
   SFX.vaunt = function () {

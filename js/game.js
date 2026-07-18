@@ -55,6 +55,34 @@
   var HUBRIS_PB = 0.03, HUBRIS_PB_R = 140;     // point-blank kill: progress + radius (px)
   Game.HUBRIS_MULT = HUBRIS_MULT;              // single source of truth (run.js end-screen reads this)
 
+  // ---------------------------------------------------------------------
+  // JUICE — impact & game-feel tuning (Polish round 2). Every knob the owner
+  // may want to tune by hand lives here, grouped, with units in the comment.
+  // Hitstop freezes the fixed-step SIM only (updateCombat is skipped): the wall
+  // clock (Engine.time) and the WebAudio music scheduler keep running, so a kill
+  // reads as a heavy beat without stalling input/pause/music. Popcorn kills get
+  // NO hitstop (they are the cadence); only midship/elite/boss/player-hit do.
+  var JUICE = {
+    // micro-hitstop, measured in fixed 1/60 s steps (sim frozen this many steps)
+    hsMid: 3,          // midship / elite kill freeze (steps)  — heavy, not sticky
+    hsBossPhase: 3,    // boss phase-clear freeze (steps)      — punctuates the payday
+    hsBoss: 6,         // boss kill freeze (steps)             — on top of bigDeath
+    hsPlayer: 4,       // player-hit freeze (steps)            — the catastrophic beat
+    // screen-shake peaks (px amplitude fed to addShake; decays at ~26/s already)
+    shakeSmall: 6,     // midship / elite kill      (~0.23s)
+    shakeMedium: 14,   // player hit / boss phase   (~0.5s)
+    shakeLong: 22,     // boss kill                 (~0.85s)
+    shakeMax: 24,      // hard clamp in addShake (was 8; raised so the big tiers land)
+    // popcorn scale-pop: the sprite briefly swells then vanishes (no hitstop)
+    popScale: 1.15,    // peak scale multiple of the enemy sprite
+    popLife: 0.10,     // s the pop sprite lives (a quick punch)
+    // fire-beat "crack": a 2-frame white core at the emitter on each volley beat
+    crackSize: 34,     // px (kept subtle so a crest of emitters doesn't flash-spam)
+    crackLife: 0.045,  // s (~2-3 frames)
+    // player-hit composite dip (uses the existing GL bloom uniform — no new pass)
+    hitBloomDip: 0.5   // bloom drops to this on a player hit, then lerps back to 1.0
+  };
+
   var UI_CYAN = '#5fe6ff', UI_GOLD = '#ffd766', UI_RED = '#ff5a6e';
   var HUBRIS_COL = '#ffc24a';    // hubris gold tint (distinct from loot UI_GOLD)
   function UI_DIM() { return '#6fa9b8'; }
@@ -113,6 +141,7 @@
       rank: 1,
       paused: false,
       time: 0,
+      hitstopT: 0,   // micro-hitstop remaining (s of SIM frozen); see JUICE + update()
       player: {
         x: W / 2, y: H - 300, alive: true, invuln: 2.0, blink: 0,
         fireT: 0, respawnT: 0, dead: false, drones: [], recoil: 0, hammerT: 0, edictT: 0, volleyN: 0
@@ -465,7 +494,32 @@
       px = nx; py = ny;
     }
   }
-  function addShake(mag) { if (mag > G.shakeMag) G.shakeMag = Math.min(mag, 8); }
+  function addShake(mag) { if (mag > G.shakeMag) G.shakeMag = Math.min(mag, JUICE.shakeMax); }
+
+  // Micro-hitstop: freeze the SIM for `steps` fixed steps. max() so overlapping
+  // kills don't stack into a long stall. Consumed in update() — never touches the
+  // wall clock, the music scheduler (real-time WebAudio), or pause handling.
+  function hitstop(steps) { var t = steps * Engine.DT; if (t > G.hitstopT) G.hitstopT = t; }
+
+  // Popcorn kill flourish: a quick 1.15x scale-pop of the dead sprite (it swells
+  // toward white, then vanishes). One additive particle — no hitstop, no shake.
+  function popEnemy(e) {
+    var p = Engine.particles.alloc(); if (!p) return;
+    p.x = e.x; p.y = e.y; p.vx = 0; p.vy = 0; p.age = 0; p.life = JUICE.popLife;
+    p.size = e.scale; p.grow = e.scale * (JUICE.popScale - 1) / JUICE.popLife; p.drag = 1;
+    p.r = e.r + (1 - e.r) * 0.55; p.g = e.g + (1 - e.g) * 0.55; p.b = e.b + (1 - e.b) * 0.55;
+    p.a = 0.9; p.spr = e.spr; p.rot = e.rot; p.angVel = 0; p.kind = K_FLASH;
+  }
+
+  // Fire-beat "crack": a brief white core at the emitter the instant a volley
+  // fires (the rhythm-law downbeat). Cheap single sprite; pose beats are skipped.
+  function crack(x, y) {
+    var p = Engine.particles.alloc(); if (!p) return;
+    p.x = x; p.y = y; p.vx = 0; p.vy = 0; p.age = 0; p.life = JUICE.crackLife;
+    p.size = JUICE.crackSize; p.grow = JUICE.crackSize * 2; p.drag = 1;
+    p.r = 1; p.g = 0.98; p.b = 0.92; p.a = 0.85;
+    p.spr = GL.SPR.CORE; p.rot = 0; p.angVel = 0; p.kind = K_FLASH;
+  }
 
   // ---------------------------------------------------------------------
   // gold + wallet
@@ -750,12 +804,16 @@
     addShake(4);
   }
   function cancelBulletsToGold(midas) {
-    var val = 0.5;
+    var val = 0.5, n = 0;
     Engine.bullets.forEach(function (b) {
       if (Engine.gold.freeTop > 0) spawnGold(b.x, b.y, 1, val);
       flash(b.x, b.y, [1, 0.8, 0.3], 22, 0.12);
-      Engine.bullets.release(b);
+      Engine.bullets.release(b); n++;
     });
+    // golden cascade that scales with how full the screen was (the denser the
+    // crest, the bigger the payday sounds) — layered under the vaunt whoosh /
+    // boss gong. Internally length-capped so it stays short + mid-band.
+    if (n > 0) SFX.cancelCascade(n);
   }
 
   // ---------------------------------------------------------------------
@@ -1747,11 +1805,16 @@
     dropHubris();                                         // a hit knocks HUBRIS down one step + clears progress
     if (!G.keepMult) { G.mult = 1; G.multDecayT = 0; }   // OATH TABLET charm: multiplier survives death
     G.vaunt.gauge = Math.max(0, G.vaunt.gauge * 0.3);
-    SFX.death();
+    SFX.death(); SFX.thud();                             // death sting + kinetic body thud
     for (var i = 0; i < 3; i++) ringShock(p.x, p.y, [1, 0.5, 0.4], 40 + i * 30, 2200, 0.6);
     spark(p.x, p.y, [1, 0.7, 0.4], 40, 520, 40);
     flash(p.x, p.y, [1, 0.8, 0.7], 300, 0.4);
-    addShake(6);
+    // catastrophic-but-fair weight: medium shake, a white full-screen flash, a
+    // brief bloom dip (the world reels), and a micro-hitstop on the impact frame.
+    addShake(JUICE.shakeMedium);
+    G.flashAll = Math.max(G.flashAll, 0.35);
+    G.bloom = JUICE.hitBloomDip;                          // dips now; updateVaunt lerps it back
+    hitstop(JUICE.hsPlayer);
     var clearR = 340;
     Engine.bullets.forEach(function (b) {
       var dx = b.x - p.x, dy = b.y - p.y;
@@ -2051,7 +2114,15 @@
   function scriptTick(e, dt) {
     var sc = e.script; if (!sc) { if (e.poseT > 0) e.poseT -= dt; return; }
     e.scriptT += dt;
-    while (e.scriptI < sc.length && sc[e.scriptI].t <= e.scriptT) { sc[e.scriptI].fn(e); e.scriptI++; }
+    while (e.scriptI < sc.length && sc[e.scriptI].t <= e.scriptT) {
+      var _pv = e.poseT;
+      sc[e.scriptI].fn(e);
+      // A beat that fired a volley (did NOT re-arm the pose windup) cracks a white
+      // core at the emitter — the rhythm-law downbeat. Pose beats raise poseT, so
+      // they're skipped (their muzzle flash already telegraphs).
+      if (e.poseT <= _pv) crack(e.x, e.y);
+      e.scriptI++;
+    }
     if (e.scriptLoop > 0 && e.scriptT >= e.scriptLoop) { e.scriptT -= e.scriptLoop; e.scriptI = 0; }
     if (e.poseT > 0) e.poseT -= dt;
   }
@@ -2679,7 +2750,7 @@
       cancelBulletsToGold(false); homeAllGold();   // generic full-field cancel to gold
       ringShock(e.x, e.y, [1, 0.92, 0.45], 90, 3200, 0.75);
       flash(e.x, e.y, [1, 0.92, 0.6], 360, 0.45);
-      addShake(6); SFX.bossPhase();
+      addShake(JUICE.shakeMedium); SFX.bossPhase(); hitstop(JUICE.hsBossPhase);
       e.breathT = 1.0;
     } else {
       e.breathT = 0.55;                    // phase I: a brief pose after the arrival
@@ -2931,7 +3002,7 @@
     for (var i = 0; i < 6; i++) ringShock(e.x, e.y, [1, 0.7, 0.3], 60 + i * 50, 2600, 0.9);
     spark(e.x, e.y, [1, 0.85, 0.4], 80, 640, 60);
     flash(e.x, e.y, [1, 0.9, 0.6], 500, 0.6);
-    SFX.explosion(true); addShake(8); homeAllGold();
+    SFX.explosion(true); addShake(JUICE.shakeLong); hitstop(JUICE.hsBoss); homeAllGold();
   }
 
   function updateEnemies(dt) {
@@ -3036,7 +3107,16 @@
       ringShock(e.x, e.y, [1, 0.7, 0.4], 30, e.boss ? 2600 : 1400, 0.5);
       spark(e.x, e.y, [1, 0.7, 0.35], e.boss ? 40 : 14, 420, 32);
       flash(e.x, e.y, [1, 0.85, 0.5], e.boss ? 220 : 70, 0.22);
-      SFX.explosion(e.boss); addShake(e.boss ? 6 : 2);
+      // Kill-feedback tiers (JUICE): popcorn = light tick + scale-pop, no freeze
+      // (it's cadence); midship/elite = deep boom + small shake + micro-hitstop;
+      // boss = existing boom here, with the long shake + hsBoss added in bigDeath.
+      if (e.boss) {
+        SFX.explosion(true); addShake(JUICE.shakeSmall);
+      } else if (e.elite || e.arch === 'midship') {
+        SFX.boom(); addShake(JUICE.shakeSmall); hitstop(JUICE.hsMid);
+      } else {
+        SFX.pop(); popEnemy(e);
+      }
       addPopup(e.x, e.y, '+' + commas(_gain), UI_GOLD, e.boss ? 40 : 24);   // show the post-HUBRIS grant (fix #3)
       if (G.aff.volatile) Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 3, 0.5, 300 * G.rank, { color: Patterns.LIME, radius: 11 });
       if (G.vaunt.active) {
@@ -3235,6 +3315,20 @@
     G.mode = 'playing';
   };
 
+  // ---- debug/test surface (Polish round 2 verify) ----------------------
+  // Zero runtime cost unless called. Lets the headless harness deterministically
+  // exercise each kill tier + the player-hit path and sample the sim clock. Not
+  // wired into any gameplay path.
+  Game.test = {
+    spawnPop: function () { var e = newEnemy(1, W / 2, 300, 999999, GL.SPR.SHIP_POP, 92, 30, POP_COL, 4, 600, false); return e ? e._i : -1; },
+    spawnMid: function () { var e = newEnemy(30, W / 2, 300, 999999, GL.SPR.SHIP_MID, 270, 100, MID_COL, 26, 7000, true); if (e) e.arch = 'midship'; return e ? e._i : -1; },
+    kill: function (i) { var e = Engine.enemies.items[i]; if (e && e.active && !e.dying) killEnemy(e, true); },
+    hurt: function () { G.player.invuln = 0; G.vaunt.active = false; G.vaunt.mercy = 0; playerHit(); },
+    hitstopT: function () { return G.hitstopT; },
+    simTime: function () { return G.time; },
+    shakeMag: function () { return G.shakeMag; }
+  };
+
   function detectClear() {
     if (G.mode !== 'playing') return;   // an Apostate death may have opened a draft mid-frame
     checkFormWipe();
@@ -3331,8 +3425,13 @@
 
     if (m === 'title') Run.updateTitle(dt);
     else if (m === 'sector') Run.updateSector(dt);
-    else if (m === 'playing') { if (!G.paused) { updateCombat(dt); detectClear(); } }
-    else if (m === 'clearing') { if (!G.paused) { updateCombat(dt); G.clearT -= dt; if (G.clearT <= 0) Run.onCleared(G.clearKind); } }
+    // Micro-hitstop: while G.hitstopT is live the SIM is frozen (updateCombat is
+    // skipped) but the step still runs, so the wall clock (Engine.time) and the
+    // real-time music scheduler advance — the kill lands as a heavy beat. Pause is
+    // handled above, so pausing during a hitstop freezes hitstopT too (it only
+    // decrements in the non-paused branch) and resumes the remaining steps clean.
+    else if (m === 'playing') { if (!G.paused) { if (G.hitstopT > 0) { G.hitstopT -= dt; if (G.hitstopT < 0) G.hitstopT = 0; } else { updateCombat(dt); detectClear(); } } }
+    else if (m === 'clearing') { if (!G.paused) { if (G.hitstopT > 0) { G.hitstopT -= dt; if (G.hitstopT < 0) G.hitstopT = 0; } else { updateCombat(dt); G.clearT -= dt; if (G.clearT <= 0) Run.onCleared(G.clearKind); } } }
     else if (m === 'draft') Run.updateDraft(dt);
     else if (m === 'shop') Run.updateShop(dt);
     else if (m === 'complete') Run.updateComplete(dt);
