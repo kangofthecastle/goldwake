@@ -55,7 +55,7 @@
     glCanvas = document.getElementById('gl');
     hudCanvas = document.getElementById('hud');
     if (!GL.init(glCanvas)) {
-      showMsg('<b>GOLDWAKE</b><br><br>This game needs <b>WebGL2</b>, which your browser or GPU did not provide.<br><br>Try a recent Chrome, Edge, or Firefox with hardware acceleration enabled.');
+      showMsg('<b>HUBRIS</b><br><br>This game needs <b>WebGL2</b>, which your browser or GPU did not provide.<br><br>Try a recent Chrome, Edge, or Firefox with hardware acceleration enabled.');
       return;
     }
     hud = hudCanvas.getContext('2d');
@@ -2302,10 +2302,11 @@
     var m = G.mode;
     if (Engine.pressed('KeyM')) { var mu = SFX.toggleMute(); addPopup(W / 2, 120, mu ? 'MUTED' : 'SOUND ON', UI_CYAN, 30); }
     if (Engine.pressed('KeyR')) { Run.startRun(Run.newSeed()); return; }
-    if (Engine.pressed('Escape')) {
-      if (m === 'playing' || m === 'clearing' || m === 'draft' || m === 'shop') { Run.toTitle(); return; }
-    }
-    if (Engine.pressed('KeyP') && (m === 'playing' || m === 'clearing')) G.paused = !G.paused;
+    // Engine.pressed CONSUMES the edge — check the mode FIRST so that in other
+    // modes ('over'/'complete'/'sector') the Escape press survives for the Run
+    // handlers' pressCancel() later this same tick.
+    if ((m === 'playing' || m === 'clearing' || m === 'draft' || m === 'shop') && Engine.pressed('Escape')) { Run.toTitle(); return; }
+    if ((m === 'playing' || m === 'clearing') && Engine.pressed('KeyP')) G.paused = !G.paused;
 
     if (m === 'title') Run.updateTitle(dt);
     else if (m === 'sector') Run.updateSector(dt);

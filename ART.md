@@ -1,6 +1,6 @@
 # Art standard: Gilded Myth — Two Layers
 
-GOLDWAKE is a portrait (1080×1920) neon-additive bullet-hell roguelite. Its art
+HUBRIS is a portrait (1080×1920) neon-additive bullet-hell roguelite. Its art
 lives in two layers that never blur into each other. This document governs both
 and, on every rule, says which layer it binds.
 
@@ -226,7 +226,7 @@ gate, a sunken bell, a colossal seated god, a feathered-serpent arch.
 
 ## 9. UI
 
-Goldwake's UI is currently canvas-drawn text and cards (see `js/run.js`). The
+HUBRIS's UI is currently canvas-drawn text and cards (see `js/run.js`). The
 target look adapts the gilded-myth vocabulary without demanding a rewrite: think
 **cloisonné, not parchment** — burnished metal frames, enamel-in-gold panels,
 seal-stamps, edict talismans, stained-glass geometry rendered as flat

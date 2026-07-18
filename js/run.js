@@ -35,6 +35,9 @@
 
   // ---------------------------------------------------------------------
   // meta layer (localStorage)
+  // NOTE: the storage key is legacy-named 'goldwake_meta' on purpose — the game
+  // was renamed to HUBRIS (display only) and keeping the key preserves existing
+  // meta progress. Do not rename it.
   // ---------------------------------------------------------------------
   Run.meta = { hi: 0, bestSector: 0, careerGold: 0, killedWarden: false, completedRun: false };
   Run.loadMeta = function () {
@@ -651,9 +654,10 @@
     dim(ctx, 0.35);
     ctx.textAlign = 'center';
     ctx.fillStyle = COL_GOLD; ctx.font = '800 150px Consolas, monospace';
-    spaced(ctx, 'GOLDWAKE', W / 2, H * 0.16, 16);
+    spaced(ctx, 'HUBRIS', W / 2, H * 0.16, 30);   // 6 letters: wider tracking than the old 8-letter mark
     ctx.fillStyle = COL_CYAN; ctx.font = '500 34px Consolas, monospace';
-    ctx.fillText('a vaunt-driven bullet hell', W / 2, H * 0.16 + 70);
+    // textBaseline is 'top': clear the full 150px glyph block before the subtitle
+    ctx.fillText('a vaunt-driven bullet hell', W / 2, H * 0.16 + 160);
 
     var pulse = 0.5 + 0.5 * Math.sin(perfNow() * 0.005);
     ctx.globalAlpha = 0.55 + 0.45 * pulse; ctx.fillStyle = '#ffffff'; ctx.font = '700 52px Consolas, monospace';

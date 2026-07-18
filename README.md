@@ -1,6 +1,7 @@
-# GOLDWAKE
+# HUBRIS
 
-A vertical-monitor **bullet-hell roguelite** — the neon-additive, bloom-drenched
+**HUBRIS** (working title; repo: `goldwake`) is a vertical-monitor
+**bullet-hell roguelite** — the neon-additive, bloom-drenched
 look of *Danmaku Unlimited 3* crossed with the gold-and-**Vaunt** economy of
 *Jamestown: Legend of the Lost Colony*, wrapped in a seeded 3-sector run with
 draft cards, shops, sector affixes, and a tiny permanent-unlock meta layer.

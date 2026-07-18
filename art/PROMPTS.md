@@ -1,4 +1,4 @@
-# GOLDWAKE — Codex Art Prompt Manifest
+# HUBRIS — Codex Art Prompt Manifest
 
 Generation prompts for every generated asset, built from `ART.md`.
 Each prompt is **fully self-contained** — paste one fenced block into Codex with
@@ -17,7 +17,7 @@ Sections: 1 title keyart · 2 pantheon emblems (5) · 3 god card portraits (15) 
 
 ## Section 1 — Title keyart
 
-### 1. GOLDWAKE title backdrop
+### 1. HUBRIS title backdrop
 
 ```
 Painted illustration, storybook style: a night ocean of darkness with a rising wake

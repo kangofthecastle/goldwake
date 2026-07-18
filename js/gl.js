@@ -524,7 +524,7 @@
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, rc.x, rc.y, CELL, CELL, gl.RGBA, gl.UNSIGNED_BYTE, premultiplied(data));
-    console.info('GOLDWAKE: authored sprite loaded for slot "' + slot + '"');
+    console.info('HUBRIS: authored sprite loaded for slot "' + slot + '"');
   }
 
   function loadOverrides() {
