@@ -19,6 +19,17 @@ Sections: 1 title keyart · 2 pantheon emblems (5) · 3 god card portraits (15) 
 
 ## Batch run (one agentic Codex session, subagent-orchestrated)
 
+**STEP ZERO — read `ART.md` (repo root) in full before generating anything.
+This applies to the coordinator AND to every subagent it spawns** (put the
+instruction in each subagent's task). ART.md is the binding art doctrine — the
+two-layer system, the color law, the third-clause sprite rules, THE DETAIL
+BUDGET. The fenced prompts below are self-contained so a block can be pasted
+into a bare image model, but an agentic session does more than paste: it
+judges outputs, rejects, and re-gens — and it cannot do that without the
+doctrine loaded. (This step was missing from the first run; the boss/elite
+sprites came back over-detailed because no one was holding ART.md while
+judging them.)
+
 To generate the whole manifest in one session: the top-level session acts as
 **coordinator only** — it does not generate images itself. Spin up **one `sol`
 subagent per batch, on high reasoning effort, all batches in parallel**:
