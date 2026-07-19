@@ -441,6 +441,19 @@ SIGNATURE. The base 3-stream is a fixed baseline you grow with ATTACK POWER."* L
 - **STARLINE table** beside `GODS{}`: per god×slot `{qtyLabel, base, secondary}`. `starLine()` prints `★★★  ×2.25 <qtyLabel>
   & <secondary>` from `LADDER[tierOf(cur)]`. `tLevel()` prints now→next.
 
+**DUO GATING (owner 2026-07-19).** A duo card may be OFFERED only when both hold:
+1. **EQUIPPED** — each god of the pair occupies one of your god slots (attack / special / ultimate once
+   ultimates ship). Per-duo `needSlot` still pins a mechanically-required slot (e.g. serpent duos need
+   Quetz on special).
+2. **INVESTED** — the run holds ≥1 additional boon from either god of the pair beyond the two slot
+   transforms themselves: a star level on their transform, a god-tied mod, or that god's charm.
+Duos are a reward for committing to a pairing, not a first-draft lottery. To-code: the duo offer path in
+`run.js` (~323) gains an `investedIn(pair)` check (stars above base on the pair's slots + `G.mods` keyed to
+either god + `G.charms.charm<God>`). Applies to all 26 duos. Duo descs also need a re-anchor sweep — HUNTER'S
+EYE / DEATH SENTENCE still say "crit" (→ PRECISION wording), WILD HUNT still assumes ravens-as-attack
+(→ doom-bolts ×2 vs Terrified per §2 Odin), TWO THRONES / PEACH BANQUET reference the retired Heaven's
+Verdict (→ re-point to IMPERIAL JUDGEMENT in the Jade amendment build).
+
 **Generic-upgrade copy:**
 - **ATTACK POWER** (SCALING): DESC "+15% attack damage." ▸ "Stacks — buffs your base stream, not signatures."
 - **APEX** (GENERIC, rewritten): DESC "APEX — your APOTHEOSIS multiplier climbs one step." ▸ "Cap ×5 → ×6 (max ×8); +0.25
