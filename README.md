@@ -43,7 +43,7 @@ overridable — they stay procedural by doctrine.
 | **X** | **SPECIAL** weapon (spends a charge)  ·  also **leave shop / back** in menus |
 | **C** | **APOTHEOSIS** (when the gauge is full) |
 | **Left / Right** | Move the selection in drafts and shops (or click) |
-| **P / Esc** | Pause in combat (on the pause screen: Z/P/Esc resume, X abandons to title); Esc also backs out of end screens |
+| **P / Esc** | Pause in combat (on the pause screen: Z/P/Esc resume, X abandons to title, **F** toggles **auto-fire**); Esc also backs out of end screens |
 | **R** | Restart the run (fresh seed) |
 | **M** | Mute / unmute (music **and** SFX) |
 
@@ -163,8 +163,8 @@ special transform, and two mod cards:
 - **DUAT** — **ANUBIS** (**Weigher of Hearts** — +25% damage below half health,
   **executes** non-bosses below 25% for bonus gold / **Judgment of Duat** — an
   instant strike on every foe for a share of its missing health).
-- **ASGARD** — **LOKI** (**Confuse** faction-flips the foe's bullets, and the
-  Confused take +15% from you / Shadow-Twin decoy that draws all aimed fire and
+- **ASGARD** — **LOKI** (attack transform in rework — a plain shot for now /
+  Shadow-Twin decoy that draws all aimed fire and
   soaks bullet streams — by design the twin never attacks: pure deception, the
   one sanctioned exception to the every-special-deals-damage rule), **ODIN**
   (orbiting ravens / **Gungnir** the never-miss piercing spear), **THOR**
@@ -195,8 +195,9 @@ TWO THRONES, GODS OF WAR, PEACH BANQUET, THE ALLSEEING, HERALD OF RAGNARÖK,
 FALSE DAWN).
 
 Statuses: **Marked/Weak** (bonus damage taken), **Charm** (fights for you),
-**Terror/Shaken** (Ares — flee + take more), **Burn** (DoT), **Confuse** (Loki
-flips the foe's bullets to your side), **Stun** (frozen). Poseidon, Thor, Guan Yu
+**Terror/Shaken** (Ares — flee + take more), **Burn** (DoT), **Stun** (frozen).
+Each reads by **where** its glyph sits (a distinct body zone) and **what** shape it
+is, not by hue alone. Poseidon, Thor, Guan Yu
 and Terror shove enemies with real spring-damped **displacement** — visible
 lurch, wall-slams, and enemy pile-ups.
 
@@ -266,7 +267,7 @@ Tidal carries and horn shoves use a per-bullet `timeScale`/`slowT` in
 small fixed collections; the staff pillar, Guan Yu's sweep and the Quetzalcoatl
 serpent extend the shared `hazards` pool (8 slots). Every enemy aimed pattern
 targets `Game.aimPoint()` — which returns the Loki decoy while it lives, else the
-player — and Confuse reflects an enemy's aim through itself (`+π`). `Run.GODS` is
+player. `Run.GODS` is
 the single metadata table (name, epithet, pantheon, color, transform text), so a
 future pantheon is a data-only addition.
 

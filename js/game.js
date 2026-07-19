@@ -724,8 +724,8 @@
           if (d > 0) damageEnemy(e, d, false);
         });
         break;
-      case 'loki':          // mass Confuse (bosses Weakened) + free decoy — pure deception, no damage by design
-        each(function (e) { if (e.boss) { e.weak = true; e.weakT = 6; } else e.confuseT = Math.max(e.confuseT, 2.5); });
+      case 'loki':          // Loki rider: free decoy + boss Weaken (CONFUSE removed, ruling 1; PILFER arrives Pass 2)
+        each(function (e) { if (e.boss) { e.weak = true; e.weakT = 6; } });
         shadowTwin();
         break;
       case 'odin': {        // Gungnir storm: 6 spears round-robin (all land on a lone boss)
@@ -921,8 +921,18 @@
     s.weave = 0; s.phase = 0;
     s.cloneShot = false; s.crescent = false;
     s.markHit = false; s.forceCrit = 0;
+    resetShotHits(s);
     return s;
   }
+  // §9a pierce-dedup reset — clear the lifetime hit budget and stamp a fresh unique
+  // fireId so a recycled pool slot never inherits a prior shot's budget or identity.
+  // fireIds start at 1 (++fireIdCounter), so 0 is a safe "never hit" sentinel on the
+  // enemy (e.lastHitFireId). No wraparound handling needed at realistic fire rates.
+  var fireIdCounter = 0;
+  function resetShotHits(s) { s.hitN = 0; s.fireId = ++fireIdCounter; }
+  // Stamp a counted, deduped hit: mark this exact shot on the enemy so it can never
+  // re-bite it, and count the distinct hit toward the shot's lifetime pierce budget.
+  function stampHit(s, e) { e.lastHitFireId = s.fireId; s.hitN++; }
 
   function lanceShot(x, kind, dmg, col) {
     var s = allocShot(); if (!s) return;
@@ -1248,11 +1258,37 @@
       }
     }
   }
+  // ---------------------------------------------------------------------
+  // §5 FACTION LAW — CYAN HEART, NOSE UP. Every player-summoned entity keeps its
+  // GOD body colour and gains one unfakeable engine marker: the player's own cyan
+  // hitbox gem, breathing at 3Hz (the same gem drawPlayer renders). drawOwnedGem
+  // stamps it; callers draw the body nose-up (rot 0), dive states may aim at prey.
+  // ---------------------------------------------------------------------
+  function drawOwnedGem(x, y, alpha) {
+    var breath = 0.72 + 0.28 * Math.sin(G.time * 18.85);   // 3Hz breath
+    GL.draw(GL.SPR.GLOW, x, y, 30, 30, 0, 0.7, 0.95, 1, 0.55 * alpha * breath);
+    GL.draw(GL.SPR.CORE, x, y, 12, 12, 0, 0.7, 0.95, 1, alpha * breath);
+  }
+  // Hostile mimic (Apostate) — the sanctioned deception, INVERTED marker: a RED
+  // heart with a harsh 12Hz flicker + a red threat chevron (NEEDLE) overhead.
+  // curd 0..1 = the decoy CURDLE (0 = still wearing the full friendly cyan costume,
+  // 1 = fully curdled red); Apostate clones spawn instantly at curd 1.
+  function drawMimicGem(x, y, scale, alpha, curd) {
+    var hr = 0.7 + 0.3 * curd, hg = 0.95 - 0.75 * curd, hb = 1 - 0.7 * curd;   // cyan -> red as it curdles
+    var flick = curd > 0.02 ? (0.55 + 0.45 * Math.sin(G.time * 75.4))          // 12Hz red flicker
+                            : (0.72 + 0.28 * Math.sin(G.time * 18.85));        // 3Hz cyan breath (disguise)
+    GL.draw(GL.SPR.GLOW, x, y, 30, 30, 0, hr, hg, hb, 0.5 * alpha * flick);
+    GL.draw(GL.SPR.CORE, x, y, 12, 12, 0, hr, hg, hb, alpha * flick);
+    if (curd > 0.05) GL.draw(GL.SPR.NEEDLE, x, y - scale * 0.85, 16, 34, Math.PI, 1, 0.2, 0.3, curd * alpha);  // threat chevron
+  }
+
   function drawRavens() {
     for (var i = 0; i < G.ravens.length; i++) {
       var r = G.ravens[i];
-      GL.draw(GL.SPR.GLOW, r.x, r.y, 46, 46, 0, 0.6, 0.62, 0.72, 0.5);
-      GL.draw(GL.SPR.SHIP_POP, r.x, r.y, 34, 34, r.state === 1 ? Math.atan2(r.ty - r.y, r.tx - r.x) + Math.PI / 2 : 0, 0.78, 0.8, 0.88, 0.95);
+      var rot = r.state === 1 ? Math.atan2(r.ty - r.y, r.tx - r.x) + Math.PI / 2 : 0;  // dive aims at prey, else nose-up
+      GL.draw(GL.SPR.GLOW, r.x, r.y, 46, 46, 0, 0.16, 0.17, 0.22, 0.5);                // near-black bird body (§2 Odin)
+      GL.draw(GL.SPR.SHIP_POP, r.x, r.y, 34, 34, rot, 0.2, 0.21, 0.28, 0.95);
+      drawOwnedGem(r.x, r.y, 1);
     }
   }
 
@@ -1318,8 +1354,9 @@
     if (!G.decoy.active) return;
     var d = G.decoy, pulse = 0.6 + 0.4 * Math.sin(G.time * 10);
     GL.draw(GL.SPR.GLOW, d.x, d.y, 72, 72, 0, 0.4, 1, 0.5, 0.5 * pulse);
-    GL.draw(GL.SPR.SHIP_PLAYER, d.x, d.y, 72, 72, 0, 0.4, 1, 0.5, 0.7);
-    GL.draw(GL.SPR.RING, d.x, d.y, 92, 92, G.time * 3, 0.4, 1, 0.5, 0.6);
+    GL.draw(GL.SPR.SHIP_PLAYER, d.x, d.y, 72, 72, 0, 0.4, 1, 0.5, 0.7);   // Loki green body, nose-up
+    GL.draw(GL.SPR.RING, d.x, d.y, 92, 92, G.time * 3, 0.4, 1, 0.5, 0.4);
+    drawOwnedGem(d.x, d.y, 1);                                            // §5 cyan heart
   }
 
   // WUKONG — clones
@@ -1339,15 +1376,15 @@
       if (c.timer <= 0) { spark(c.x, c.y, [1, 0.4, 0.2], 10, 240, 24); G.clones.splice(i, 1); continue; }
       c.x = p.x + c.offset; c.y = p.y;
       if (c.x < 40) c.x = 40; if (c.x > W - 40) c.x = W - 40;
-      if (Engine.fireHeld()) { c.fireT -= dt; if (c.fireT <= 0) { c.fireT = FIRE_CD / (G.stats.atkRate * frenzyRate()); fireStreams(c.x, c.y, Engine.focusHeld(), 0.45, true); } }
+      if (wantFire()) { c.fireT -= dt; if (c.fireT <= 0) { c.fireT = FIRE_CD / (G.stats.atkRate * frenzyRate()); fireStreams(c.x, c.y, Engine.focusHeld(), 0.45, true); } }
     }
   }
   function drawClones() {
     for (var i = 0; i < G.clones.length; i++) {
       var c = G.clones[i], a = Math.min(1, c.timer) * 0.62;
-      GL.draw(GL.SPR.GLOW, c.x, c.y + 30, 46, 70, 0, 1, 0.4, 0.2, 0.4 * a);
-      GL.draw(GL.SPR.SHIP_PLAYER, c.x, c.y, 68, 68, 0, 1, 0.4, 0.25, a);
-      GL.draw(GL.SPR.CORE, c.x, c.y, 10, 10, 0, 1, 0.7, 0.5, a);
+      GL.draw(GL.SPR.GLOW, c.x, c.y + 30, 46, 70, 0, 1, 0.8, 0.35, 0.4 * a);   // §5 Wukong gold default
+      GL.draw(GL.SPR.SHIP_PLAYER, c.x, c.y, 68, 68, 0, 1, 0.8, 0.35, a);        // gold body, nose-up
+      drawOwnedGem(c.x, c.y, a);                                                // cyan heart (was gold core)
     }
   }
 
@@ -1537,9 +1574,10 @@
   function drawWraiths() {
     for (var i = 0; i < G.wraiths.length; i++) {
       var w = G.wraiths[i], a = Math.min(1, w.timer * 2);
-      GL.draw(GL.SPR.GLOW, w.x, w.y, 150, 150, w.ang, 0.55, 0.02, 0.06, 0.55 * a);
-      GL.draw(GL.SPR.CORE, w.x, w.y, 40, 40, 0, 0.9, 0.1, 0.15, 0.8 * a);
-      GL.draw(GL.SPR.SHIP_POP, w.x, w.y, 44, 44, w.ang + Math.PI / 2, 0.7, 0.05, 0.1, a);
+      var rot = (w.state === 1 && w.target) ? Math.atan2(w.target.y - w.y, w.target.x - w.x) + Math.PI / 2 : 0;  // dive aims, else nose-up
+      GL.draw(GL.SPR.GLOW, w.x, w.y, 150, 150, 0, 0.55, 0.02, 0.06, 0.55 * a);   // dread-red aura (§5 Ares body)
+      GL.draw(GL.SPR.SHIP_POP, w.x, w.y, 44, 44, rot, 0.7, 0.05, 0.1, a);        // dread-red body
+      drawOwnedGem(w.x, w.y, a);                                                 // §5 cyan heart (was a red core = read as enemy)
     }
   }
 
@@ -1654,7 +1692,7 @@
 
   // ---------------------------------------------------------------------
   // aim point — every enemy aimed pattern targets this (Loki decoy redirects
-  // all aimed fire; Confuse reflects an enemy's aim through itself = +pi).
+  // all aimed fire; returns the Loki decoy while it lives, else the player).
   // ---------------------------------------------------------------------
   var aimTX = W / 2, aimTY = H - 300;
   function refreshAim() {
@@ -1667,13 +1705,32 @@
     Engine.enemies.forEach(function (o) { if (!o.charmed || o.dying) return; var dx = o.x - e.x, dy = o.y - e.y, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = o; } });
     return best;
   }
-  function AIMX(e) { var t = tauntTarget(e); var tx = t ? t.x : aimTX; return e.confuseT > 0 ? (2 * e.x - tx) : tx; }
-  function AIMY(e) { var t = tauntTarget(e); var ty = t ? t.y : aimTY; return e.confuseT > 0 ? (2 * e.y - ty) : ty; }
+  function AIMX(e) { var t = tauntTarget(e); return t ? t.x : aimTX; }
+  function AIMY(e) { var t = tauntTarget(e); return t ? t.y : aimTY; }
   Game.aimPoint = function () { return { x: aimTX, y: aimTY }; };
 
   // ---------------------------------------------------------------------
   // player
   // ---------------------------------------------------------------------
+  // §9b AUTO-FIRE — a persisted pause-menu toggle (Run.meta.autoFire, default
+  // OFF) that fires as if Z were held. It is only ever read inside updateCombat
+  // (player / clone / decoy fire), which itself runs only while actively playing
+  // and NOT paused / hitstopped / gilded — so auto-fire can never fire on the
+  // title, in a shop, while paused, or mid-freeze. Uses the HELD read, never
+  // Engine.pressed, so it leaves the edge semantics untouched.
+  function wantFire() {
+    // §Fire-hold law: any player-OWNED entity that fires (Wukong clones) reads
+    // wantFire to decide whether to shoot, so it must fall silent exactly when the
+    // player's own fire would. updatePlayer already early-returns on the gild-freeze
+    // and on the death/respawn window, so gating here is a no-op for the player's
+    // own fire path — but it is what actually silences the clones, whose updateClones
+    // has no such early-return of its own. (Ravens/decoy auto-fire on their own
+    // cadence, NOT via wantFire, so they are outside this gate by design.)
+    if (G.freeze.t > 0) return false;                 // CURSED-GOLD gild: statue holds fire
+    var p = G.player; if (p.dead || !p.alive) return false;   // dead/respawning: no owned fire
+    return Engine.fireHeld() || !!(Run.meta && Run.meta.autoFire);
+  }
+
   function updatePlayer(dt) {
     var p = G.player;
     if (p.dead) {
@@ -1745,11 +1802,11 @@
     p.blink += dt;
     // Ra replaces projectile fire with a continuous solar beam
     if (G.attackGod === 'ra') {
-      if (Engine.fireHeld()) raBeam(dt);
+      if (wantFire()) raBeam(dt);
       else { G.ra.active = false; G.ra.target = null; G.ra.ramp = 0; }
     } else {
       p.fireT -= dt;
-      if (Engine.fireHeld() && p.fireT <= 0) {
+      if (wantFire() && p.fireT <= 0) {
         var cad = (G.attackGod === 'guanyu') ? 1.7 : 1;   // crescents: slower, heavier cadence
         p.fireT = FIRE_CD * cad / (G.stats.atkRate * frenzyRate());
         fireShots(focus); SFX.shot();
@@ -1759,7 +1816,7 @@
     // Thor Mjolnir throw cycle (alongside the thinned normal stream)
     if (G.attackGod === 'thor') {
       p.hammerT -= dt;
-      if (Engine.fireHeld() && p.hammerT <= 0) {
+      if (wantFire() && p.hammerT <= 0) {
         p.hammerT = G.mods.thorFast ? 0.9 : 1.4;
         throwHammer(false, 5 * G.stats.atkDmg * G.attackR * (G.mods.thorBelt ? 1.4 : 1), 300 * (G.mods.thorBelt ? 1.5 : 1));
       }
@@ -1767,7 +1824,7 @@
     // Jade Emperor: issue a homing imperial edict every ~3s of firing (1.5s w/ jadeOften)
     if (G.attackGod === 'jade') {
       p.edictT -= dt;
-      if (Engine.fireHeld() && p.edictT <= 0) { p.edictT = G.mods.jadeOften ? 1.5 : 3.0; fireEdict(); }
+      if (wantFire() && p.edictT <= 0) { p.edictT = G.mods.jadeOften ? 1.5 : 3.0; fireEdict(); }
     }
   }
   function fireEdict() {
@@ -1913,6 +1970,7 @@
   function newEnemy(type, x, y, hp, spr, scale, radius, col, gold, score, elite) {
     var e = Engine.enemies.alloc(); if (!e) return null;
     e.seq = ++seqCounter;
+    e.lastHitFireId = 0;   // §9a pierce-dedup: reset so a recycled slot isn't "already bitten"
     e.type = type; e.x = x; e.y = y; e.vx = 0; e.vy = 0;
     e.hp = hp * G.aff.hpMul; e.maxhp = e.hp; e.spr = spr; e.scale = scale; e.radius = radius;
     e.r = col[0]; e.g = col[1]; e.b = col[2];
@@ -1925,7 +1983,7 @@
     e.terrorT = 0; e.shakenT = 0;
     e.charmMeter = 0; e.charmed = false; e.charmT = 0;
     e.marked = false; e.markT = 0; e.weak = false; e.weakT = 0; e.ghost = false;
-    e.burnT = 0; e.burnDps = 0; e.confuseT = 0; e.stunT = 0; e.confuseBudget = 0; e.judgeT = 0;
+    e.burnT = 0; e.burnDps = 0; e.trickStacks = 0; e.stunT = 0; e.trickBudget = 0; e.judgeT = 0;
     e.dispX = 0; e.dispY = 0; e.dispVX = 0; e.dispVY = 0; e.impactDmg = 0; e.slamCd = 0;
     e.arch = ''; e.aura = ''; e.link = null; e.gen = 0; e.g1 = ''; e.g2 = ''; e.shieldT = 0;
     e.knx = 0; e.kny = 0; e.fireHold = 0;
@@ -1959,12 +2017,11 @@
         if (e.boss) { e.weak = true; e.weakT = 4; }
         else { e.charmMeter += CHARM_PER_HIT; if (e.charmMeter >= (G.mods.aphroFast ? 3 : CHARM_THRESHOLD)) charmEnemy(e); }
         break;
-      case 'loki': {
-        var ch = 0.12 + (G.mods.lokiChance ? 0.06 : 0);
-        if (e.boss) { if (Math.random() < ch * 0.5) { e.confuseT = 0.8; e.confuseBudget = e.maxhp * 0.03; } }
-        else if (Math.random() < ch) e.confuseT = 2.0;
+      case 'loki':
+        // CONFUSE REMOVED (ruling 1). Loki's attack is a plain default shot with
+        // no rider this pass; PILFER (and its trickStacks/trickBudget boss budget)
+        // lands in Pass 2. Deliberately dead — nothing to apply on hit.
         break;
-      }
       case 'anubis':
         if (!e.boss && !e.dying && e.hp < anubisThreshold() * e.maxhp) executeEnemy(e);
         break;
@@ -2077,7 +2134,6 @@
       if (Math.random() < dt * 9) spark(e.x, e.y, [1, 0.5, 0.12], 1, 130, 14);
       if (e.hp <= 0) { killEnemy(e, true); return; }
     }
-    if (e.confuseT > 0) e.confuseT -= dt;
     if (e.stunT > 0) e.stunT -= dt;
     // Ares terror / shaken
     if (e.terrorT > 0) e.terrorT -= dt;
@@ -2743,11 +2799,11 @@
     // fakedecoy is a summon — spawn loose so its self-destruct (killEnemy false)
     // doesn't mark the wave's squadron as escaped and block a WIPE (fix #2).
     var d = spawnLoose(function () { return newEnemy(1, 200 + Math.random() * (W - 400), 300 + Math.random() * 320, 30, GL.SPR.SHIP_PLAYER, 60, 26, [0.5, 1, 0.6], 2, 200, false); });
-    if (d) { d.arch = 'fakedecoy'; d.vy = 0; d.onUpdate = function (dd, ddt) { dd.t += ddt; dd.rot = 0; if (dd.t > 4) killEnemy(dd, false); }; }
+    if (d) { d.arch = 'fakedecoy'; d.vy = 0; d.onUpdate = function (dd, ddt) { dd.t += ddt; dd.rot = Math.min(1, Math.max(0, (dd.t - 0.6) / 0.15)) * Math.PI; if (dd.t > 4) killEnemy(dd, false); }; }   // §5 curdle: nose swings down
   }
   function apostateClones(e) {
     spawnLoose(function () {   // apostate clones are summons — never squadron members (fix #2)
-      for (var i = 0; i < 2; i++) { var c = newEnemy(1, e.x + (i ? 120 : -120), e.y + 60, 40, GL.SPR.SHIP_POP, 60, 26, [1, 0.5, 0.3], 3, 300, false); if (c) { c.vy = 120; c.fireCd = 1.0; c.onUpdate = updateEscort; } }
+      for (var i = 0; i < 2; i++) { var c = newEnemy(1, e.x + (i ? 120 : -120), e.y + 60, 40, GL.SPR.SHIP_POP, 60, 26, [1, 0.5, 0.3], 3, 300, false); if (c) { c.vy = 120; c.fireCd = 1.0; c.arch = 'apostateclone'; c.onUpdate = updateEscort; } }   // §5 hostile mimic: instant red heart, nose-down
     });
   }
 
@@ -3166,7 +3222,6 @@
         var fr = e.aura === 'frenzied' ? 1.3 : 1;       // FRENZIED aura
         if (e.onUpdate) e.onUpdate(e, dt * fr);
         Patterns.clearSource();
-        if (e.boss && e.confuseT > 0) confuseBossSelfHarm(e); // Loki: flipped bullets self-harm
       }
       if (terrified) {                                  // continued flee acceleration
         var fx = e.x - G.player.x, fy = e.y - G.player.y, fd = Math.hypot(fx, fy) || 1;
@@ -3176,16 +3231,6 @@
       if (!e.dying) { e.x += e.dispX; e.y += e.dispY; }
     });
   }
-  function confuseBossSelfHarm(e) {
-    var n = Patterns.consumeBossFlip();
-    if (n <= 0) return;
-    var dmg = Math.min(n * e.maxhp * 0.001, e.confuseBudget);
-    if (dmg <= 0) return;
-    e.confuseBudget -= dmg;
-    damageEnemy(e, dmg, false);
-    spark(e.x, e.y, [0.55, 1, 0.35], 3, 200, 20);
-  }
-
   // central damage: applies Marked / Weak / crit, popups, kill.
   // Boss spellcard rule (DANMAKU.md "each spellcard gets its stage time"):
   // while a boss is on a NON-final phase its hp cannot fall below the current
@@ -3303,6 +3348,9 @@
       if (b.gild && ((((G.time * 60) | 0) + b._i) & 3) === 0) flash(b.x, b.y, [1, 0.8, 0.34], 15, 0.14);
       // Loki flipped (friendly) bullets: hit enemies, ignore the player. During a
       // TALOS nail phase they may only damage the nail (the body is immune).
+      // DORMANT until Pass 2 PILFER — nothing sets b.friendly=true this pass (Confuse
+      // is deleted), so this branch never runs; the per-frame cost is just the boolean
+      // check below. KEEP it: PILFER's bullet-snatch is its consumer next pass.
       if (b.friendly) {
         var hitF = false;
         Engine.enemies.forEach(function (e) {
@@ -3352,8 +3400,6 @@
     if (s.faction === 0 && G.attackGod === 'anubis' && e.hp < 0.5 * e.maxhp) dmg *= (e.boss && G.mods.anubisBossDmg ? 1.4 : 1.25);
     // Aphrodite: +15% to the charm-touched and the Weakened
     if (s.faction === 0 && G.attackGod === 'aphrodite' && (e.weak || e.charmMeter > 0)) dmg *= 1.15;
-    // Loki: the Confused take +15% from you
-    if (s.faction === 0 && G.attackGod === 'loki' && e.confuseT > 0) dmg *= 1.15;
     if (s.kind === 5) { // charm missile
       if (e.boss) { e.weak = true; e.weakT = 6; damageEnemy(e, dmg, false); }
       else { charmEnemy(e); flash(e.x, e.y, [1, 0.5, 0.85], 60, 0.2); }
@@ -3385,34 +3431,44 @@
   }
   function artemisCritChance() { return Math.min(0.6, 0.18 + 0.03 * (G.attackR - 1) + G.mods.artemisCrit); }
 
+  // §9a HONEST PIERCE. maxHits = pierce+1 is the shot's LIFETIME cap on distinct
+  // enemies (s.hitN persists across frames now). Per-enemy dedup is a stamp: the
+  // shot's unique s.fireId is written to e.lastHitFireId on a counted hit, so the
+  // shot bites each enemy exactly once for its whole life instead of re-hitting it
+  // every overlap frame (the old ~55-DPS exploit). This is eviction-free — unlike
+  // the old 8-slot seq ring, a pierce-999 shot through a dense swarm can never lose
+  // a foe's record and re-hit it. Quetz weave / Guan Yu crescents still pierce &
+  // cleave — just once per foe. Applies to the TALOS nail branch too.
   function collideShots() {
     Engine.shots.forEach(function (s) {
-      var maxHits = s.pierce + 1, hits = 0, done = false;
+      var maxHits = s.pierce + 1;
+      if (s.hitN >= maxHits) { Engine.shots.release(s); return; }
       Engine.enemies.forEach(function (e) {
-        if (done || e.dying || e.charmed) return;
-        // TALOS THE NAIL: the body is immune — only the small nail hitbox (his ankle
-        // weak point) drains the segment. A body hit still counts against the shot's
-        // pierce budget (no free pass-through) but deals 0 damage with dim feedback.
-        // This is the ONLY spatial special-case; every non-shot damage source (riders,
+        if (s.hitN >= maxHits || e.dying || e.charmed) return;
+        if (e.lastHitFireId === s.fireId) return;          // this shot already bit this foe
+        // TALOS THE NAIL: the body is immune — only the small nail hitbox (his
+        // ankle weak point) drains the segment. A body hit still costs one pierce
+        // slot (no free pass-through) but deals 0 damage with dim feedback. This
+        // is the ONLY spatial special-case; every non-shot damage source (riders,
         // hazards, chain, burn) routes to the nail pool through damageEnemy = e.hp.
         if (e.nailActive) {
           if (Engine.hit(s.x, s.y, s.radius, e.nailX, e.nailY, e.nailR)) {
             hitEnemy(s, e);
             flash(s.x, s.y, [0.6, 1, 0.55], 26, 0.1);
-            hits++; if (hits >= maxHits) done = true;
+            stampHit(s, e);
           } else if (Engine.hit(s.x, s.y, s.radius, e.x, e.y, e.radius)) {
             spark(s.x, s.y, [1, 0.82, 0.4], 1, 120, 10);   // dim clank: it did nothing
-            hits++; if (hits >= maxHits) done = true;
+            stampHit(s, e);
           }
           return;
         }
         if (Engine.hit(s.x, s.y, s.radius, e.x, e.y, e.radius)) {
           hitEnemy(s, e);
           flash(s.x, s.y, s.faction === 2 ? [1, 0.5, 0.85] : [0.7, 1, 1], 26, 0.1);
-          hits++; if (hits >= maxHits) done = true;
+          stampHit(s, e);
         }
       });
-      if (hits >= maxHits) Engine.shots.release(s);
+      if (s.hitN >= maxHits) Engine.shots.release(s);
     });
   }
   function collideBodies() {
@@ -3530,7 +3586,22 @@
       var s = Engine.shots.alloc(); if (!s) return;
       s.x = x; s.y = y; s.vx = 0; s.vy = -1200; s.radius = 12; s.damage = dmg || 1000; s.faction = 0;
       s.pierce = 0; s.kind = 0; s.crescent = false; s.cloneShot = false; s.markHit = false; s.forceCrit = 0; s.homing = false; s.big = false; s.age = 0; s.life = 2.5;
+      resetShotHits(s);
     },
+    // §9a verify: fire a piercing shot (pierce n, weak dmg) at (x,y) going up.
+    testPierceShot: function (x, y, dmg, pierce) {
+      var s = Engine.shots.alloc(); if (!s) return;
+      s.x = x; s.y = y; s.vx = 0; s.vy = -1200; s.radius = 14; s.damage = dmg || 5; s.faction = 0;
+      s.pierce = pierce == null ? 4 : pierce; s.kind = 0; s.crescent = false; s.cloneShot = false; s.markHit = false; s.forceCrit = 0; s.homing = false; s.big = false; s.age = 0; s.life = 2.5;
+      resetShotHits(s);
+    },
+    shotCount: function () { return Engine.shots.count(); },
+    setAutoFire: function (v) { Run.meta.autoFire = !!v; },
+    autoFire: function () { return !!Run.meta.autoFire; },
+    setPaused: function (v) { G.paused = !!v; },
+    // run one REAL dispatch frame (respects mode/pause gating, unlike step) so
+    // the harness can prove auto-fire stays silent on title/pause.
+    frame: function (dt) { update(dt || Engine.DT); Engine.flushEdges(); },
     // hurry the boss to its next phase (sets hp to the segment floor = a damage-beat).
     advancePhase: function () { var b = G.boss; if (b && b.arrived && b.breathT <= 0) { b.hp = b.segFloorHp; b.phaseT = 9999; } },
     // ---- boss-FIX verify surface (freeze / theft / nail / jackpot / HUD) -----
@@ -3555,7 +3626,32 @@
     freeTop: function () { return Engine.gold.freeTop; },
     fieldGoldBank: function () { var s = 0; Engine.gold.forEach(function (g) { s += (g.bank || 0); }); return s; },
     setHi: function (v) { Run.meta.hi = v; },                      // headless: fake a wide HI for the HUD collision check
-    dashActive: function () { return G.dash.active; }
+    dashActive: function () { return G.dash.active; },
+    // §5/§9c owned-entity + kit-swap verify surface (zero cost unless called)
+    cloneCount: function () { return G.clones.length; },
+    ravenCount: function () { return G.ravens.length; },
+    wraithCount: function () { return G.wraiths.length; },
+    decoyActive: function () { return !!G.decoy.active; },
+    spawnClone: function (x) { if (x != null) G.player.x = x; spawnClone(); return G.clones.length; },
+    spawnWraiths: function () { phobosDeimos(); return G.wraiths.length; },
+    // spawn an Apostate DECOY mimic (arch 'fakedecoy') — wears the friendly
+    // costume for 0.6s then curdles. onUpdate advances its curdle clock (e.t).
+    spawnFakeDecoy: function (x, y) {
+      var d = newEnemy(1, x, y, 999999, GL.SPR.SHIP_PLAYER, 60, 26, [0.5, 1, 0.6], 2, 200, false);
+      if (d) { d.arch = 'fakedecoy'; d.vy = 0; d.onUpdate = function (dd, ddt) { dd.t += ddt; dd.rot = Math.min(1, Math.max(0, (dd.t - 0.6) / 0.15)) * Math.PI; }; }
+      return d ? d._i : -1;
+    },
+    enemyAt: function (i) { var e = Engine.enemies.items[i]; return (e && e.active) ? { x: e.x, y: e.y, seq: e.seq, hp: e.hp } : null; },
+    setStatus: function (i, st) {
+      var e = Engine.enemies.items[i]; if (!e || !e.active) return;
+      if (st.marked) { e.marked = true; e.markT = st.marked; }
+      if (st.weak) { e.weak = true; e.weakT = st.weak; }
+      if (st.burn) { e.burnT = st.burn; e.burnDps = 22; }
+      if (st.stun) e.stunT = st.stun;
+      if (st.charm) { e.charmed = true; e.charmT = st.charm; e.charmMeter = 0; }
+      if (st.terror) e.terrorT = st.terror;
+      if (st.shaken) e.shakenT = st.shaken;
+    }
   };
 
   function detectClear() {
@@ -3651,6 +3747,8 @@
     // X abandons to title. In draft/shop, Esc deliberately does nothing.
     if (m === 'playing' || m === 'clearing') {
       if (G.paused) {
+        // §9b auto-fire is toggled on the pause menu and persisted in goldwake_meta.
+        if (Engine.pressed('KeyF')) { Run.meta.autoFire = !Run.meta.autoFire; Run.saveMeta(); addPopup(W / 2, 120, Run.meta.autoFire ? 'AUTO-FIRE ON' : 'AUTO-FIRE OFF', UI_CYAN, 30); }
         if (Engine.pressed('KeyX')) { G.paused = false; if (window.MUSIC) MUSIC.duck(false); Run.toTitle(); return; }
         if (Engine.pressed('KeyZ') || Engine.pressed('Space') || Engine.pressed('KeyP') || Engine.pressed('Escape')) { G.paused = false; if (window.MUSIC) MUSIC.duck(false); }
       } else if (Engine.pressed('Escape') || Engine.pressed('KeyP')) {
@@ -3686,12 +3784,51 @@
   };
   Game.spendGold = function (n) { if (G.wallet >= n) { G.wallet -= n; return true; } return false; };
 
+  // §5/§9c KIT-SWAP HYGIENE. Swapping the attack OR special god recalls every
+  // live owned entity that kit owns — clones, ravens, decoy, wraiths, Gungnir,
+  // and its live hazards (staff pillar, serpent, sweep, tidal wall, zap field) —
+  // immediately. Each recall pops a cyan implosion toward the player (the GLOW
+  // folding back to the gem) and releases the entity. One centralized path; kills
+  // the 7s orphan-clone lie and the ravens' abrupt length=0 clear.
+  function recallFx(x, y) {
+    spark(x, y, [0.7, 0.95, 1], 10, 300, 24);
+    var dx = G.player.x - x, dy = G.player.y - y, d = Math.hypot(dx, dy) || 1;
+    flash(x + dx / d * 44, y + dy / d * 44, [0.7, 0.95, 1], 90, 0.2);
+  }
+  function expireKitHazards(type) {
+    for (var i = 0; i < hazards.length; i++) { if (hazards[i].active && hazards[i].type === type) { recallFx(hazards[i].x, hazards[i].y); hazards[i].active = false; } }
+  }
+  function expireOwned(slot) {
+    var i, c;
+    if (slot === 'attack') {
+      for (i = 0; i < G.clones.length; i++) { c = G.clones[i]; recallFx(c.x, c.y); }
+      G.clones.length = 0;
+      for (i = 0; i < G.ravens.length; i++) { c = G.ravens[i]; recallFx(c.x, c.y); }
+      G.ravens.length = 0;
+      // Thor's in-flight Mjölnir hammers are ENTITIES, not fire-and-forget shots —
+      // an unrecalled hammer orphan-flies and keeps smashing after the god is gone.
+      // Recall like every other owned entity (implosion pop + immediate release).
+      for (i = 0; i < G.hammers.length; i++) { c = G.hammers[i]; recallFx(c.x, c.y); }
+      G.hammers.length = 0;
+      G.ra.active = false; G.ra.target = null; G.ra.ramp = 0;   // stale beam can't paint post-swap
+      expireKitHazards('zap');                                  // zeusField attack-mod hazard
+    } else {
+      if (G.decoy.active) { recallFx(G.decoy.x, G.decoy.y); G.decoy.active = false; }
+      for (i = 0; i < G.wraiths.length; i++) { c = G.wraiths[i]; recallFx(c.x, c.y); }
+      G.wraiths.length = 0;
+      if (G.gungnir.active) { recallFx(G.gungnir.x, G.gungnir.y); G.gungnir.active = false; }
+      expireKitHazards('staff'); expireKitHazards('serpent');
+      expireKitHazards('sweep'); expireKitHazards('sweepwake'); expireKitHazards('wave');
+    }
+  }
+
   Game.applyBoon = function (b) {
     var mag = b.rarity === 'epic' ? 2.25 : b.rarity === 'rare' ? 1.5 : 1;
     switch (b.kind) {
-      // a SWAP keeps the slot's current tier (attackR/specialR) — only the god changes
-      case 'transformA': G.attackGod = b.god; if (!b.swap) G.attackR = mag; break;
-      case 'transformS': G.specialGod = b.god; if (!b.swap) G.specialR = mag; break;
+      // a SWAP keeps the slot's current tier (attackR/specialR) — only the god changes.
+      // Swapping a slot's god first recalls the OLD kit's live owned entities (§5).
+      case 'transformA': if (G.attackGod && G.attackGod !== b.god) expireOwned('attack'); G.attackGod = b.god; if (!b.swap) G.attackR = mag; break;
+      case 'transformS': if (G.specialGod && G.specialGod !== b.god) expireOwned('special'); G.specialGod = b.god; if (!b.swap) G.specialR = mag; break;
       case 'levelA': G.attackR = b.mag; break;   // pom: raise attack tier
       case 'levelS': G.specialR = b.mag; break;  // pom: raise special tier
       case 'duo': Game.applyDuo(b.id); break;
@@ -3716,7 +3853,7 @@
     }
   }
   function effMultCap() { return G.up.multCap + (G.communion === 'OLYMPUS' ? 1 : 0); }
-  function hasStatus(e) { return e.marked || e.weak || e.charmed || e.burnT > 0 || e.confuseT > 0 || e.stunT > 0 || e.terrorT > 0 || e.shakenT > 0; }
+  function hasStatus(e) { return e.marked || e.weak || e.charmed || e.burnT > 0 || e.stunT > 0 || e.terrorT > 0 || e.shakenT > 0; }
   function applyMod(id, mag) {
     var M = G.mods;
     switch (id) {
@@ -4103,7 +4240,7 @@
     Engine.enemies.forEach(function (e) {
       var f = e.hitFlash > 0 ? 1 : 0;
       var er = e.r, eg = e.g, eb = e.b;
-      if (e.charmed) { er = 1; eg = 0.4; eb = 0.8; }
+      if (e.charmed) { er = 0.7; eg = 0.95; eb = 1; }   // §4 CHARMED: body recolors player-cyan (faction law)
       var r = er + (1 - er) * f, g = eg + (1 - eg) * f, bl = eb + (1 - eb) * f;
       GL.draw(GL.SPR.GLOW, e.x, e.y, e.scale * 1.5, e.scale * 1.5, 0, er, eg, eb, e.boss ? 0.5 : 0.35);
       GL.draw(e.spr, e.x, e.y, e.scale, e.scale, e.rot, r, g, bl, 1);
@@ -4138,16 +4275,93 @@
       }
       // apostate renegade aura
       if (e.arch === 'apostate') GL.draw(GL.SPR.GLOW, e.x, e.y, e.scale * 1.9, e.scale * 1.9, 0, 0.8, 0.3, 0.95, 0.32 + 0.15 * Math.sin(G.time * 5));
-      // status tells
-      if (e.terrorT > 0) { var tp = 0.5 + 0.5 * Math.sin(G.time * 22); GL.draw(GL.SPR.GLOW, e.x, e.y, e.scale * 1.6, e.scale * 1.6, 0, 0.6, 0.05, 0.12, 0.4 + 0.3 * tp); }
-      if (e.shakenT > 0) { GL.draw(GL.SPR.RING, e.x, e.y, e.scale * 1.4, e.scale * 1.4, G.time * 8, 0.9, 0.2, 0.3, 0.6); }
-      if (e.marked) { GL.draw(GL.SPR.RING, e.x, e.y, e.scale * 1.5, e.scale * 1.5, -G.time * 2, 0.8, 1.0, 0.3, 0.7); }
-      if (e.weak) { GL.draw(GL.SPR.GLOW, e.x, e.y, e.scale * 1.7, e.scale * 1.7, 0, 1, 0.4, 0.8, 0.2); }
-      if (e.charmed) { GL.draw(GL.SPR.GLOW, e.x, e.y, e.scale * 1.8, e.scale * 1.8, 0, 1, 0.4, 0.8, 0.35); }
-      if (e.burnT > 0) { GL.draw(GL.SPR.GLOW, e.x, e.y, e.scale * 1.7, e.scale * 1.7, 0, 1, 0.45, 0.1, 0.33); }
-      if (e.confuseT > 0) { GL.draw(GL.SPR.RING, e.x, e.y, e.scale * 1.4, e.scale * 1.4, G.time * 6, 0.7, 1, 0.3, 0.6); }
-      if (e.stunT > 0) { GL.draw(GL.SPR.RING, e.x, e.y, e.scale * 1.6, e.scale * 1.6, -G.time * 4, 0.6, 0.9, 1, 0.7); }
+      // §5 Apostate hostile-mimic markers (inverted faction law)
+      if (e.arch === 'fakedecoy') drawMimicGem(e.x, e.y, e.scale, 1, Math.min(1, Math.max(0, (e.t - 0.6) / 0.15)));   // 0.6s costume then curdle
+      else if (e.arch === 'apostateclone') drawMimicGem(e.x, e.y, e.scale, 1, 1);                                     // instant fake
+      // §4 status shape-language (zones + shapes; hue never carries a status alone)
+      drawStatus(e);
     });
+  }
+  // §4 STATUS SHAPE-LANGUAGE. Read WHERE (zone) before WHAT (shape). Four disjoint
+  // zones around the enemy (offsets in e.scale): FRAME (4 corners), CROWN (over-
+  // head), UNDERFOOT (below), BODY (on the hull). Same-zone collisions resolve by
+  // fixed priority (marked>weak in FRAME, stun>charm in CROWN); the loser demotes
+  // to a 6px CORE pip upper-right. Disjoint zones all render at once. Confuse is
+  // gone (ruling 1). Each glyph carries a faint dark backing so it survives bloom.
+  function darkBack(x, y, r) { GL.draw(GL.SPR.GLOW, x, y, r, r, 0, 0.02, 0.02, 0.03, 0.55); }
+  function statusPip(e, col) {
+    var px = e.x + e.scale * 0.6, py = e.y - e.scale * 0.6;
+    darkBack(px, py, 16); GL.draw(GL.SPR.CORE, px, py, 6, 6, 0, col[0], col[1], col[2], 0.95);
+  }
+  function drawStatus(e) {
+    var s = e.scale, t = G.time;
+    var stun = e.stunT > 0, charm = e.charmed;
+    var mark = e.marked, weak = e.weak;
+    // ---- BODY: terror vignette / shaken cracks ----
+    if (e.terrorT > 0 && !e.boss) {
+      var tp = 0.5 + 0.5 * Math.sin(t * 188);                     // 30Hz contracting dark vignette
+      GL.draw(GL.SPR.GLOW, e.x, e.y, s * (1.7 - 0.3 * tp), s * (1.7 - 0.3 * tp), 0, 0.25, 0.02, 0.05, 0.42 + 0.28 * tp);
+    }
+    if (e.shakenT > 0) {                                          // boss variant: 2 flickering STREAK cracks, no vignette
+      var sf = 0.4 + 0.6 * Math.abs(Math.sin(t * 40));
+      GL.draw(GL.SPR.STREAK, e.x - s * 0.18, e.y, s * 0.14, s * 1.0, 0.5, 0.9, 0.25, 0.3, sf);
+      GL.draw(GL.SPR.STREAK, e.x + s * 0.2, e.y, s * 0.12, s * 0.9, -0.4, 0.9, 0.25, 0.3, sf * 0.85);
+    }
+    // ---- FRAME (4 corners): marked L-brackets; weak sagging lower brackets ----
+    if (mark) {
+      var mc = [0.95, 0.75, 0.2], off = s * 0.62, arm = s * 0.26, th = s * 0.05;
+      for (var ci = 0; ci < 4; ci++) {
+        var sx = (ci & 1) ? 1 : -1, sy = (ci & 2) ? 1 : -1;
+        var cx = e.x + sx * off, cy = e.y + sy * off;
+        GL.draw(GL.SPR.STREAK, cx, cy + sy * arm * 0.5, th, arm, 0, mc[0], mc[1], mc[2], 0.9);          // vertical arm
+        GL.draw(GL.SPR.STREAK, cx + sx * arm * 0.5, cy, th, arm, Math.PI / 2, mc[0], mc[1], mc[2], 0.9); // horizontal arm
+      }
+    }
+    if (weak) {
+      if (mark) { statusPip(e, [0.6, 0.5, 0.65]); }               // demoted: marked wins the FRAME
+      else {
+        var wc = [0.6, 0.5, 0.65], woff = s * 0.62, warm = s * 0.24, wth = s * 0.05;
+        for (var wi = 0; wi < 2; wi++) {                          // lower two corners, sagging (tilted)
+          var wsx = wi ? 1 : -1, wx = e.x + wsx * woff, wy = e.y + woff;
+          GL.draw(GL.SPR.STREAK, wx, wy - warm * 0.4, wth, warm, wsx * 0.35, wc[0], wc[1], wc[2], 0.85);
+          GL.draw(GL.SPR.STREAK, wx + wsx * warm * 0.4, wy + wth, wth, warm, Math.PI / 2 + 0.2, wc[0], wc[1], wc[2], 0.85);
+        }
+        var ff = (t * 0.6) % 1;                                   // falling SHARD flakes
+        GL.draw(GL.SPR.SHARD, e.x - s * 0.2, e.y + s * (0.55 + ff * 0.5), s * 0.14, s * 0.2, 0, wc[0], wc[1], wc[2], 0.7 * (1 - ff));
+        GL.draw(GL.SPR.SHARD, e.x + s * 0.22, e.y + s * (0.6 + ((ff + 0.5) % 1) * 0.5), s * 0.12, s * 0.18, 0, wc[0], wc[1], wc[2], 0.7 * (1 - ((ff + 0.5) % 1)));
+      }
+    }
+    // ---- UNDERFOOT: burn flame ticks ----
+    if (e.burnT > 0) {
+      var flick = 0.55 + 0.45 * Math.sin(t * 88);                 // ~14Hz
+      for (var bi = 0; bi < 3; bi++) {
+        var rise = ((t * 1.6 + bi * 0.33) % 1);
+        var bx = e.x + (bi - 1) * s * 0.24, by = e.y + s * (0.7 + rise * 0.35);
+        var cr = 1, cg = 0.85 - rise * 0.55, cb = 0.3 - rise * 0.25;   // yellow core -> red tip
+        darkBack(bx, by, s * 0.24);
+        GL.draw(GL.SPR.SHARD, bx, by, s * 0.16, s * 0.28, 0, cr, cg, Math.max(0.05, cb), (0.55 + 0.4 * flick) * (1 - rise * 0.5));
+      }
+    }
+    // ---- CROWN: stun sparks (priority) or charm hearts ----
+    var crownY = e.y - s * 0.82;
+    if (stun) {
+      for (var si = 0; si < 3; si++) {
+        var a2 = t * 3 + si * (Math.PI * 2 / 3);
+        var spx = e.x + Math.cos(a2) * s * 0.26, spy = crownY + Math.sin(a2) * s * 0.1;
+        darkBack(spx, spy, s * 0.2);
+        GL.draw(GL.SPR.SPARK, spx, spy, s * 0.26, s * 0.26, t * 4 + si, 0.7, 0.95, 1, 0.95);
+      }
+      if (charm) statusPip(e, [1, 0.3, 0.55]);                    // demoted: stun wins the CROWN
+    } else if (charm) {
+      for (var hi2 = 0; hi2 < 3; hi2++) {
+        var hr = ((t * 0.8 + hi2 * 0.33) % 1);
+        var hx = e.x + (hi2 - 1) * s * 0.22, hy = crownY - hr * s * 0.35;
+        var ha = 0.85 * (1 - hr);
+        darkBack(hx, hy, s * 0.2);
+        GL.draw(GL.SPR.GLOW, hx, hy, s * 0.2, s * 0.2, 0, 1, 0.3, 0.55, ha * 0.6);
+        GL.draw(GL.SPR.CORE, hx, hy, s * 0.09, s * 0.09, 0, 1, 0.4, 0.6, ha);
+      }
+    }
   }
   function drawShots() {
     Engine.shots.forEach(function (s) {
@@ -4478,6 +4692,7 @@
     drawSpaced('PAUSED', W / 2, H * 0.42, 12);
     hud.fillStyle = UI_DIM(); hud.font = '500 34px Consolas, monospace';
     hud.fillText('Z / P / Esc — resume   ·   X — abandon to title', W / 2, H * 0.42 + 90);
+    hud.fillText('F — auto-fire: ' + (Run.meta.autoFire ? 'ON' : 'OFF'), W / 2, H * 0.42 + 138);
   }
   function roundRect(ctx, x, y, w, h, r) {
     if (w < 2 * r) r = w / 2; if (h < 2 * r) r = h / 2;

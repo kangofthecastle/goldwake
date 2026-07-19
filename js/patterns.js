@@ -85,17 +85,18 @@
     return n < 1 ? 1 : n;
   }
 
-  // Loki faction-flip (Confuse): the source enemy for the current fire burst.
+  // Emitter source for the current fire burst (retained infra; the Loki CONFUSE
+  // faction-flip that used it was removed in ruling 1, and PILFER — Pass 2 — flips
+  // already-flying bullets, not freshly emitted ones). Kept as harmless no-ops so
+  // the setSource/clearSource call sites in updateEnemies need no edit.
   var curSource = null, bossFlip = 0;
   P.setSource = function (e) { curSource = e; };
   P.clearSource = function () { curSource = null; };
   P.consumeBossFlip = function () { var n = bossFlip; bossFlip = 0; return n; };
 
-  // core spawn — returns bullet or null (pool exhausted / boss-flipped)
+  // core spawn — returns bullet or null (pool exhausted)
   P.bullet = function (x, y, dir, speed, o) {
     o = o || {};
-    // confused boss: bullet is not spawned; it becomes a counted self-harm tick
-    if (curSource && curSource.confuseT > 0 && curSource.boss) { bossFlip++; return null; }
     var b = Engine.bullets.alloc();
     if (!b) return null;
     speed = speed * P.gSpeed;
@@ -129,9 +130,7 @@
     b.grazed = false;
     b.life = o.life || 30;
     b.timeScale = 1; b.slowT = 0; b.carried = false;
-    // confused non-boss source: flip to a green friendly bullet
-    if (curSource && curSource.confuseT > 0) { b.friendly = true; b.srcId = curSource._i; b.r = 0.55; b.g = 1.0; b.b = 0.35; }
-    else { b.friendly = false; b.srcId = -1; }
+    b.friendly = false; b.srcId = -1;   // enemy bullets are hostile (PILFER flips them later, Pass 2)
     b.gardenerId = -1;
     // emitter ownership — lets a midship cancel its own remaining pattern to
     // gold on death (never touches bullets from other emitters). Stamped with

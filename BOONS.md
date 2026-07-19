@@ -34,9 +34,10 @@ visual here is engine-procedural from the existing atlas.
 
 Per god: **ATK**/**SP** (mechanic·numbers · *visual* · voice) · **★** (honest-split) · **CARD**
 (DESC / ▸HOW / ★-LINE) · **BOSS** · **RE-ANCHORS**. Colors are **combat** projectile colors
-(cyan/white player law where a god has no rework record). Eight kits were reworked (artemis, ares,
-odin, loki, quetz, ra, the three specials, faction) — verbatim; the other seven keep current
-mechanics, brought up to the Laws.
+(cyan/white player law where a god has no rework record). Nine kits were reworked (artemis, ares, odin,
+loki, quetz, ra, heimdall, the three specials, faction); the rest keep current mechanics,
+brought up to the Laws. Owner amendments 2026-07-18: Artemis Hunted chain/sticky, Ares Greek
+armory, Odin NINE NIGHTS, Heimdall THE BIFRÖST.
 
 ### OLYMPUS
 
@@ -65,30 +66,36 @@ mechanics, brought up to the Laws.
   into terrain." / "★★★ ×2.25 impact damage"
 - **★/BOSS** atk→knockback dmg · sp→wall dmg & eat-count. Wall eats the dense volley to gold; shove = displacement-lite (heavier body).
 
-**ARTEMIS** — THE QUARRY · THE LOOSED ARROW (REWORKED, artemis rec)
-- **ATK THE HUNT/QUARRY**: 3 (focus 4) arrow-needles — **kind 9**, faction 0, pierce 1, radius 12, speed
-  `SHOT_SPEED`, oriented to velocity, gently homing to the **Quarry** via Jade block (`homing, turn=2.2` —
-  weak on purpose; the ramp is the skill). Quarry = last foe your fire struck. Each hit on the SAME Quarry
-  `+12%` dmg, cap 8 = `+96%`; stacks hold 3s (refresh on hit); a DIFFERENT foe reassigns + hard-resets to 0.
-  State `G.quarry`, `G.huntStacks`. *Silver-white body + moon-blue rim; a tightening chevron bracket on the
-  Quarry cinches with stacks.* Voice BOW thwip + ramp pizzicato (+semitone/stack) + slack-string reset.
-- **SP THE LOOSED ARROW** (specials rec is authority; grafted with attack rec's Quarry-slam): kind 4, radius
+**ARTEMIS** — THE HUNT · THE LOOSED ARROW (REWORKED, artemis rec + owner chain/sticky amendments 2026-07-18)
+- **ATK THE HUNT**: 3 (focus 4) arrow-needles — **kind 9**, faction 0, pierce 1, radius 12, speed
+  `SHOT_SPEED`, oriented to velocity. With no Hunted branded, arrows fly STRAIGHT (normal forward spread);
+  the first foe hit is branded **Hunted**. Branded: arrows gently home to the Hunted via Jade block
+  (`homing, turn=2.2` — weak on purpose; the ramp is the skill). Each hit on the Hunted `+12%` dmg, cap 8
+  = `+96%`; stacks hold 3s (refresh on hit). **CHAIN**: killing the Hunted auto-brands the nearest foe and
+  CARRIES stacks −1 per hop. **STICKY**: stray hits on non-Hunted foes do NOT re-brand; 3 consecutive hits
+  on the same other foe abandon the hunt and re-brand it at 0 (deliberate switch only). **SPLINTER**: a
+  Hunted kill bursts `huntStacks` silver shards (small, shard fam) into nearby foes for `0.4×` arrow dmg
+  each — deep hunts pay out in crowd damage. State `G.hunted`, `G.huntStacks`, `G.huntSwap` (0-3 counter).
+  *Silver-white body + moon-blue rim; a tightening chevron bracket on the Hunted cinches with stacks.*
+  Voice BOW thwip + ramp pizzicato (+semitone/stack) + slack-string reset (only on abandon, not on chain).
+- **SP THE LOOSED ARROW** (specials rec is authority; owner-amended interlock): kind 4, radius
   14, scale ~64, `vy=-2600` (fastest), `homing, turn=5.0, pierce 999, forceCrit=1` (always **precise** ×2.5),
-  `markHit=1`. Target: marked → lowest-HP → boss → up; only re-aims if nothing in a ~40px forward cone. On hit
-  `markEnemy` (+25% taken) **and slams every pierced foe to full Quarry (8)**. *Acid-green CORE needle +
-  white head + 2 fletches, vapor trail, visible bank.* Voice ARTEMIS THWIP (triangle 220→60Hz/30ms + 4kHz
-  fletch, ~80ms, dry).
+  `markHit=1`. Target: marked → lowest-HP → boss → up; only re-aims if nothing in a ~40px forward cone.
+  Every pierced foe gets `markEnemy` (+25% taken); the FIRST foe struck becomes the Hunted at FULL ramp (8)
+  — thread a line, then chain kills down your own Marked trail. *Moon-silver CORE needle + white head +
+  2 fletches, vapor trail, visible bank (unified to the player cool-fire law — acid-green rejected; reads
+  by silhouette/speed, not hue).* Voice ARTEMIS THWIP (triangle 220→60Hz/30ms + 4kHz fletch, ~80ms, dry).
 - **CRIT RETIRED → PRECISION** (§3): delete all RNG crit rolls (`artemisCritChance`, `G.critBonus` roll,
   `huntersEye` always-crit). Keep `damageEnemy`'s crit path, rename read `precise` ×2.5, driven **only** by
   weak-point overlap or `forceCrit`; keeps gold pop + spark + APOTHEOSIS/HUBRIS feed.
 - **★** atk→arrow dmg (ramp base) · sp→LOOSED ARROW dmg.
-- **CARD ATK**: "Streams become silver homing arrows that lock the last foe hit as your QUARRY." / ▸ "Every
-  hit on the same Quarry ramps +12% (max +96%); a new target resets it." / "★★★ ×2.25 arrow damage"
+- **CARD ATK**: "Silver arrows brand the first foe hit as your HUNTED and home to it." / ▸ "Hits on the
+  Hunted ramp +12% (max +96%); kills chain the hunt to the next prey." / "★★★ ×2.25 arrow damage"
 - **BOSS** arrows converge on the lone body, ramp climbs uncontested — Artemis's peak.
 - **RE-ANCHORS** SILVER FLETCHING→**PRECISION** (+precise dmg, +15% node size); huntersEye→Marked foes always
-  expose a node; deathSentence→max-Quarry hit executes <40%; godsOfWar→crescents precise vs Terrified.
-  Mods: artemisCrit→QUARRY REACH (+2 cap, +0.6 turn); artemisMulti→DEEPER HUNT (0.12→0.18/stack);
-  artemisRefund→6+ stacks refund 0.1 charge; artemisSpread→max-Quarry kill flings 4 stacks to nearest.
+  expose a node; deathSentence→max-ramp hit executes <40%; godsOfWar→crescents precise vs Terrified.
+  Mods: artemisCrit→HUNTER'S REACH (+2 cap, +0.6 turn); artemisMulti→DEEPER HUNT (0.12→0.18/stack);
+  artemisRefund→6+ stacks refund 0.1 charge; artemisSpread→chain hops carry ALL stacks (no −1 decay).
   Optional mod **THE QUIVER**: special banks up to 3 arrows, dump as seeking crits.
 
 **APHRODITE** — Charm · HEARTSEEKER (special REWORKED, specials rec)
@@ -110,23 +117,25 @@ mechanics, brought up to the Laws.
   beyond FAR (0.4s grace) `−0.18/s`; between = hold. **Proximity alone builds** — no trigger-hold. `frenzyRate()`
   rewritten +6%→**+3%/stack**. Three hard tiers off stacks, payoff in `fireStreams`:
 
-  | Tier | stacks | shape | spread | scale | radius | pierce | color |
+  | Tier | stacks | shape (GREEK ARMORY, owner 2026-07-18) | spread | scale | radius | pierce | color |
   |---|---|---|---|---|---|---|---|
-  | CALM | 0–3 | needles | 0.30 (0.16 focus) | 44 | 14 | 0 | ember `0.70,0.20,0.15` |
-  | HEATED | 4–7 | short blades, converge | ×0.8 | ×1.5 | ×1.35 | 1 | arterial `1.0,0.15,0.12` |
-  | FRENZY | 8–10 | braided spear-bundle | ×0.33 | ×1.9 ctr | ×1.6 | 3 | white core `1.0,0.55,0.35` |
+  | CALM | 0–3 | **javelins (akontia)** — slim shaft + small bronze leaf point | 0.30 (0.16 focus) | 44 | 14 | 0 | ember `0.70,0.20,0.15` |
+  | HEATED | 4–7 | **xiphos** — leaf-blade short swords (waisted swell profile), converge | ×0.8 | ×1.5 | ×1.35 | 1 | arterial `1.0,0.15,0.12` + bronze hilt glint |
+  | FRENZY | 8–10 | **doru bundle** — braided hoplite spears, broad bronze heads | ×0.33 | ×1.9 ctr | ×1.6 | 3 | white core `1.0,0.55,0.35` |
 
-  FRENZY adds **one WAR-SCYTHE**/volley: extra shot kind 6, `crescent`, RED serrated `0.78,0.12,0.12`, radius 34,
-  pierce 3, travels ~520px (reach so wall/lattice phases can't strand melee). `prevTier` upward cross → 1-frame
-  red muzzle bloom + kindle SFX; backing out re-splays the fan (cooling read).
+  FRENZY adds **one LABRYS**/volley (replaces war-scythe — a serrated crescent still risked reading as Guan Yu;
+  the mirrored double-axe silhouette cannot): spinning double-headed axe, RED `0.78,0.12,0.12` + bronze heads,
+  radius 34, pierce 3, travels ~520px (reach so wall/lattice phases can't strand melee). Needs new atlas painters:
+  leaf-point javelin, waisted xiphos, labrys twin-head. `prevTier` upward cross → 1-frame red muzzle bloom +
+  kindle SFX; backing out re-splays the fan (cooling read). [VARIANT] labrys head geometry + spin trail.
 - **SP PHOBOS & DEIMOS** (unchanged): two dread-wraiths dive-bomb, sow **Terror**. Owned-entity law (§5): dread-red
   body, cyan heart, nose-up. Voice FLUTTER dive + terror shudder.
 - **VOICE (bespoke, overrides FLUTTER)**: WAR-DRUM bed 70Hz thud every `(0.9−0.5*frenzyF)s` (tempo rises — heat is
   audible before visible); shot growl layered (CALM clean → HEATED saw ~110Hz → FRENZY ~80Hz + hiss, 3 blips merge
   to one thrown-weapon hit); tier-up timpani + noise whoosh 400→3k; tier-down douse downsweep.
-- **★** atk→War-Heat shot & scythe dmg · sp→wraith strike dmg.
+- **★** atk→War-Heat shot & labrys dmg · sp→wraith strike dmg.
 - **CARD ATK**: "BLOODLUST — fight at the muzzle; a spear's length from a foe stokes War-Heat, back off and it cools." /
-  ▸ "HEATED: blades thicken & converge. FRENZY: a boss-splitting spear + war-scythe." / "★★★ ×2.25 War-Heat damage"
+  ▸ "HEATED: xiphos blades converge. FRENZY: a doru spear-bundle + whirling labrys." / "★★★ ×2.25 War-Heat damage"
 - **BOSS** the war-drum beats hardest in the boss's face — old dead-air becomes the peak. aresDecay halves FAR-drain
   for wall phases; bloodAndFire skips drain while anything burns; addFrenzy redefined `+0.10` (terror-kill duos = gravy).
 
@@ -189,32 +198,33 @@ mechanics, brought up to the Laws.
 - **RE-ANCHORS** lokiVaunt→"pilfered daggers also charge APOTHEOSIS" (already true, addGauge(0.6)); lokiChance→**PICKPOCKET**
   (Pilfer on 2nd stack, steal 12). DOPPELGANGER deferred (OPEN CALLS).
 
-**ODIN** — ÓÐR the War-Fury · Gungnir (attack REWORKED, odin rec; ravens → charm)
-- **ATK ÓÐR**: fuel `G.player.odrStreak` (int, cap 40). A landed ÓÐr shot sets `odrSince=0` and (debounced +1/0.05s) grows;
-  `odrSince>0.4` grace then bleeds −1/0.1s (full T2→T0 ≈2.4s whiffing). Tier by streak (odinFury softens to 5/16):
-
-  | Tier | streak | shot | n | dmg | pierce | cadence | ~DPS |
-  |---|---|---|---|---|---|---|---|
-  | T0 | <8 | rune-bolt | 1 | 1.3× | 0 | 0.075 | ~17 (below default — the downgrade) |
-  | T1 | 8–24 | rune-trident | 3 | 1.25× ea | 1 | 0.075 | ~50 |
-  | T2 | >24 | RUNE-LANCE | 1 fat | 4.6× | 3 | 0.10 | ~46 raw (`markHit=true`) |
-
-  → T2 in ~1.8s held fire on a boss; evasive popcorn keeps T0/T1 (skill gate). *Metamorphosis in steel-blue `0.8,0.85,0.92`
-  + gold `1,0.85,0.4`: T0 thin pale streak; T1 three prongs each capped with a spinning STAR rune; T2 prongs SNAP inward on
-  a RING implosion → one STREAK core + NEEDLE spine + GLOW wake + runic GRING halo. Tier-flash: 1-frame STAR+RING sigil at
-  ship (gold up / steel-blue down).* Voice T0 dry 'tok' 820→520Hz; T1 tok + hollow fifth; T2 detuned-saw drone + metallic
-  'shhk'/lance; tier-up sweep 300→900Hz; tier-down drone-cut + descending thud.
+**ODIN** — NINE NIGHTS · Gungnir (attack REWORKED, owner design 2026-07-18 replacing ÓÐR; ravens → charm)
+- **ATK NINE NIGHTS**: the single-target specialist archetype — weak into popcorn, inevitable into anything that
+  lives. Stream collapses to **one heavy rune-bolt** (n=1, no spread): dmg `3.2×` base, cadence 0.14, pierce 0,
+  radius 16. Every **4th hit** on the same foe CARVES A RUNE into it: `e.runes` 0..9, **permanent for that enemy's
+  life** (never decays, never resets — reset only in `newEnemy`; per-enemy, so several foes can each hold carved
+  runes; no brand to lose, no streak to protect). Odin's damage vs a foe: `×(1 + 0.15*e.runes)` (+135% at 9).
+  **THE NINTH RUNE**: the band ignites — vs that foe his bolts become gold-cored **doom-bolts** (`markHit=true`,
+  full +135%); the fight visibly tips from studying to sentencing. ~36 hits ≈ 5s sustained to full on a boss;
+  popcorn dies before 2 runes (priced-in archetype cost — Gungnir is the crowd release valve). Ramp axis vs the
+  other ramp gods: Artemis = per-hit momentum (resets/chains), Ra = held attention (cools), **Odin = permanent
+  per-enemy knowledge**. *Steel-blue `0.8,0.85,0.92` STREAK bolt + NEEDLE spine + faint runic wake; carved runes =
+  small gold `1,0.85,0.4` glyphs filling a band arced around the foe's hull (count IS the meter); 9th → band
+  ignites gold + 1-frame sigil flash; doom-bolts gain gold core + GRING halo.* Voice heavy dry 'tok' 620→380Hz;
+  each carve = stone-chisel chip (2ms noise tick + 1.2kHz ring); ninth = low doom-toll (bell, 180Hz, 0.6s);
+  doom-bolts add a sub-thump layer.
 - **SP GUNGNIR** (unchanged): never-miss piercing spear.
-- **★** atk→all-tier ÓÐr dmg · sp→Gungnir dmg.
-- **CARD ATK**: "ÓÐR — your fire feeds on itself: bolt → three-prong trident → the roaring RUNE-LANCE that pierces and
-  Marks." / ▸ "Keep landing hits to climb; whiff and the fury bleeds down." / "★★★ ×2.25 ÓÐr damage"
-- **BOSS** park at T2 and dump; T2 Mark feeds Gungnir / THE ALLSEEING.
+- **★** atk→bolt dmg (rune mult rides it) · sp→Gungnir dmg.
+- **CARD ATK**: "NINE NIGHTS — one heavy bolt; every 4th hit carves a rune into the foe, each +15% against it,
+  forever." / ▸ "Runes never fade. The ninth seals its doom: gold bolts that Mark." / "★★★ ×2.25 bolt damage"
+- **BOSS** his kingdom: by mid-fight the boss wears the rune-band scar and every bolt lands like judgment. Doom
+  Mark feeds Gungnir / THE ALLSEEING. Segment/phase transitions do NOT clear runes (same enemy, same knowledge).
 - **RE-ANCHORS** **HUGINN & MUNINN** charm (charmOdin) — lift `updateRavens/drawRavens` out of the attack path, gate on
   `G.charms.charmOdin` so ravens fly with **any** attack. Dive 9→12, interval 1.7→1.4s, scale `atkDmg`, Mark-on-dive
   (`markT 6`). **MEMORY**: +1 dive dmg/8 kills (cap +18); past 30 kills interval→1.0s + fast pairs. *Near-black birds, cyan
-  heart (§5), gold RING halo thickens with kills.* Mods odinRaven/RavenMark → **odinFury** (climbs on fewer hits, bleeds
-  slower) + **odinSunder** (RUNE-LANCE pierces all, sheds a rune-shard/pierce). Duos wildHunt→lance ×2 to Terrified, feeds
-  frenzy; theAllseeing→lance & Gungnir +40% to Marked. (Retired 'shop rerolls half' perk — OPEN CALLS.)
+  heart (§5), gold RING halo thickens with kills.* Mods odinRaven/RavenMark → **odinFury** (runes carve every 3rd hit,
+  not 4th) + **odinSunder** (doom-bolts splash 50% to one foe within 120px). Duos wildHunt→doom-bolts ×2 to Terrified,
+  feeds frenzy; theAllseeing→bolt & Gungnir +40% to Marked. (Retired 'shop rerolls half' perk — OPEN CALLS.)
 
 **THOR** — Mjölnir · Giant's Bane
 - **ATK MJÖLNIR** (unchanged): returning kinetic hammer, spring-damped displacement (lurch, wall-slams). *Slate hammer arcs
@@ -225,15 +235,27 @@ mechanics, brought up to the Laws.
 - **CARD ATK**: "A kinetic hammer flies out and returns, slamming foes aside." / ▸ "Hold — hammer loops out and back; displaces on hit." / "★★★ ×2.25 hammer damage"
 - **BOSS** crush lands full as heavy displacement-lite + bonus damage.
 
-**HEIMDALL** — Bifröst Prism · Gjallarhorn
-- **ATK BIFRÖST** (unchanged): every 4th volley refracts into a piercing rainbow fan. **To-code**: 4th shot must read — a
-  prism flash + the triad. *Dawn-gold streams; every 4th splits to a rainbow pierce fan.* Voice BELL, **4th shot = stacked
-  fifth+octave triad**.
+**HEIMDALL** — THE BIFRÖST · Gjallarhorn (attack REWORKED, owner design 2026-07-18 — refraction as terrain, kills the 4-count)
+- **ATK THE BIFRÖST**: between bridges, ordinary dawn-gold streams. On a fixed cadence (**every 6.0s while firing**):
+  **TELEGRAPH** — a thin dotted **dawn-seam** traces left→right (~0.5s) at `player.y − 300` (clamped 180..H−600) with a
+  rising bell arpeggio — then the **BRIDGE** solidifies there: a full-width shimmering rainbow band (~26px), lifetime 4.0s,
+  altitude frozen at seam-finish (placement is the skill: stand low = big refract zone; ride high = lay it through a foe).
+  **REFRACT**: each player shot crossing the band forks AT the crossing point into **5 rainbow rays** (red/gold/green/
+  blue/violet CORE streaks), each `0.32×` the shot's dmg (Σ≈1.6×), cone ±0.45 rad unfocused / **±0.12 focused** (focus =
+  spectrum lance); rays inherit pierce, no re-refraction. Below the band your fire is white; above it, rainbow — a hard
+  seam. **THE WATCHMAN SEES**: any foe crossing the band, or whose body overlaps it, is **Marked** (`markT 6`) with a
+  shimmer flash — bosses included (fly up, lay the band across the hull: HUBRIS-courage rewarded). *Voice BELL; seam =
+  rising arpeggio (3 bells, 5th+8ve); refract = crystalline shimmer tick per fork (throttled 6/s); bridge-fade = soft
+  descending pair.* State: `G.bifrost {t, y, seamT}` — no pooled entities; band is a drawn hazard like tidal wall.
 - **SP GJALLARHORN** (unchanged): horn blast wounds + **Marks** every foe + shoves the whole field (`timeScale/slowT`).
   *Expanding shockwave, field shoved out.*
-- **★** atk→refract-fan dmg · sp→horn dmg & Mark potency.
-- **CARD ATK**: "Every 4th volley refracts into a piercing rainbow fan." / ▸ "Auto — count to four; the fourth pierces all." / "★★★ ×2.25 refract damage"
-- **BOSS** horn Marks the lone boss (+40% taken) + shoves its wall; per-foe value collapses onto it.
+- **★** atk→ray dmg (refract base) · sp→horn dmg & Mark potency.
+- **CARD ATK**: "THE BIFRÖST — a rainbow bridge forms above you on a beat; your shots crossing it refract into five
+  rays." / ▸ "A dawn-seam warns first. Foes touching the bridge are Marked; focus narrows the spectrum." /
+  "★★★ ×2.25 ray damage"
+- **BOSS** lay the band across the hull → boss stays Marked while the focused spectrum lance pours through; horn shoves
+  its wall. [VARIANT] band/seam treatment (dotted-seam density, band shimmer vs glassy). (PRISM idea deferred: possible
+  high-tier mod — "a prism rides the bridge; rays recombine 200px past it".)
 
 ### CELESTIAL COURT
 
@@ -362,7 +384,7 @@ melodic motifs on shots (mush at 35/s vs the ~2.6k lowpassed score). Code: 9 bui
 | 2 | KINETIC | sine sub 160→38Hz + lowpassed noise slap + 2ms click | Thor (doubleHit); Poseidon (+1.2k water); Wukong (wooden knock, +grain/clone) |
 | 3 | BLADE | bandpassed metallic shing ~2.5k, −80c/pierce; SP 0.5s downsweep | Guan Yu |
 | 4 | BEAM | sustained sine+saw thru resonant lowpass, rising while held | Ra (§2) |
-| 5 | BELL | inharmonic 1/2.4/3.9× stack, ~250ms ring | Jade Emperor; Anubis (dark + gong-ping <50%); Heimdall (4th-shot triad) |
+| 5 | BELL | inharmonic 1/2.4/3.9× stack, ~250ms ring | Jade Emperor; Anubis (dark + gong-ping <50%); Heimdall (seam arpeggio + refract shimmer) |
 | 6 | SERPENT | detuned dual-osc ±8c, continuous portamento + breath ~3k | Quetzalcoatl (ruling 2: serpent-on-shot correct) |
 | 7 | BOW | plucked transient: 12ms pitch-flick + fast decay + arrow-zip noise | Artemis; Odin (double grain 40ms) |
 | 8 | CHARM | soft sine chime + minor-3rd gliss + 5Hz tremolo, **no noise** | Aphrodite |
@@ -404,7 +426,7 @@ SIGNATURE. The base 3-stream is a fixed baseline you grow with ATTACK POWER."* L
 - **APEX** (GENERIC, rewritten): DESC "APEX — your APOTHEOSIS multiplier climbs one step." ▸ "Cap ×5 → ×6 (max ×8); +0.25
   each kill while golden." **Never** "HUBRIS ceiling" (collides with the ×1.0–2.0 HUBRIS skill meter) and **never** "×2→×3"
   (wrong numbers). `vcap` raises `G.up.multCap` (default 5, hard-cap 8) which caps `G.mult` the APOTHEOSIS score multiplier.
-- **LEVEL-UP** (`levelA/levelS`): epithet "LEVEL UP"; DESC "ODIN ATTACK ★★☆☆☆ → ★★★☆☆"; ★-LINE "×1.5 → ×2.25 ÓÐr damage";
+- **LEVEL-UP** (`levelA/levelS`): epithet "LEVEL UP"; DESC "ODIN ATTACK ★★☆☆☆ → ★★★☆☆"; ★-LINE "×1.5 → ×2.25 bolt damage";
   **rail** `1.0 · 1.5 · [2.25] · 2.9 · 3.5`.
 
 ---
@@ -465,9 +487,9 @@ spawn-tether. Reads as an ENTITY (dark body, health shimmer), never a bullet; lo
 + `expireOwnedOnSwap` recall; §4 the 4-zone status system + confuse deletion + field renames + weak/charm color split.
 Cross-cutting; unblocks everything.
 
-**Pass 2 — Kit reworks.** The 8 reworked kits: Artemis QUARRY + §3 PRECISION, Ares War-Heat, Odin ÓÐR + Huginn&Muninn charm,
+**Pass 2 — Kit reworks.** The 8 reworked kits: Artemis HUNT (Hunted brand, chain/sticky/splinter) + §3 PRECISION, Ares War-Heat, Odin NINE NIGHTS + Huginn&Muninn charm,
 Loki PILFER, the three differentiated specials, Quetz CONSTRICTOR + COIL. Then bring the 7 unchanged kits up to code
-(Poseidon/Guan Yu feedback, Heimdall 4th-shot tell, Anubis execute tell…).
+(Poseidon/Guan Yu feedback, Anubis execute tell…). Heimdall THE BIFRÖST joins the reworked-kit list (owner 2026-07-18).
 
 **Pass 3 — Sound.** §6 material-voice table + 9 builders + pantheon table + mix law; per-god bespoke event cues; Communion
 stings; status apply-stings.
@@ -483,12 +505,12 @@ Implementation proceeds on the default; `[VARIANT]` calls get variant renders fo
 ratification, default proceeds; `[SCOPE]` = content-work confirm.
 
 - **Artemis** — [VARIANT] arrow accent (default silver-white body + moon-blue rim; a warmer read bends the cyan/white
-  player-fire law). · [VARIANT] Quarry indicator (default tightening chevron vs orbiting shard). · [SCOPE] weak-point
+  player-fire law). · [VARIANT] Hunted indicator (default tightening chevron vs orbiting shard). · [SCOPE] weak-point
   authoring into TALOS/AMMIT/MIDAS + elite spellcards (default acceptable; fallback = generic Marksmanship tier).
-- **Ares** — [VARIANT] war-scythe serration (must read distinct from Guan Yu's green crescent; 2–3 edge treatments). ·
+- **Ares** — [VARIANT] labrys head geometry + spin trail (2–3 treatments; double-axe silhouette, unmistakable vs Guan Yu). ·
   [CONFIRM] proximity source over graze (default proximity; graze stays HUBRIS's). · [CONFIRM] bands 260/440 +
   fire-not-required (default; watch corner-hug cheese). · [CONFIRM] war-drum mix.
-- **Odin** — [CONFIRM] ÓÐr T2 shake (default light kick every 2nd lance-shot). · [VARIANT] tier-flash color (default gold
+- **Odin** — [VARIANT] rune-band glyph treatment on foes + doom-ignition flash (default gold
   up / steel-blue down). · [CONFIRM] raven scaling = continuous MEMORY (default). · [CONFIRM] drop 'shop rerolls half' (default drop).
 - **Loki** — [VARIANT] stolen-bullet feel (default flip + reverse + gentle homing; pure-reverse-outward is cleaner on dense
   walls). · [SCOPE] DOPPELGANGER green-boss capstone (default DEFERRED — not built this pass).
@@ -515,7 +537,7 @@ ratification, default proceeds; `[SCOPE]` = content-work confirm.
 purple mirror-chevron tell dropped) · Quetz role (ruling 2 — CONSTRICTOR/attack, serpent voice on shot correct).
 
 **Conflicts resolved beyond the rulings:** (1) Artemis **special** — attack rec's KILLING ARROW vs specials rec's THE LOOSED
-ARROW: the dedicated specials record is authority → **THE LOOSED ARROW**, grafted with "slam pierced foes to full Quarry."
+ARROW: the dedicated specials record is authority → **THE LOOSED ARROW**, grafted + owner-amended: pierced foes Marked, first-struck becomes Hunted at full ramp.
 (2) **MARKED tell** — specials rec proposed green chevrons, status rec proposed amber L-brackets: the dedicated status record
 is authority → **amber L-brackets** globally (the specials rec itself flagged this open).
 
@@ -529,9 +551,9 @@ whose *kit identity* changed against what the prompts actually depict:
 | Prompt | Depicts | Verdict |
 |---|---|---|
 | **#9 ARTEMIS** | silver bow + glowing marking-arrow nocked | **UNCHANGED** — bow + arrow are still the props of THE HUNT / THE LOOSED ARROW; mechanic changed, depiction didn't |
-| **#11 ARES** | flanked by Phobos & Deimos wraiths + notched spear | **UNCHANGED** — wraiths = the still-current special; the spear covers the new War-Heat spear-bundle/scythe |
+| **#11 ARES** | flanked by Phobos & Deimos wraiths + notched spear | **UNCHANGED** — wraiths = the still-current special; the spear covers the new War-Heat javelin→xiphos→doru ladder |
 | **#15 LOKI** | shadow-twin decoy peeling off; venom-green accent | **UNCHANGED** — decoy = the still-current special; PILFER depicts no god-prop; green accent still matches |
-| **#16 ODIN** | leveling Gungnir + Huginn & Muninn circling | **UNCHANGED** — Gungnir = the still-current special; ravens migrate attack→charm but stay an Odin motif; the rune-lance is spear-adjacent |
+| **#16 ODIN** | leveling Gungnir + Huginn & Muninn circling | **UNCHANGED** — Gungnir = the still-current special; ravens migrate attack→charm but stay an Odin motif; the heavy rune-bolt is spear-adjacent |
 
 **Digest: all 32 prompts are SAFE TO GEN unchanged.** No portrait needs an edit and no new painted asset is required — the
 reworks live entirely in procedural combat art, sound, and card text. Two procedural-only notes (not PROMPTS.md edits):

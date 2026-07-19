@@ -33,7 +33,7 @@
   // ---------------------------------------------------------------------
   // peakHubris = best HUBRIS multiplier ever reached (additive field; legacy blobs
   // without it fall back to 1.0). Key stays 'goldwake_meta' — never rename.
-  Run.meta = { hi: 0, bestSector: 0, careerGold: 0, killedWarden: false, completedRun: false, peakHubris: 1 };
+  Run.meta = { hi: 0, bestSector: 0, careerGold: 0, killedWarden: false, completedRun: false, peakHubris: 1, autoFire: false };
   Run.loadMeta = function () {
     try {
       var raw = localStorage.getItem('goldwake_meta');
@@ -42,6 +42,7 @@
         Run.meta.hi = m.hi | 0; Run.meta.bestSector = m.bestSector | 0; Run.meta.careerGold = m.careerGold | 0;
         Run.meta.killedWarden = !!m.killedWarden; Run.meta.completedRun = !!m.completedRun;
         Run.meta.peakHubris = +m.peakHubris || 1;   // additive: legacy blob -> 1.0
+        Run.meta.autoFire = !!m.autoFire;            // §9b auto-fire toggle (default OFF)
       }
     } catch (e) {}
   };
@@ -99,7 +100,8 @@
                  attack: '+25% damage below half health; executes non-bosses below 25% for +50% gold.',
                  special: 'Judgment of Duat: every foe is struck for a share of its missing health.' },
     loki:      { name: 'LOKI', epithet: 'the Trickster', pantheon: 'ASGARD', css: '#8cff5a', color: [0.55, 1.0, 0.35],
-                 attack: '12% chance to Confuse a foe’s aim; the Confused take +15% from you.',
+                 // PASS2: PILFER text is pre-set so a restore of the Loki ATTACK draft is already correct.
+                 attack: 'PILFER — your hits pickpocket a foe (3 marks); on the third, snatch the 8 nearest enemy bullets.',
                  special: 'Shadow-Twin: a decoy that draws all aimed fire and soaks bullets.' },
     odin:      { name: 'ODIN', epithet: 'the Allfather', pantheon: 'ASGARD', css: '#cfd6e0', color: [0.8, 0.85, 0.92],
                  attack: 'Huginn & Muninn orbit and dive at the nearest foe.',
@@ -155,7 +157,9 @@
     heimdall: [['heimVigil', '+20% damage to Marked foes', 'any'], ['heimPrism', 'refraction every 3rd volley; +2 prism shots', 'attack'], ['heimHorn', 'Gjallarhorn hits harder; shove 350px', 'special'], ['heimEcho', 'the horn echoes once at 50% after 1s', 'special']],
     ra: [['raRamp', 'beam ramps faster & higher', 'attack'], ['raSpread', 'burning foes spread Burn on death', 'any'], ['raSplit', 'beam splits vs swarms', 'attack'], ['raBurn', 'beam ignites its target', 'attack']],
     anubis: [['anubisThresh', 'execute threshold 25% → 33%', 'attack'], ['anubisRefund', 'executes refund special charge', 'attack'], ['anubisShard', 'executes drop an apotheosis shard', 'attack'], ['anubisBossDmg', 'below-half bonus vs bosses +25% → +40%', 'attack']],
-    loki: [['lokiLong', 'decoy lasts 6 → 9s', 'special'], ['lokiBoom', 'decoy explodes: bullets → gold', 'special'], ['lokiVaunt', 'flipped bullets feed apotheosis', 'attack'], ['lokiChance', '+6% confuse chance', 'attack']],
+    // PASS2: lokiVaunt + lokiChance removed from the draftable pool — their readers died with Confuse.
+    // They re-anchor under PILFER next pass (lokiChance→PICKPOCKET steal-on-2nd-stack, lokiVaunt→daggers charge apotheosis).
+    loki: [['lokiLong', 'decoy lasts 6 → 9s', 'special'], ['lokiBoom', 'decoy explodes: bullets → gold', 'special']],
     odin: [['odinRaven', 'ravens dive more & hit harder', 'attack'], ['odinMark', 'Gungnir marks last; bonus x1.4', 'special'], ['odinRavenMark', 'ravens Mark on hit', 'attack'], ['odinGungnir', 'Gungnir +50% damage & longer', 'special']],
     wukong: [['wukongClones', 'clones last 7s, cap 3', 'attack'], ['wukongStaff', 'staff wider; survivors Stunned', 'special'], ['wukongSpecial', 'clones echo your special at 25%', 'special'], ['wukongChance', 'clone spawn 20% → 35%', 'attack']],
     quetz: [['quetzBig', 'serpent larger & slower', 'special'], ['quetzGold', 'eaten bullets also pay gold', 'special'], ['quetzCircle', 'serpent circles you at the end', 'special'], ['quetzPierce', '+1 more pierce', 'attack']],
@@ -281,7 +285,8 @@
     if (!slots.length) return null;
     var slot = slots[Math.floor(Run.rng() * slots.length)];
     var owned = slot === 'attack' ? st.attackGod : st.specialGod;
-    var others = GOD_KEYS.filter(function (g) { return g !== owned; });
+    // PASS2: exclude Loki from ATTACK swaps too (his ATTACK transform is out until PILFER); his SPECIAL stays swappable.
+    var others = GOD_KEYS.filter(function (g) { return g !== owned && !(slot === 'attack' && g === 'loki'); });
     var g = others[Math.floor(Run.rng() * others.length)];
     return slot === 'attack' ? tAttack(g, true) : tSpecial(g, true);
   }
@@ -311,7 +316,7 @@
     // attack / special transforms — only while the slot is empty.
     // Swaps are NOT part of the weighted pool: they'd flood it (11 gods × weight
     // per filled slot). A single swap card is rarely injected in pickDistinct.
-    if (!st.attackGod) GOD_KEYS.forEach(function (g) { push(tAttack(g, false), 14); });
+    if (!st.attackGod) GOD_KEYS.forEach(function (g) { if (g === 'loki') return; /* PASS2: restore with PILFER (Loki ATTACK removed while its Confuse reader is gone) */ push(tAttack(g, false), 14); });
     if (!st.specialGod) GOD_KEYS.forEach(function (g) { push(tSpecial(g, false), 12); });
     // transform LEVEL-UP (pom) cards — your own equipped god, up the ladder
     if (st.attackGod && st.attackR < 3.5) push(tLevel('attack', st.attackGod), 10);
@@ -566,7 +571,7 @@
     var st = Game.st();
     if (idx === 0) {
       // Hades opening: three ATTACK transforms from three different gods
-      var gs = GOD_KEYS.slice();
+      var gs = GOD_KEYS.filter(function (g) { return g !== 'loki'; });   // PASS2: restore Loki ATTACK opening pick with PILFER
       for (var s = gs.length - 1; s > 0; s--) { var j = ri(s + 1); var t = gs[s]; gs[s] = gs[j]; gs[j] = t; }
       Run.draftOffers = [finalizeBoon(tAttack(gs[0], false), false), finalizeBoon(tAttack(gs[1], false), false), finalizeBoon(tAttack(gs[2], false), false)];
     } else {

@@ -94,7 +94,7 @@
       life: 1e9,
       timeScale: 1, slowT: 0,         // bullet time-slow (tidal carry, horn shoves)
       carried: false,                 // Poseidon tidal wave
-      friendly: false, srcId: -1,     // Loki faction-flip (Confuse)
+      friendly: false, srcId: -1,     // player-faction flipped bullet (Loki PILFER, Pass 2)
       gardenerId: -1,                 // Bullet Gardener ownership
       ownerId: -1                     // emitter ownership (midship cancel-to-gold on death)
     };
@@ -110,7 +110,14 @@
       faction: 0, big: false, markHit: false, forceCrit: 0,
       weave: 0, phase: 0,                // Quetzalcoatl serpentine shots
       cloneShot: false,                  // Wukong clone (HAVOC IN HEAVEN)
-      crescent: false                    // Guan Yu cleaving crescent blade
+      crescent: false,                   // Guan Yu cleaving crescent blade
+      // §9a pierce-dedup: a stamp scheme. Every shot gets a unique monotonic fireId
+      // (stamped in resetShotHits); an enemy it hits records e.lastHitFireId = fireId,
+      // so collideShots skips a foe already bitten by THIS shot for the shot's whole
+      // life. O(1), eviction-free — supersedes the old 8-slot seq ring that could
+      // evict a still-overlapping foe on a high-pierce shot and let it re-hit. hitN =
+      // lifetime distinct hits (the pierce budget).
+      hitN: 0, fireId: 0
     };
   }
 
@@ -135,7 +142,10 @@
       marked: false, markT: 0,
       weak: false, weakT: 0, ghost: false,
       burnT: 0, burnDps: 0,
-      confuseT: 0, stunT: 0, judgeT: 0, confuseBudget: 0,
+      // §4 CONFUSE REMOVED (ruling 1): the freed confuse fields are renamed to
+      // trickStacks/trickBudget, reserved for Loki PILFER's boss budget (Pass 2).
+      // Unused this pass — kept only so the pool stays monomorphic.
+      trickStacks: 0, trickBudget: 0, stunT: 0, judgeT: 0,
       // Poseidon physical displacement (integrated after scripted movement)
       dispX: 0, dispY: 0, dispVX: 0, dispVY: 0, impactDmg: 0, slamCd: 0,
       // phase-6 archetypes
@@ -207,7 +217,8 @@
     'ArrowUp': 1, 'ArrowDown': 1, 'ArrowLeft': 1, 'ArrowRight': 1,
     'KeyW': 1, 'KeyA': 1, 'KeyS': 1, 'KeyD': 1,
     'ShiftLeft': 1, 'ShiftRight': 1,
-    'KeyZ': 1, 'KeyX': 1, 'KeyC': 1, 'Space': 1, 'KeyP': 1, 'KeyR': 1, 'KeyM': 1
+    'KeyZ': 1, 'KeyX': 1, 'KeyC': 1, 'Space': 1, 'KeyP': 1, 'KeyR': 1, 'KeyM': 1,
+    'KeyF': 1   // pause-menu auto-fire toggle (§9b)
   };
 
   var firstGesture = null; // set by Game: called once on first keydown
