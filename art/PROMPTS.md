@@ -63,6 +63,11 @@ spot-checks grounds and slice quality (a bad ground or a subject clipped by
 slicing goes back to its subagent for a re-gen), and runs the embed step once
 at the end.
 
+**HOLD-flagged rows must be SKIPPED until their flag clears**: 33.7 (edict —
+counts as one of the 82; gen only the style the owner picks, A, B, or C) and
+34.6 (solar barque — additive, 83rd file, gen once the ultimate roster is
+ratified). A batch run before the flags clear delivers 81 files.
+
 Output convention:
 - **Filename**: `<prompt#>[-<row#>]-<slug>.png`, e.g. `16-odin.png`,
   `33-1-mjolnir.png`, `30-10-huginn-muninn.png`.
@@ -866,7 +871,9 @@ Substitutions:
 | 33.4 | AKONTIA of Ares — a slim thrown war-javelin with a small bronze leaf-point | nose UP, vertical | ember red, dark and smouldering (sanctioned red) | ~44 pixels tall, very slim |
 | 33.5 | XIPHOS of Ares — a leaf-bladed short sword with the classic waisted swell profile, short cross-guard | nose UP, vertical | arterial red #ff5a6e with a bronze hilt glint (sanctioned red) | ~44 pixels tall |
 | 33.6 | DORU BUNDLE of Ares — three hoplite spears braided into one heavy bolt, broad bronze heads staggered | nose UP, vertical | white-hot core with a red rim (sanctioned red) | ~56 pixels tall |
-| 33.7 | IMPERIAL EDICT of the Jade Emperor — a small rectangular scroll-talisman: violet tablet, thin gold border, one red seal-dot near the head, abstract vertical script ticks | nose UP, long axis vertical | imperial violet #c99aff with the gold #ffd766 border carrying the edge | ~40 pixels tall — the game's ONLY rectangular projectile; the right-angle corners are the read |
+| 33.7 | **[HOLD — owner picking style A/B/C from in-game renders; gen ONLY the winner]** Style A (spec default): IMPERIAL EDICT of the Jade Emperor — a small rectangular scroll-talisman: violet tablet, thin gold border, one red seal-dot near the head, abstract vertical script ticks | nose UP, long axis vertical | imperial violet #c99aff with the gold #ffd766 border carrying the edge | ~40 pixels tall — the game's ONLY rectangular projectile; the right-angle corners are the read |
+| 33.7-B | (alternate, gen only if picked) IMPERIAL EDICT — a long thin vertical edict BANNER unfurled mid-flight, trailing like a ribbon: violet silk, gold end-rods, one red seal-dot, abstract script ticks streaming | nose UP, ribbon trailing down | imperial violet #c99aff, gold #ffd766 end-rods | ~56 pixels tall, very slim — motion is the read |
+| 33.7-C | (alternate, gen only if picked) IMPERIAL EDICT — a square imperial SEAL-STAMP chop flying face-first: bronze-backed violet seal block, carved gold seal-script face, red ink edge | face DOWN toward travel, square silhouette | imperial violet #c99aff, gold #ffd766 seal face | ~34 pixels — the crisp square is the read |
 | 33.8 | THE LOOSED ARROW of Artemis — a great moon-silver hunting arrow, bright white head, two long trailing fletches | nose UP, vertical | moon-silver blending to white at the head | ~64 pixels tall |
 | 33.9 | RUYI JINGU BANG, Wukong's wish-fulfilling staff — one long, perfectly straight dark-iron staff with thick burnished gold bands at both ends and a hairline gold seam down its length | vertical, full length filling the frame | gold #ffd766 on the bands, warm-white edge light down the dark shaft | must read as a clean hard-edged rectangle at any height — it is slammed down as a pillar |
 
@@ -901,6 +908,7 @@ Substitutions:
 | 34.3 | THUNDER-COURT STORM-CLOUD — one of the Jade Emperor's twin Leigong judgment clouds | a wide dark roiling cumulus slab, deep violet-black puffs edged in imperial violet #c99aff, a gold #ffd766 lightning under-flicker glowing in its belly |
 | 34.4 | ZHAOYAOJING — the demon-revealing mirror of MIRROR REFLECTION | a small round burnished bronze disc hung frontally like an icon, gold #ffd766 rim, a faint cold gleam crossing its polished face, short mounting tassel below |
 | 34.5 | SKY SERPENT head — the head of Quetzalcoatl's bullet-devouring hazard serpent | a flat codex-styled feathered serpent head, jaws open forward, streaming quetzal plumes swept back, turquoise #5affc0 body over obsidian dark planes (the engine draws the trailing coil procedurally) |
+| 34.6 | **[HOLD — gen once the ultimate roster is ratified]** SOLAR BARQUE of Ra — the sun-god's night-boat crossing the top of the field (NOON OF THE DUAT ultimate) | a long low reed-boat in flat Egyptian profile, upswept prow and stern, a blazing sun-disc amidships, gold-leaf hull bands over dark planes, solar #ffe89a rim blending white at the disc; wide horizontal silhouette, reads while sweeping laterally |
 
 Substitutions:
 
