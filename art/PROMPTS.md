@@ -80,13 +80,12 @@ counts as one of the 82; gen only the style the owner picks, A, B, or C) and
 ratified). A batch run before the flags clear delivers 81 files.
 
 **COMBAT-SPRITE SIMPLICITY (Sections 8–9).** The first boss/elite field-sprite
-gens came back far too detailed — at in-game size over bloom, ornament reads
-as noise, not craft. The templates' MAXIMUM SIMPLICITY clauses exist to stop
-that; treat them as hard constraints, not flavor. Coordinator QA: view every
-Section 8–9 output scaled to its in-game read size (~60–100px for bosses,
-smaller for popcorn) — if it reads as texture instead of a shape, reject and
-re-gen with "SIMPLER: fewer, larger, flatter shapes" appended. STORYBOOK
-portraits are exempt — that layer is allowed intricacy.
+gens came back too detailed for in-game size — over bloom, fine ornament reads
+as noise. The sprite templates now steer toward bold, simple, few-large-shapes
+output; when checking results, glance at each sprite near its in-game size and
+re-gen any that read as texture rather than a shape, asking for fewer, larger,
+flatter shapes. STORYBOOK portraits are exempt — that layer is allowed
+intricacy.
 
 Output convention:
 - **Filename**: `<prompt#>[-<row#>]-<slug>.png`, e.g. `16-odin.png`,
@@ -826,12 +825,11 @@ shape alone, never "same hull, different tint". THE EDGE IS LIGHT: the entire
 silhouette is carried by a self-luminous hostile rim-glow in a warm
 red-magenta family tinted with the accent color {ACCENT}; there is NO drawn
 outline; the interior is quiet dark mid-tone planes only, gilded-myth armor
-suggested in broad dark shapes. MAXIMUM SIMPLICITY: compose the whole sprite
-from at most 8 large flat shapes; no panel lines, no greebles, no engraved
-texture, no ornament — any element that will not survive at final sprite size
-must be omitted entirely. Sacred and ceremonial menace, never gory. Silhouette
-must read instantly at small sprite size over a black field under additive
-bloom. Deliver: PNG, 1:1 square, sprite centered, on a fully
+suggested in broad dark shapes. Keep it bold and simple — a clean flat game
+sprite built from a few large shapes, minimal interior detail, smooth quiet
+surfaces rather than fine ornament; it should read in one glance like a mark,
+not a miniature. Sacred and ceremonial menace, never gory. Silhouette must
+read instantly at small sprite size over a black field under additive bloom. Deliver: PNG, 1:1 square, sprite centered, on a fully
 TRANSPARENT ground — never white, never light gray, no backdrop of any kind.
 Negative: no photorealism, no airbrushed or plastic gradients, no glossy 3D
 render, no mixed mythological traditions, no ink outline, no paper grain, no
@@ -875,9 +873,9 @@ scene, {ORIENTATION}. This is a sacred relic-weapon of the gods: reliquary
 craftsmanship, ceremonial, mythic — never sci-fi, never a machine. THE EDGE IS
 LIGHT: the silhouette is carried by a self-luminous rim-glow in {RIM}; there is
 NO drawn outline; the interior is quiet dark mid-tone planes with gilded-myth
-detail suggested in broad dark shapes only. MAXIMUM SIMPLICITY: at most 8 large
-flat shapes; no engraving, no filigree, no ornament smaller than the read size
-below — omit it entirely rather than render it smaller. Silhouette must read instantly at
+detail suggested in broad dark shapes only. Keep it bold and simple — a few
+large clean shapes, smooth quiet surfaces, no fine engraving or filigree; the
+weapon should read in one glance at game size. Silhouette must read instantly at
 {READ SIZE} over a black field under additive bloom. Deliver: PNG, 1:1 square,
 sprite centered, on a fully TRANSPARENT ground — never white, never light gray,
 no backdrop of any kind. Negative: no photorealism, no airbrushed or plastic
@@ -913,9 +911,9 @@ Game sprite for a vertical bullet-hell, strict top-down view seen from directly
 above, nose or head pointing UP (it fights FOR the player): {SUBJECT}. {BODY}.
 THE EDGE IS LIGHT: the silhouette is carried by a self-luminous rim-glow in the
 body hue given above; there is NO drawn outline; the interior is quiet dark
-mid-tone planes. MAXIMUM SIMPLICITY: at most 8 large flat shapes; no feather-by-
-feather or ornament detail — anything that will not survive at final sprite
-size is omitted entirely, never rendered smaller. CRITICAL: the exact center of the body must stay dark, empty
+mid-tone planes. Keep it bold and simple — a few large clean shapes, broad
+masses rather than feather-by-feather or ornament detail; it should read in
+one glance at game size. CRITICAL: the exact center of the body must stay dark, empty
 and visually quiet — the game engine draws a small glowing heart-gem there and
 it must read on top. Sacred and ceremonial, never cute, never gory. Silhouette
 must read instantly at small sprite size over a black field under additive
