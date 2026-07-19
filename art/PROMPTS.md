@@ -34,16 +34,34 @@ subagent per batch, on high reasoning effort, all batches in parallel**:
 | G | §9 projectile template ×9 rows | 9 |
 | H | §9 owned-entity template ×5 rows | 5 |
 
-Each subagent works its batch **sequentially**: one image request per fenced
-block, and for templated batches one request **per table row** with that row's
-values substituted into the `{PLACEHOLDERS}` before generating. Never combine
-blocks or rows into a single request. Total: 29 direct blocks + 47 template
-rows = **76 images**.
+**Group related subjects into shared gen requests** — one image containing a
+family renders far more consistently than the same subjects genned separately.
+For the templated batches, substitute each row's values into the
+`{PLACEHOLDERS}`, then combine sibling rows into a single **sheet request**: an
+evenly-spaced grid of the subjects on one transparent (or near-black, per the
+delivery spec) ground, every subject fully separated with clear margins, no
+overlaps — then slice the sheet into the individual per-subject PNGs named
+below. Suggested groupings:
 
-The coordinator then: verifies the count per batch, enforces the filename and
-destination convention below, spot-checks grounds (anything on a white or
-light ground goes back to its subagent for a re-gen), and runs the embed step
-once at the end.
+- E: all 15 relic icons as one grid sheet (or 5 pantheon-grouped sheets).
+- F: regular foes (32.1–32.10) as one sheet; boss/elite field sprites
+  (32.11–32.18) as a second; the player ship ALONE (its quiet-center rule
+  must not share a frame with hostile rims).
+- G: the Ares armory (33.3–33.6) as one sheet; the Norse pair Mjölnir +
+  Gungnir (33.1–33.2) as another; edict + Loosed Arrow (33.7–33.8) together;
+  the Ruyi staff (33.9) alone (needs the full frame height).
+- H: all 5 owned entities as one sheet.
+
+Full-composition pieces — title, emblems, every §3/§4 portrait, backdrops,
+shop — stay **one request each**: each is a distinct painting and sheet cells
+would cost too much resolution. Judgment call throughout: group only while
+per-subject resolution stays comfortably above its read size.
+
+The coordinator then: verifies all **76 delivered files** (29 direct + 47
+template rows), enforces the filename and destination convention below,
+spot-checks grounds and slice quality (a bad ground or a subject clipped by
+slicing goes back to its subagent for a re-gen), and runs the embed step once
+at the end.
 
 Output convention:
 - **Filename**: `<prompt#>[-<row#>]-<slug>.png`, e.g. `16-odin.png`,
