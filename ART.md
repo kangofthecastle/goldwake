@@ -212,11 +212,32 @@ distinct impact/end state.**
 
 ## 8. Environments & backdrops
 
-**(STORYBOOK layer, composited behind COMBAT.)** Build a backdrop as large,
-readable painted **masses** first, then localized texture: atmospheric ground →
-large dark shapes → one landmark → small story props. Give each sector one
-**unmistakable landmark** drawn from its affix/pantheon mood — a broken celestial
-gate, a sunken bell, a colossal seated god, a feathered-serpent arch.
+**(STORYBOOK layer, composited behind COMBAT.)** **A sector is a JOURNEY, not a
+wallpaper** (owner ruling 2026-07-19: "level should take me somewhere"). The
+backdrop scrolls slowly downscreen across the sector's whole duration — a
+continuous painted route in three **legs** (approach → passage → threshold),
+each leg synced to a wave-arrangement act, arriving at the boss's doorstep as
+the boss spawns. The fight IS the destination. The three routes:
+
+- **SECTOR 1 — THE BRONZE COAST** (arrival: TALOS): open night sea with
+  drifting wreck-gold → bronze-littered shallows, fragments of fallen
+  colossi → the marble gate cliffs of the guarded island, TALOS's circuit.
+- **SECTOR 2 — THE RIVER OF NIGHT** (arrival: AMMIT): down the Nile at dusk —
+  reed banks, papyrus, pylon gates → the river enters the Duat, tomb-wall
+  banks and the gates of the hours of night → the narrowing approach to the
+  Hall of Judgment, scales iconography on the banks. The river is the
+  playfield: banks carry all the detail at the screen edges.
+- **SECTOR 3 — ASCENT OF THE GILDED COURT** (arrival: MIDAS): rising through
+  cloud-borne outer terraces → the middle court, hanging curtains and edict
+  banners, each tier more gold-choked → the throne approach and dais.
+
+Build each leg as large, readable painted **masses** first, then localized
+texture: atmospheric ground → large dark shapes → one landmark per leg → small
+story props. Legs must **seam vertically** — the top of leg N continues into
+the bottom of leg N+1 — so the scroll never visibly cuts. Engine: the sector
+backdrop becomes a tall scrolling texture (three stacked 9:16 leg paintings);
+crossfade is the fallback where a seam fails. Every leg individually obeys the
+center-column and darkness laws below.
 
 - Backdrops must stay **near-black and low-contrast** so additive neon sings over
   them; they are scenery, not spectacle.

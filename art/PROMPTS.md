@@ -12,7 +12,7 @@ exception (owner call 2026-07-18, BOONS.md §12) — the procedural draw stays t
 live fallback until each sprite is wired in.
 
 Sections: 1 title keyart · 2 pantheon emblems (5) · 3 god card portraits (15) ·
-4 boss portraits (4) · 5 sector backdrops (3) · 6 shop dressing (1) ·
+4 boss portraits (4) · 5 sector journeys (3 routes × 3 legs = 9) · 6 shop dressing (1) ·
 7 charm-relic icon batch (1 template × 15 subjects) ·
 8 combat sprites (1 player ship + 1 enemy template × 18 subjects) ·
 9 signature player-side sprites (2 templates × 14 subjects).
@@ -28,7 +28,7 @@ subagent per batch, on high reasoning effort, all batches in parallel**:
 | A | §1 title + §2 emblems | 6 |
 | B | §3 god portraits | 15 |
 | C | §4 boss portraits | 4 |
-| D | §5 backdrops + §6 shop | 4 |
+| D | §5 sector journeys (3 legs each, SEQUENTIAL with reference-image continuity — see §5 intro) + §6 shop | 10 |
 | E | §7 relic icon template ×15 rows | 15 |
 | F | §8 player ship + enemy template ×18 rows | 19 |
 | G | §9 projectile template ×9 rows | 9 |
@@ -57,7 +57,7 @@ shop — stay **one request each**: each is a distinct painting and sheet cells
 would cost too much resolution. Judgment call throughout: group only while
 per-subject resolution stays comfortably above its read size.
 
-The coordinator then: verifies all **76 delivered files** (29 direct + 47
+The coordinator then: verifies all **82 delivered files** (35 direct + 47
 template rows), enforces the filename and destination convention below,
 spot-checks grounds and slice quality (a bad ground or a subject clipped by
 slicing goes back to its subagent for a re-gen), and runs the embed step once
@@ -590,77 +590,92 @@ black #000000, no text or lettering, no busy particle noise, no watermark.
 
 ---
 
-## Section 5 — Sector backdrops (9:16, sits behind dense bullet fields)
+## Section 5 — Sector journeys (9:16 ×3 legs each; scrolls behind dense bullet fields)
 
-### 26. SECTOR 1 backdrop — the Marble Gate
+**A sector is a JOURNEY, not a wallpaper** (owner ruling 2026-07-19, ART.md §8).
+Each sector's backdrop is a continuous painted route in three vertically-seamed
+**legs** — approach → passage → threshold — that the engine scrolls slowly
+downscreen across the sector, arriving at the boss's doorstep. Per sector,
+generate **three 9:16 images sequentially in one subagent**: gen leg 1, then
+feed each finished leg back as a reference image when genning the next so
+style, palette and bank-lines stay continuous; the TOP ~10% of leg N must
+compositionally continue into the BOTTOM ~10% of leg N+1 (the seam), since the
+scroll runs bottom-to-top through legs 1→2→3. Every leg individually obeys the
+shared contract below.
 
-```
-Painted backdrop for a vertical bullet-hell playfield, storybook style: the
-approach to a colossal ruined marble temple gate at night, drawn in the manner of
-Greek carved marble frieze and black-figure pottery — broken columns, laurel
-relief, a fallen capital. CRITICAL: this image sits BEHIND a dense field of
-glowing bullets and must never steal reads — use an extreme dark value range
-(nothing above a dim mid-tone), concentrate ALL architectural detail along the
-left and right edges and the top corners, and keep the entire center column
-(middle 50% of the width) nearly empty near-black darkness. One landmark only:
-the gate spanning the top edge. Large flat painted masses first, minimal
-localized texture, low contrast throughout, no visual lanes or stripes that could
-imply a safe path. Palette: near-black base #05080b, dim desaturated
-marble-ivory and moss midtones, the faintest thread of gold #ffd766 on the gate
-relief, warm near-black outline #231A20 kept soft and heavy. No grain in the
+**Shared contract (applies to all nine leg images — treat as part of every
+prompt):** Painted backdrop for a vertical bullet-hell playfield, storybook
+style. CRITICAL: sits BEHIND a dense field of glowing bullets and must never
+steal reads — extreme dark value range (nothing above a dim mid-tone), ALL
+detail pressed against the left and right screen edges, the entire center
+column (middle 50% of the width) kept nearly empty near-black darkness. One
+landmark per leg. Large flat painted masses first, minimal localized texture,
+low contrast, no stripes or lanes implying a safe path. Near-black base
+#05080b, warm near-black outline #231A20 soft and heavy, no grain in the
 central play area. Deliver: PNG, 9:16 portrait (1080x1920), on a near-black
 #05080b ground — never white or light gray. Negative: no photorealism, no
 airbrushed or plastic gradients, no glossy 3D render, no mixed mythological
-traditions (Greek only), no pure black #000000, no bright detail in the center
-column, no text or lettering, no busy particle noise, no watermark.
-```
+traditions, no pure black #000000, no bright detail in the center column, no
+text or lettering, no busy particle noise, no watermark.
 
-### 27. SECTOR 2 backdrop — the Tomb Vault
+### 26. SECTOR 1 journey — THE BRONZE COAST (arrival: TALOS)
 
-```
-Painted backdrop for a vertical bullet-hell playfield, storybook style: descent
-into a vast Egyptian tomb vault, drawn in the manner of tomb-wall painting and
-papyrus — flat profile figures in wall frescoes, hieroglyph bands, gold leaf on
-lapis, two colossal seated guardian statues. Deeper and heavier than a temple
-gate: this is the mid-run escalation. CRITICAL: this image sits BEHIND a dense
-field of glowing bullets and must never steal reads — extreme dark value range
-(nothing above a dim mid-tone), ALL fresco and statue detail pressed hard against
-the left and right edges, the entire center column (middle 50% of the width)
-kept as nearly empty near-black darkness falling away downward. One landmark
-only: the paired seated statues flanking the upper edges. Large flat painted
-masses, minimal texture, low contrast, no stripes or lanes implying a safe path.
-Palette: near-black base #05080b, dim lapis-blue and tomb-gold #e8c46a
-midtones, the faintest gold #ffd766 leaf glints at the edges, warm near-black
-outline #231A20 soft and heavy. No grain in the central play area. Deliver: PNG,
-9:16 portrait (1080x1920), on a near-black #05080b ground — never white or light
-gray. Negative: no photorealism, no airbrushed or plastic gradients, no glossy
-3D render, no mixed mythological traditions (Egyptian only), no pure black
-#000000, no bright detail in the center column, no text or lettering, no busy
-particle noise, no watermark.
-```
-
-### 28. SECTOR 3 backdrop — the Gilded Sanctum
+Greek only: carved marble frieze and black-figure pottery manner. Dim
+desaturated marble-ivory, sea-green and moss midtones; faintest gold #ffd766
+threads on wreck-gold and relief.
 
 ```
-Painted backdrop for a vertical bullet-hell playfield, storybook style: the
-innermost imperial throne sanctum, drawn in the manner of Ming dynasty court
-scroll painting — hanging judgment curtains, drifting cloud bands, tiers of
-gold-on-jade balustrades climbing toward an empty throne dais at the very top
-edge; the final-boss arena, richest and darkest of the three sectors. CRITICAL:
-this image sits BEHIND the densest bullet fields in the game and must never
-steal reads — extreme dark value range (nothing above a dim mid-tone), ALL
-curtain, balustrade and cloud detail pinned to the left and right edges and the
-extreme top, the entire center column (middle 50% of the width) kept as nearly
-empty near-black darkness. One landmark only: the throne dais silhouette at the
-top. Large flat painted masses, minimal texture, low contrast, no stripes or
-lanes implying a safe path. Palette: near-black base #05080b, dim jade and
-imperial-violet #c99aff midtones, restrained gold #ffd766 threads on the
-balustrade edges, warm near-black outline #231A20 soft and heavy. No grain in
-the central play area. Deliver: PNG, 9:16 portrait (1080x1920), on a near-black
-#05080b ground — never white or light gray. Negative: no photorealism, no
-airbrushed or plastic gradients, no glossy 3D render, no mixed mythological
-traditions (Chinese imperial only), no pure black #000000, no bright detail in
-the center column, no text or lettering, no busy particle noise, no watermark.
+LEG 1 (approach): open night sea — long dark swells, drifting wreck-gold and
+splintered hulls of offering-ships along the left and right edges, a faint
+star-band high up. Landmark: one half-sunken bronze colossus hand breaking the
+water at an edge.
+LEG 2 (passage): bronze-littered shallows — reefs of broken colossus fragments
+(a face, a greave, a shield) pressed against both edges, shallow water glinting
+dimly between them. Landmark: a toppled bronze head lying on a reef.
+LEG 3 (threshold): the marble cliffs of the guarded island — broken columns
+and laurel relief climbing both edges toward a colossal ruined temple gate
+spanning the top edge (TALOS's circuit). Landmark: the gate.
+```
+
+### 27. SECTOR 2 journey — THE RIVER OF NIGHT (arrival: AMMIT)
+
+Egyptian only: tomb-wall painting and papyrus manner — flat profile forms,
+hieroglyph bands, gold leaf on lapis. Dim lapis-blue and tomb-gold #e8c46a
+midtones. The river IS the playfield: the dark water is the empty center
+column, the banks carry all detail at the edges.
+
+```
+LEG 1 (approach): down the Nile at dusk — reed and papyrus banks on both
+edges, small dark fishing skiffs beached, a pylon gate silhouette at one edge.
+Landmark: the first pylon gate.
+LEG 2 (passage): the river enters the Duat — banks become tomb walls with flat
+fresco profiles and hieroglyph bands, gates of the hours of night passing at
+the edges, colossal seated guardian statues flanking. Landmark: the paired
+guardians.
+LEG 3 (threshold): the narrowing approach to the Hall of Judgment — the banks
+close in, columns and scales iconography on both edges, gold-leaf judgment
+scenes, the hall's doorway darkness spanning the top edge where the river ends.
+Landmark: the hall doorway.
+```
+
+### 28. SECTOR 3 journey — ASCENT OF THE GILDED COURT (arrival: MIDAS)
+
+Chinese imperial only: Ming dynasty court scroll manner — cloud bands,
+gold-on-jade, hanging curtains, edict banners. Dim jade and imperial-violet
+#c99aff midtones, restrained gold #ffd766 threads; each leg is more gold-choked
+than the last (the scroll ascends, so this journey reads as CLIMBING).
+
+```
+LEG 1 (approach): the cloud-borne outer terraces — balustrade tiers emerging
+from drifting cloud bands at both edges, distant lantern glints. Landmark: the
+first great terrace stair at an edge.
+LEG 2 (passage): the middle court — hanging judgment curtains and long
+vertical edict banners at both edges, gold-on-jade balustrades stacking
+higher, coins and treasure beginning to heap in the edge shadows. Landmark: a
+colossal gilded censer.
+LEG 3 (threshold): the throne approach — the richest and darkest tier, curtain
+layers parting at the edges, treasure heaped and hardening to gold, the empty
+throne dais silhouette spanning the very top edge. Landmark: the dais.
 ```
 
 ---
