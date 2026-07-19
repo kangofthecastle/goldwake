@@ -352,6 +352,10 @@
       sector: sector, env: env, stars: stars, nebula: nebula, units: units, debris: debris,
       // choreography state (eased toward targets)
       structAlpha: 0, structTarget: 1, bright: 1, brightTarget: 1, scrollMul: 1, scrollTarget: 1,
+      // journey odometer: accumulates at the arc-modulated scroll speed so the
+      // PAINTED layers travel with the wave arc (accelerate at crescendo, settle
+      // at breather/boss) exactly like the procedural layers — not on wall-clock.
+      scrollY: 0,
       role: 'opener', dimFactor: 1,
       setpiece: { active: false, x: 0, y: 0, vy: 0, alpha: 0, parts: null },
       bossShadow: { active: false, y: 0, t: 0, alpha: 0 }
@@ -392,6 +396,10 @@
 
   function updateBackground(dt) {
     var b = G.bg, i;
+    // Journey arrival: once the boss has actually descended, the journey has
+    // reached its destination — settle the scroll to a slow arena drift (the
+    // dim-to-near-black from setBgRole('boss') still holds; §8 boss threshold).
+    if (b.role === 'boss' && G.boss && G.boss.arrived) b.scrollTarget = 0.4;
     // ease choreography
     var k = Math.min(1, dt * 1.6);
     b.structAlpha += (b.structTarget - b.structAlpha) * (b.role === 'opener' ? Math.min(1, dt * 0.7) : k);
@@ -401,6 +409,9 @@
     var target = bgDimFor(Engine.bullets.count());
     b.dimFactor += (target - b.dimFactor) * Math.min(1, dt * 4);
     var sm = b.scrollMul;
+    // advance the journey odometer at the arc-modulated speed (drives painted-layer
+    // parallax; at sm=1 it tracks seconds so painted scroll rate is unchanged).
+    b.scrollY += sm * dt;
     for (i = 0; i < b.stars.length; i++) {
       var s = b.stars[i];
       s.y += s.sp * sm * dt; s.tw += dt * 3;
@@ -445,7 +456,8 @@
     var b = G && G.bg; if (!b) return null;
     return {
       sector: b.sector, slot: b.env.slot, role: b.role,
-      structAlpha: b.structAlpha, bright: b.bright, scrollMul: b.scrollMul, dimFactor: b.dimFactor,
+      structAlpha: b.structAlpha, bright: b.bright, scrollMul: b.scrollMul, scrollTarget: b.scrollTarget,
+      scrollY: b.scrollY, bossArrived: !!(G.boss && G.boss.arrived), dimFactor: b.dimFactor,
       structCol: b.env.structCol.slice(), starCol: b.env.star.slice(),
       units: b.units.length, setpiece: b.setpiece.active, bossShadow: b.bossShadow.active, bossShadowY: b.bossShadow.y,
       bulletCount: Engine.bullets.count()
@@ -5800,7 +5812,7 @@
     var sc = b.env.structCol, st = b.env.star;
     // DEEP FIELD — nebula tint then stars. Painted layer overrides if present.
     if (GL.backdropReady(b.env.slot + '-deep')) {
-      GL.drawBackdrop(b.env.slot + '-deep', W / 2, H / 2, W, H, 1, 1, 1, deepA, (G.time * 0.006) % 1);
+      GL.drawBackdrop(b.env.slot + '-deep', W / 2, H / 2, W, H, 1, 1, 1, deepA, (b.scrollY * 0.006) % 1);
     } else {
       for (i = 0; i < b.nebula.length; i++) { var n = b.nebula[i]; GL.draw(GL.SPR.GLOW, n.x, n.y, n.r, n.r, 0, n.col[0], n.col[1], n.col[2], deepA); }
       for (i = 0; i < b.stars.length; i++) { var s = b.stars[i]; var tw = 0.7 + 0.3 * Math.sin(s.tw); GL.draw(GL.SPR.CORE, s.x, s.y, s.sz, s.sz, 0, st[0], st[1], st[2], s.a * tw * deepA); }
@@ -5815,7 +5827,7 @@
     // STRUCTURE LAYER — drifting architecture silhouettes (painted override or
     // procedural units).
     if (GL.backdropReady(b.env.slot + '-structure')) {
-      GL.drawBackdrop(b.env.slot + '-structure', W / 2, H / 2, W, H, 1, 1, 1, structBase, (G.time * 0.012) % 1);
+      GL.drawBackdrop(b.env.slot + '-structure', W / 2, H / 2, W, H, 1, 1, 1, structBase, (b.scrollY * 0.012) % 1);
     } else if (structBase > 0.01) {
       for (i = 0; i < b.units.length; i++) drawStructUnit(b.units[i], sc, structBase);
     }
@@ -5826,7 +5838,7 @@
     // NEAR-DEBRIS WEATHER — fast sparse motes/embers (painted override or procedural).
     var dc = b.env.debrisCol, debA = deepA * 0.9;
     if (GL.backdropReady(b.env.slot + '-debris')) {
-      GL.drawBackdrop(b.env.slot + '-debris', W / 2, H / 2, W, H, 1, 1, 1, debA, (G.time * 0.03) % 1);
+      GL.drawBackdrop(b.env.slot + '-debris', W / 2, H / 2, W, H, 1, 1, 1, debA, (b.scrollY * 0.03) % 1);
     } else {
       for (i = 0; i < b.debris.length; i++) { var d = b.debris[i]; var dt2 = 0.6 + 0.4 * Math.sin(d.tw); GL.draw(GL.SPR.SPARK, d.x, d.y, d.sz, d.sz, d.tw, dc[0], dc[1], dc[2], d.a * dt2 * debA); }
     }
