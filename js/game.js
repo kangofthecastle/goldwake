@@ -1888,9 +1888,9 @@
   function anubisVerdict(e) {
     if (e.dying) return;
     if (SFX.verdictGong) SFX.verdictGong();               // Pass4: the scales tip — WEIGHING verdict gong
-    pushVerdictStamp(e.x, e.y, e.scale);                  // §36b THE VERDICT jackal stamp (open→shut)
     e.scaleW = 0;                                         // reset + re-arm
     if (!e.boss && !e.elite) {                            // THE VERDICT: devour the weak
+      pushVerdictStamp(e.x, e.y, e.scale);               // §36b THE VERDICT jackal stamp (open→shut) — only on an actual devour
       flash(e.x, e.y, [0.14, 0.05, 0.11], 130, 0.32);    // jackal-shadow snap
       spark(e.x, e.y, [0.9, 0.75, 0.35], 12, 320, 26); ringShock(e.x, e.y, [0.9, 0.72, 0.3], 34, 2000, 0.42);
       executeEnemy(e);                                    // +50% gold (FEAST +50% more); ETERNAL DEVOTION ghosts ride
@@ -5893,7 +5893,7 @@
       drawBifrost();          // HEIMDALL rainbow bridge / dawn-seam telegraph (drawn hazard)
       drawDuat();             // ANUBIS GATE OF DUAT sand-vortex (drawn hazard)
       drawSkyfall();          // ZEUS SKYFALL transient column
-      drawGold(); drawEnemies(); drawShots(); drawParticles(); drawBolts(); drawBulletHalos(); drawHurledStones();
+      drawGold(); drawEnemies(); drawShots(); drawParticles(); drawBolts(); drawBulletHalos();
       // PASS B — enemy-bullet opaque bodies (premultiplied-over). The bullet
       // shader recolours each cell so the baked white cores survive the family
       // tint; restore the default sprite shader immediately after.
@@ -5904,6 +5904,7 @@
       // PASS C — additive over the bullets: allies + the player (and its core
       // gem) always read on top of the danmaku.
       GL.blendAdditive();
+      drawHurledStones();     // TALOS authored boulders — additive, OVER the bullet field they burst into (procedural boulder's z)
       drawDecoy(); drawClones(); drawRavens(); drawGungnir(); drawRaBeam(); drawWraiths(); drawJudgement(); drawHammers(); drawUlt(); drawDebris(); drawVerdictStamps();
       drawDashGhosts();
       if (G.player.alive) drawPlayer();
@@ -6030,7 +6031,20 @@
     return e.spr;
   }
 
+  // §35/§37 authored glyph cells hoisted OUT of the per-enemy draw loop: the 9 rune
+  // and 6 flame names are static, so resolve them ONCE per frame into these reused
+  // module-level arrays (drawGold's coinC pattern) instead of concat-keying authCell
+  // per glyph per enemy every frame (young-gen string churn in the hottest draw path).
+  var RUNE_NAMES = ['35-1-rune', '35-2-rune', '35-3-rune', '35-4-rune', '35-5-rune', '35-6-rune', '35-7-rune', '35-8-rune', '35-9-rune'];
+  var FLAME_NAMES = ['37-1-flame', '37-2-flame', '37-3-flame', '37-4-flame', '37-5-flame', '37-6-flame'];
+  var runeCells = [-1, -1, -1, -1, -1, -1, -1, -1, -1], flameCells = [-1, -1, -1, -1, -1, -1];
+  function resolveGlyphCells() {
+    var i;
+    for (i = 0; i < 9; i++) runeCells[i] = authCell(RUNE_NAMES[i]);
+    for (i = 0; i < 6; i++) flameCells[i] = authCell(FLAME_NAMES[i]);
+  }
   function drawEnemies() {
+    resolveGlyphCells();   // per-frame glyph-cell resolve (feeds drawKitOverlays runes + drawStatus flames)
     Engine.enemies.forEach(function (e) {
       var f = e.hitFlash > 0 ? 1 : 0;
       var er = e.r, eg = e.g, eb = e.b;
@@ -6132,7 +6146,7 @@
         var rx = e.x + rf * span, ry = gy - Math.abs(rf) * s * 0.14;   // arced band
         // §35 authored carved runes — order = carve order (ri-th rune = 35-(ri+1));
         // the 9th is THE NINTH RUNE (doom). Small marks on the hull; SHARD on miss.
-        var runeC = authCell('35-' + (ri + 1) + '-rune');
+        var runeC = runeCells[ri];   // §35 pre-resolved once per frame (see resolveGlyphCells)
         if (runeC >= 0) GL.draw(runeC, rx, ry, s * 0.19, s * 0.19, 0, 1, 1, 1, 0.95);
         else GL.draw(GL.SPR.SHARD, rx, ry, s * 0.11, s * 0.16, rf, 1, 0.85, 0.4, 0.95);
       }
@@ -6279,13 +6293,13 @@
       var flick = 0.55 + 0.45 * Math.sin(t * 88);                 // ~14Hz
       // §37 authored flame flipbook — 6 frames cycled ~12Hz at the UNDERFOOT zone,
       // stacked as a few offset tongues (heavier/boss foes get more). SHARD on miss.
-      var fr = (Math.floor(t * 12) % 6) + 1, flC = authCell('37-' + fr + '-flame');
+      var fr = (Math.floor(t * 12) % 6) + 1, flC = flameCells[fr - 1];   // §37 pre-resolved once per frame
       if (flC >= 0) {
         var nT = e.boss ? 3 : 2;
         for (var fi = 0; fi < nT; fi++) {
           var offx = (fi - (nT - 1) * 0.5) * s * 0.26, fby = e.y + s * 0.78;
           // each tongue reads its own frame (offset) so they don't pulse in lock-step
-          var ffr = ((Math.floor(t * 12) + fi * 2) % 6) + 1, tC = authCell('37-' + ffr + '-flame');
+          var ffr = ((Math.floor(t * 12) + fi * 2) % 6) + 1, tC = flameCells[ffr - 1];
           darkBack(e.x + offx, fby, s * 0.24);
           GL.draw(tC >= 0 ? tC : flC, e.x + offx, fby, s * 0.4, s * 0.5, 0, 1, 1, 1, 0.85 + 0.15 * flick);
         }
@@ -6320,19 +6334,28 @@
       }
     }
   }
+  // Signature projectile scaffold: an authored sprite over a tinted GLOW haze, the shape
+  // every §9 kind (9/15/17/5/4-loosed/crescent) shared inline. Cell is PRE-RESOLVED once
+  // per frame (see drawShots) so this never string-keys authCell per shot. Returns true
+  // when the authored cell is loaded + drawn (caller returns); false to keep its fallback.
+  function drawSigShot(s, cell, gw, gh, gang, gr, gg, gb, ga, sprS, orient) {
+    if (cell < 0) return false;
+    GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * gw, s.scale * gh, gang, gr, gg, gb, ga);
+    GL.draw(cell, s.x, s.y, s.scale * sprS, s.scale * sprS, orient, 1, 1, 1, 1);
+    return true;
+  }
   function drawShots() {
+    // §9 signature cells resolved ONCE per frame (drawGold's coinC pattern), not per shot.
+    var cHunt = authCell('33-11-hunt-arrow'), cRune = authCell('33-13-rune-bolt'),
+        cAnkh = authCell('33-12-ankh-bolt'), cHeart = authCell('33-14-heartseeker'),
+        cLoosed = authCell('33-8-loosed-arrow'), cCres = authCell('33-10-green-dragon-crescent');
     Engine.shots.forEach(function (s) {
       var ang = Math.atan2(s.vy, s.vx) + Math.PI / 2;
       // ZEUS THE STORM (kind 3) — the shot is a crackling ribbon mini-bolt, not a streak.
       if (s.kind === 3) { drawMiniBolt(s); return; }
       // ARTEMIS arrow-needle (kind 9): silver-white body + moon-blue rim, oriented.
       if (s.kind === 9) {
-        var hac9 = authCell('33-11-hunt-arrow');   // §9 volley arrow — nose-up → rotate to travel
-        if (hac9 >= 0) {
-          GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 0.55, s.scale * 1.9, ang, 0.55, 0.75, 1.0, 0.4);
-          GL.draw(hac9, s.x, s.y, s.scale * 1.7, s.scale * 1.7, ang, 1, 1, 1, 1);
-          return;
-        }
+        if (drawSigShot(s, cHunt, 0.55, 1.9, ang, 0.55, 0.75, 1.0, 0.4, 1.7, ang)) return;   // §9 volley arrow
         GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 0.55, s.scale * 1.9, ang, 0.55, 0.75, 1.0, 0.45);
         GL.draw(GL.SPR.NEEDLE, s.x, s.y, s.scale * 0.5, s.scale * 1.7, ang, 0.9, 0.95, 1.0, 0.95);
         GL.draw(GL.SPR.CORE, s.x, s.y, s.scale * 0.24, s.scale * 0.24, 0, 1, 1, 1, 0.9);
@@ -6346,12 +6369,7 @@
       if (s.kind >= 11 && s.kind <= 14) { drawArmoryShot(s, ang); return; }
       // ODIN rune-bolt (15): steel-blue STREAK + NEEDLE spine, gold core once at doom.
       if (s.kind === 15) {
-        var rbc = authCell('33-13-rune-bolt');   // §9 heavy NINE NIGHTS bolt — nose-up → rotate to travel
-        if (rbc >= 0) {
-          GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 0.7, s.scale * 2.0, ang, 0.6, 0.72, 0.95, 0.5);
-          GL.draw(rbc, s.x, s.y, s.scale * 1.8, s.scale * 1.8, ang, 1, 1, 1, 1);
-          return;
-        }
+        if (drawSigShot(s, cRune, 0.7, 2.0, ang, 0.6, 0.72, 0.95, 0.5, 1.8, ang)) return;   // §9 heavy NINE NIGHTS bolt
         GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 0.7, s.scale * 2.0, ang, 0.6, 0.72, 0.95, 0.5);
         GL.draw(GL.SPR.STREAK, s.x, s.y, s.scale * 0.5, s.scale * 1.9, ang, 0.8, 0.85, 0.95, 0.95);
         GL.draw(GL.SPR.NEEDLE, s.x, s.y, s.scale * 0.28, s.scale * 1.4, ang, 0.95, 0.98, 1, 0.9);
@@ -6362,12 +6380,7 @@
       if (s.kind === 7) { drawEdict(s, ang); return; }
       // ANUBIS THE WEIGHING amber ankh-bolt (kind 17).
       if (s.kind === 17) {
-        var akc = authCell('33-12-ankh-bolt');   // §9 thrown ankh — loop-up, nose-up → rotate to travel
-        if (akc >= 0) {
-          GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 0.6, s.scale * 1.7, ang, 1, 0.72, 0.28, 0.45);
-          GL.draw(akc, s.x, s.y, s.scale * 1.5, s.scale * 1.5, ang, 1, 1, 1, 1);
-          return;
-        }
+        if (drawSigShot(s, cAnkh, 0.6, 1.7, ang, 1, 0.72, 0.28, 0.45, 1.5, ang)) return;   // §9 thrown ankh
         GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 0.6, s.scale * 1.7, ang, 1, 0.72, 0.28, 0.5);
         GL.draw(GL.SPR.STREAK, s.x, s.y, s.scale * 0.34, s.scale * 1.3, ang, 1, 0.72, 0.28, 0.95);
         GL.draw(GL.SPR.RING, s.x, s.y - s.scale * 0.2, s.scale * 0.34, s.scale * 0.34, 0, 1, 0.82, 0.4, 0.9);   // ankh loop
@@ -6378,13 +6391,8 @@
       // point-DOWN and ornamental; it weaves, so present it near-upright with a gentle
       // sway rather than spinning to velocity (the read is the heart, not a needle).
       if (s.kind === 5) {
-        var hkc = authCell('33-14-heartseeker');
-        if (hkc >= 0) {
-          var sway = Math.sin(G.time * 5 + s.y * 0.02) * 0.18;
-          GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 1.4, s.scale * 1.4, 0, 1, 0.4, 0.72, 0.5);
-          GL.draw(hkc, s.x, s.y, s.scale * 1.8, s.scale * 1.8, sway, 1, 1, 1, 1);
-          return;
-        }
+        var sway = Math.sin(G.time * 5 + s.y * 0.02) * 0.18;   // weaves, so present near-upright with a gentle sway
+        if (drawSigShot(s, cHeart, 1.4, 1.4, 0, 1, 0.4, 0.72, 0.5, 1.8, sway)) return;   // §9 votive heartseeker
       }
       // HEIMDALL SPECTRUM LANCE (kind 18) — prismatic rainbow bolt, cycling hue.
       if (s.kind === 18) {
@@ -6396,23 +6404,13 @@
       }
       // ARTEMIS THE LOOSED ARROW (kind 4 special) — great moon-silver arrow (§9).
       if (s.kind === 4 && s.loosed) {
-        var lc = authCell('33-8-loosed-arrow');
-        if (lc >= 0) {
-          GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 1.0, s.scale * 3.0, ang, 0.7, 0.85, 1.0, 0.5);
-          GL.draw(lc, s.x, s.y, s.scale * 2.4, s.scale * 2.4, ang, 1, 1, 1, 1);
-          return;
-        }
+        if (drawSigShot(s, cLoosed, 1.0, 3.0, ang, 0.7, 0.85, 1.0, 0.5, 2.4, ang)) return;   // §9 great moon-silver arrow
       }
       if (s.crescent) {
         // broad crescent blade — wide across its travel; brightens as it cleaves
         var cw = s.scale, perp = ang + Math.PI / 2;
         var pow = Math.min(1, (s.damage - 1) * 0.12);
-        var crc = authCell('33-10-green-dragon-crescent');   // §9 Green Dragon Crescent — cleaving profile, nose-up → rotate to travel
-        if (crc >= 0) {
-          GL.draw(GL.SPR.GLOW, s.x, s.y, cw * 1.6, cw * 2.2, perp, s.r, s.g, s.b, 0.45 + 0.3 * pow);
-          GL.draw(crc, s.x, s.y, cw * 2.6, cw * 2.6, ang, 1, 1, 1, 1);
-          return;
-        }
+        if (drawSigShot(s, cCres, 1.6, 2.2, perp, s.r, s.g, s.b, 0.45 + 0.3 * pow, 2.6, ang)) return;   // §9 Green Dragon Crescent — cleaving profile
         GL.draw(GL.SPR.GLOW, s.x, s.y, cw * 1.1, cw * 2.4, perp, s.r, s.g, s.b, 0.5 + 0.35 * pow);
         GL.draw(GL.SPR.STREAK, s.x, s.y, cw * 0.7, cw * 2.0, perp, s.r, s.g, s.b, 0.95);
         GL.draw(GL.SPR.STREAK, s.x, s.y, cw * 0.4, cw * 1.3, perp, 1, 1, 1, 0.85);
