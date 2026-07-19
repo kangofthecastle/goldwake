@@ -173,7 +173,13 @@
     shimmerGain = ctx.createGain(); shimmerGain.gain.value = 0.0001;
 
     padGain.connect(bus); pulseGain.connect(bus); crestGain.connect(bus); shimmerGain.connect(bus);
-    bus.connect(lp); lp.connect(duck); duck.connect(master); master.connect(ctx.destination);
+    // The score keeps its OWN gain path (bus -> score lowpass -> pause duck -> master):
+    // nothing SFX does compresses or ducks it. It terminates into SFX's shared master
+    // safety limiter (not raw destination) so the summed program can't hard-clip the DAC
+    // during dense hit/coin storms — the fix for the "music sounds compressed" report.
+    // Falls back to destination if SFX's bus is unavailable (headless / SFX absent).
+    var out = (window.SFX && SFX.masterBus && SFX.masterBus()) || ctx.destination;
+    bus.connect(lp); lp.connect(duck); duck.connect(master); master.connect(out);
 
     // NO persistent oscillators — the score is built entirely from scheduled,
     // enveloped one-shots. Nothing sustains, nothing glides: no whirr.

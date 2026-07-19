@@ -26,9 +26,16 @@
   window.SFX = SFX;
 
   var ctx = null;
-  var master = null;   // master gain -> lowpass -> compressor -> destination
+  var master = null;   // SFX master gain -> lowpass -> glue comp -> safety limiter -> destination
   var lp = null;
-  var comp = null;
+  var comp = null;     // SFX-ONLY glue compressor (never touches music)
+  var ceiling = null;  // final transparent soft-clip after the limiter (absolute brickwall)
+  var limiter = null;  // SHARED master safety limiter: SFX + MUSIC both terminate here
+                       // -> destination. A TRUE PEAK SAFETY (near 0dBFS, fast, ratio 20)
+                       // that only catches genuine overs — NOT a loudness glue on the sum.
+                       // Music keeps its own gain path (see music.js) and is NOT lowpassed
+                       // or glue-compressed by SFX; it merely meets SFX at this brickwall so
+                       // the summed program can never hard-clip the DAC (the old squash).
   var reverb = null;   // shared procedural room (convolver) -> reverbRet -> master
   var killBus = null;  // shared DRY tanh saturator for the kill family (pop/small
                        // explosion) -> killTrim -> master. Rapid pops SUM through
@@ -51,6 +58,20 @@
   var CURVE = (function () {
     var n = 1024, c = new Float32Array(n), k = 2.0;
     for (var i = 0; i < n; i++) { var x = i / (n - 1) * 2 - 1; c[i] = Math.tanh(k * x); }
+    return c;
+  })();
+
+  // TRANSPARENT final-ceiling soft-clip curve (distinct from CURVE, which has 2x
+  // small-signal gain). Identity for |x| <= 0.75, tanh-rounded above, asymptote < 1.
+  // Sits at the very end of the master chain (after the limiter) so the summed
+  // program can NEVER hard-clip the DAC even on a limiter overshoot — while normal
+  // levels (music alone ~0.12, a lone SFX) pass through mathematically untouched.
+  var SOFTCLIP = (function () {
+    var n = 2048, c = new Float32Array(n), knee = 0.75, span = 1 - knee;
+    for (var i = 0; i < n; i++) {
+      var x = i / (n - 1) * 2 - 1, a = x < 0 ? -x : x, s = x < 0 ? -1 : 1;
+      c[i] = a <= knee ? x : s * (knee + span * Math.tanh((a - knee) / span));
+    }
     return c;
   })();
 
@@ -78,9 +99,27 @@
     comp.attack.value = 0.004;
     comp.release.value = 0.18;
 
+    // master safety limiter (shared final node). Brickwall-ish near 0dBFS: with the
+    // coin/hit polyphony law below keeping the summed program well under the ceiling,
+    // this idles in normal play (<3dB) and only shaves a genuine crest (boss-death
+    // cascade), so dense hit/coin storms can no longer clip the whole mix (music too).
+    limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -2.0;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.001;   // fast: minimize transient overshoot (no lookahead)
+    limiter.release.value = 0.06;
+
+    // absolute brickwall behind the limiter: rounds any overshoot the (lookahead-less)
+    // limiter lets through so the DAC never hard-clips even in the densest combat.
+    ceiling = ctx.createWaveShaper();
+    ceiling.curve = SOFTCLIP; ceiling.oversample = '4x';
+
     master.connect(lp);
     lp.connect(comp);
-    comp.connect(ctx.destination);
+    comp.connect(limiter);
+    limiter.connect(ceiling);
+    ceiling.connect(ctx.destination);
 
     // procedural room: a short exponentially-decaying stereo noise IR as a
     // low-mix send bus (subtle — the return sits well under the dry hits).
@@ -117,6 +156,13 @@
   // lazy/unlock path as SFX) and returns it, so the score never spawns a second
   // context and unlocks on the same first gesture. Null if WebAudio is absent.
   SFX.context = function () { SFX.ensure(); return ctx; };
+
+  // Shared master-bus accessor for MUSIC — the node the score connects its OWN
+  // master into so both SFX and music pass through ONE final peak-safety limiter
+  // before the DAC (prevents the summed program hard-clipping). Music does NOT
+  // route through SFX's glue comp or lowpass; it only meets SFX at the limiter.
+  // Falls back to destination if the graph is unavailable (headless-safe).
+  SFX.masterBus = function () { SFX.ensure(); return limiter || (ctx && ctx.destination) || null; };
 
   SFX.toggleMute = function () {
     muted = !muted;
@@ -172,10 +218,36 @@
     return h;
   }
 
+  // ---- polyphony law (constant-power) ---------------------------------------
+  // The two HIGHEST-FREQUENCY cues — coin pickups and enemy-hit ticks — fire dozens
+  // of times a second in dense play. Un-capped, their summed square-wave energy used
+  // to dominate the SFX bus and push the whole program past 0dBFS, hard-clipping the
+  // DAC (which the ear reads as the MUSIC being crushed/pumped — the owner's bug).
+  // Fix: per-cue CONSTANT-POWER gain scaling — with N of a cue live in its tail
+  // window, each plays at 1/sqrt(N) so N stacked coins sum to only ~one coin's worth,
+  // plus a hard voice CAP to bound node count. NO ducking of the music (music has its
+  // own path); ducking stays reserved for the big one-shots (pause / apotheosis).
+  var polyScale = true;                 // debug toggle (SFX.debugPolyScale) — verify only
+  var coinTimes = [], COIN_WIN = 0.12, COIN_CAP = 14;
+  var hitTimes = [],  HIT_WIN = 0.06,  HIT_CAP = 12;
+  // drop stale onsets outside the tail window; return how many remain live at time t.
+  function density(arr, t, win) {
+    var i = 0; while (i < arr.length && arr[i] < t - win) i++;
+    if (i) arr.splice(0, i);
+    return arr.length;
+  }
+
   // A proper arcade COIN voice: square fundamental + one-octave harmonic, a tiny
   // pitch-up flick at note onset, fast decay. Used by gold, cancelCascade and the
   // gold-sting fanfares so every "coin" in the game is the same lovely object.
+  // Polyphony-scaled (constant-power) + capped so a gold vacuum can't dominate the mix.
   function coin(freq, t, peak, dest) {
+    if (polyScale) {
+      var d = density(coinTimes, t, COIN_WIN);
+      if (d >= COIN_CAP) return;        // hard cap: bound concurrent coin voices
+      coinTimes.push(t);
+      peak *= 1 / Math.sqrt(d + 1);     // N simultaneous coins ~= one coin's loudness
+    }
     var o = ctx.createOscillator(); o.type = 'square';
     o.frequency.setValueAtTime(freq * 0.94, t);
     o.frequency.exponentialRampToValueAtTime(freq, t + 0.012);   // flick up
@@ -692,19 +764,26 @@
   SFX.hit = function () {
     if (!ready || muted) return;
     var t = now();
+    var scl = 1;                        // constant-power polyphony (dense hit storms)
+    if (polyScale) {
+      var d = density(hitTimes, t, HIT_WIN);
+      if (d >= HIT_CAP) return;         // hard cap: bound concurrent hit voices
+      hitTimes.push(t);
+      scl = 1 / Math.sqrt(d + 1);       // N simultaneous hits ~= one hit's loudness
+    }
     var o = ctx.createOscillator();
     o.type = 'square';
     o.frequency.setValueAtTime(1200, t);
     o.frequency.exponentialRampToValueAtTime(720, t + 0.035);
     var g = ctx.createGain();
-    g.gain.setValueAtTime(0.045, t);
+    g.gain.setValueAtTime(0.045 * scl, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
     o.connect(g); g.connect(master);
     o.start(t); o.stop(t + 0.06);
     var n = noiseVoice(t, 0.005, null);
     var nf = ctx.createBiquadFilter(); nf.type = 'highpass'; nf.frequency.setValueAtTime(2000, t);
     n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
-    n.g.gain.setValueAtTime(0.02, t);
+    n.g.gain.setValueAtTime(0.02 * scl, t);
     n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.006);
   };
 
@@ -2195,6 +2274,26 @@
   };
 
   // ---- verify / debug surface (non-gameplay) --------------------------------
+  // Live mix telemetry: the SFX glue comp's reduction, the SHARED safety limiter's
+  // reduction (the number that must stay shallow during storms), the SFX master gain,
+  // and the live coin/hit voice counts. Used by the headless mix harness. Zero cost
+  // unless called; not part of gameplay.
+  SFX.mixInfo = function () {
+    return {
+      comp: comp ? comp.reduction : 0,          // SFX-only glue (negative dB)
+      limiter: limiter ? limiter.reduction : 0, // shared master safety (negative dB)
+      masterGain: master ? master.gain.value : 0,
+      activeCoins: coinTimes.length,
+      activeHits: hitTimes.length,
+      polyScale: polyScale
+    };
+  };
+  // Toggle the coin/hit constant-power polyphony law (verify only, so the harness can
+  // A/B the un-capped regression against the fix in a single load). Default ON.
+  SFX.debugPolyScale = function (on) { polyScale = !!on; return polyScale; };
+  // verify-only: the final ceiling node (true DAC output) for an analyser tap.
+  SFX.debugCeiling = function () { SFX.ensure(); return ceiling; };
+
   // Reports the boot-render inventory, timings, buffer peaks, and the last
   // playbackRate used per rich patch (variation check). Zero cost unless called.
   SFX.renderInfo = function () {
