@@ -913,7 +913,9 @@ Game sprite for a vertical bullet-hell, strict top-down view seen from directly
 above, nose or head pointing UP (it fights FOR the player): {SUBJECT}. {BODY}.
 THE EDGE IS LIGHT: the silhouette is carried by a self-luminous rim-glow in the
 body hue given above; there is NO drawn outline; the interior is quiet dark
-mid-tone planes. CRITICAL: the exact center of the body must stay dark, empty
+mid-tone planes. MAXIMUM SIMPLICITY: at most 8 large flat shapes; no feather-by-
+feather or ornament detail — anything that will not survive at final sprite
+size is omitted entirely, never rendered smaller. CRITICAL: the exact center of the body must stay dark, empty
 and visually quiet — the game engine draws a small glowing heart-gem there and
 it must read on top. Sacred and ceremonial, never cute, never gory. Silhouette
 must read instantly at small sprite size over a black field under additive
