@@ -346,6 +346,49 @@ I don't want the fan out"; owner picked SPECTRUM LANCE)
 
 ---
 
+## 2.5 ULTIMATES — the fifth card type (roster drafted 2026-07-19 under two owner rulings: "meaningful
+gameplay differences" + "most of these are still variations of the bullets-turning-to-gold ultimate" —
+so each ultimate is a distinct INTERACTION SHAPE, not a distinct payload on the same screen-flash)
+
+**SYSTEM.** Card kind `ultimate`, god-tied, epic rarity, weight ~4. Transforms the **C-key burst slot**;
+`G.ultimateGod`, one slot, picking another = swap (same pattern as attack/special). **DEFAULT (empty slot)
+= DIVINE INTERVENTION** (freeze→gild, already built). Charge: the existing burst gauge, unchanged
+[CONFIRM]. Offered only while the god holds attack or special (kit hooks guaranteed; OFFER PATHING feel)
+[CONFIRM]. No star levels first wave [CONFIRM]. Card frame: white-gold double rim (rainbow stays duo-only).
+All 15 first wave [CONFIRM]; numbers are tuning baselines.
+
+**The shape law: at most ONE instant full-screen payload (Zeus). Everything else is something you place,
+steer, wear, ride, or time.**
+
+| God | Ultimate · shape | Mechanics (baseline) |
+|---|---|---|
+| ZEUS | **OLYMPIAN STORM** · THE one instant nuke | every live foe struck at once, `LANCE_DMG*4` + Stun 1.2 non-boss; no bullet interaction; the delete button, deliberately unique in shape |
+| POSEIDON | **THE DELUGE** · placed territory | a calm-water zone floods the field third centered where you stand at cast, 4s: enemy bullets entering it DIE (no gold), foes inside slowed; you fight FROM your ground |
+| ARTEMIS | **THE GREAT HUNT** · time you move through | ~1.5s at timeScale ~0.12 with free player movement; every foe your column crosses during the slow is tagged; on resume each tagged foe takes a precise arrow (`forceCrit`, `LANCE_DMG*2.5`) — damage = your flying during the freeze |
+| APHRODITE | **ADORATION** · worn aura | a heart-aura clings to the player 5s (r~200): non-boss foes inside it charm one by one (~0.4s dwell); bosses inside accrue Weak stacks — you fly INTO them to convert |
+| ARES | **ARISTEIA** · kill contract | 4s pinned FRENZY + doubled volleys; each kill +0.3s (cap 8s); no clear, no safety — runs while you kill |
+| RA | **NOON OF THE DUAT** · steered artillery | the solar barque rides the top edge tracking the player's x for 3s, pouring a CORONA-class beam column straight down your lane (`BEAM_DPS*2.5` + Burn) — you aim the sun by flying |
+| ANUBIS | **THE FINAL WEIGHING** · the timed verdict | instant but conditional: wounded non-bosses devoured (execute+gold), bosses bitten `missing*0.25` cap `0.2*maxhp`, full-health foes untouched — its whole gameplay is WHEN you press it |
+| LOKI | **DOPPELGÄNGER** · the mirror | one perfect owned copy, 6s: fires your attack continuously, casts your special once at mid-life; §5 law (green body, cyan heart) |
+| ODIN | **ALLFATHER'S EYE** · the study window | 6s: EVERY Odin hit carves a rune (not every 4th), on any foe — you choose what to learn; zero direct damage, everything after |
+| THOR | **GIANT'S END** · orbiting wrecking ball | Mjölnir grows colossal and ORBITS the player 4s (r~180): foes it touches are hurled to the nearest wall (`LANCE_DMG*2` slam), bullets in its arc destroyed — a melee storm you steer by positioning |
+| HEIMDALL | **DAWNBREAK** · mode transform | 4s: the whole field is the bridge — every shot a spectrum lance from anywhere, all foes continuously Marked |
+| WUKONG | **THE WORLD-PILLAR** · planted cover | the staff PLANTS where you cast it: a stun shockwave rings outward (non-boss Stun 2.5s, boss stagger 0.8), then the pillar STANDS 4s as the game's only bullet-blocking obstacle — cover you position |
+| GUAN YU | **GREEN DRAGON ASCENDS** · trailing blade | 3s: a blade-dragon trails your position (~0.3s lag) carving `BEAM_DPS`-class contact ticks through everything — you drag the blade through the crowd |
+| JADE | **MANDATE OF HEAVEN** · bullet conversion (ruled 2026-07-18) | freeze 0.3s → gild → gilded bullets fire back (`flipDmg`-class) + gold +25% over default — deliberately the default burst's strict upgrade; the ONLY bullets→gold ultimate |
+| QUETZ | **THE FIFTH SUN RISES** · orbiting devourer | the serpent coils AROUND the player 4s eating every bullet its body touches → burst-gauge + gold trickle, zero damage — you steer the orbit through the densest fire for maximum harvest |
+
+- **Shape ledger** (no two alike): nuke · placed zone · time+input · worn aura · kill contract · steered
+  artillery · timed verdict · mirror summon · study window · orbiting ball · mode transform · planted
+  cover · trailing blade · bullet conversion · orbiting eater. Thor orbits to THROW FOES, Quetz orbits to
+  EAT BULLETS; Ra steers a ranged column, Guan Yu drags a contact body — flagged as pairs, split by verb.
+- Only MANDATE touches bullets→gold; only DELUGE/GIANT'S END destroy bullets uncompensated; only FIFTH SUN
+  feeds the gauge; only GREAT HUNT touches time.
+- Voice: one shared ULT-CAST swell + the god's §6 material accent at ×1.5; stubs until Pass 3.
+- §11's ULTIMATES entry remains the ruling-of-record for the card type; this section is the roster.
+
+---
+
 ## 3. PRECISION weak-point system (systemic crit)
 
 RNG crit is retired game-wide (artemis rec). Crit is reborn as **PRECISION** — a systemic, aim-earned, god-agnostic weak
