@@ -21,7 +21,11 @@ out=js/sprites-data.js
   echo "// entry here always overrides its procedural atlas cell. An empty registry"
   echo "// means the game renders fully procedurally (js/gl.js also probes"
   echo "// art/sprites/<slot>.png directly, which covers http:// and Firefox file://)."
-  echo "// Slots: ship, enemy-pop, enemy-gun, enemy-mid, enemy-boss."
+  echo "// Generic ship slots: ship, enemy-pop, enemy-gun, enemy-mid, enemy-boss."
+  echo "// Plus every name-keyed authored sprite (art/PROMPTS.md §8-9): per-archetype"
+  echo "// enemies 32-*, signature projectiles 33-*, owned entities 34-* — gl.js loads"
+  echo "// the generic slots into fixed atlas cells and the 32/33/34-* names into"
+  echo "// cells 19+ (GL.authoredSpr), so this registry embeds ALL of art/sprites/*.png."
   echo "window.SPRITES = window.SPRITES || {};"
   shopt -s nullglob
   for f in art/sprites/*.png; do

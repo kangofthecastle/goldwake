@@ -16,6 +16,46 @@
   // rarity border colors
   var RB = { common: '#e8f4f7', rare: '#7fd0ff', epic: '#ffd766' };
 
+  // ---- STORYBOOK art (art/gen/*.png) lazy loader --------------------------
+  // These paintings (god portraits ~3MB each, emblems, relic icons, title +
+  // shop dressing) are drawn ONLY on the 2D HUD canvas, which is never read back
+  // (no getImageData/toDataURL), so a file:// cross-origin taint is harmless for
+  // drawing. Too big to data-URI-embed, so they lazy-load via Image() on first
+  // request and are cached; every draw site tolerates absence (text/panel shows
+  // through until — or if — the image lands). getArt returns a decoded image or
+  // null. Portraits/relics map by god; emblems by pantheon.
+  var GOD_PORTRAIT = {
+    zeus: '7-zeus', poseidon: '8-poseidon', artemis: '9-artemis', aphrodite: '10-aphrodite',
+    ares: '11-ares', heimdall: '12-heimdall', ra: '13-ra', anubis: '14-anubis', loki: '15-loki',
+    odin: '16-odin', thor: '17-thor', wukong: '18-wukong', guanyu: '19-guan-yu',
+    jade: '20-jade-emperor', quetz: '21-quetzalcoatl'
+  };
+  var GOD_RELIC = {
+    zeus: '30-1-eagle-feather', poseidon: '30-2-pearl-of-the-deep', artemis: '30-3-silver-fletching',
+    aphrodite: '30-4-dove-token', ares: '30-5-spear-splinter', heimdall: '30-6-watchmans-eye',
+    ra: '30-7-sunstone', anubis: '30-8-heart-scarab', loki: '30-9-tangled-thread',
+    odin: '30-10-huginn-muninn', thor: '30-11-hammer-shard', wukong: '30-12-golden-hair',
+    guanyu: '30-13-oath-tablet', jade: '30-14-imperial-seal', quetz: '30-15-plumed-crest'
+  };
+  var PANTHEON_EMBLEM = {
+    OLYMPUS: '2-olympus', KEMET: '3-kemet', ASGARD: '4-asgard',
+    'CELESTIAL COURT': '5-celestial-court', 'FIFTH SUN': '6-fifth-sun'
+  };
+  var artCache = {};   // slug -> { img, ok } ; entry present but ok=false while loading/failed
+  function getArt(slug) {
+    if (!slug) return null;
+    var e = artCache[slug];
+    if (e) return e.ok ? e.img : null;
+    var img = new Image();
+    e = artCache[slug] = { img: img, ok: false };
+    img.onload = function () { e.ok = true; };
+    img.onerror = function () { /* absent: draw sites fall back to text/panel */ };
+    img.src = 'art/gen/' + slug + '.png';
+    return null;
+  }
+  Run.getArt = getArt;
+  Run.godRelic = function (g) { return GOD_RELIC[g] || null; };   // shared with the in-combat loadout HUD (game.js)
+
   var CAREER_GOLD_UNLOCK = 40000;
 
   // ---------------------------------------------------------------------
@@ -775,9 +815,22 @@
     else if (mode === 'over') drawEnd(ctx, false);
   };
   function dim(ctx, a) { ctx.fillStyle = 'rgba(0,0,0,' + a + ')'; ctx.fillRect(0, 0, W, H); }
+  // Full-field STORYBOOK dressing (title backdrop / shop backdrop) painted under
+  // the menu text. Both were authored 1080×1920 with an empty dark center column
+  // for exactly this. When the art is absent, fall back to the plain dim wash so
+  // the screen never breaks. scrim = extra near-black over the art for contrast.
+  function drawScreenArt(ctx, slug, scrim, dimWhenAbsent) {
+    var img = getArt(slug);
+    if (!img) { dim(ctx, dimWhenAbsent); return false; }
+    var scale = Math.max(W / img.width, H / img.height);
+    var dw = img.width * scale, dh = img.height * scale;
+    ctx.drawImage(img, W / 2 - dw / 2, H / 2 - dh / 2, dw, dh);
+    ctx.fillStyle = 'rgba(5,8,11,' + scrim + ')'; ctx.fillRect(0, 0, W, H);
+    return true;
+  }
 
   function drawTitle(ctx) {
-    dim(ctx, 0.35);
+    drawScreenArt(ctx, '1-hubris-title-backdrop', 0.28, 0.35);
     ctx.textAlign = 'center';
     ctx.fillStyle = COL_GOLD; ctx.font = '800 150px Consolas, monospace';
     spaced(ctx, 'HUBRIS', W / 2, H * 0.16, 30);   // 6 letters: wider tracking than the old 8-letter mark
@@ -830,9 +883,15 @@
     }
   }
 
+  // sector → tradition for the intro emblem stamp (S1 Bronze Coast/TALOS = Greek,
+  // S2 River of Night/AMMIT = Kemet, S3 Gilded Court/MIDAS = Celestial Court).
+  var SECTOR_PANTHEON = ['OLYMPUS', 'KEMET', 'CELESTIAL COURT'];
   function drawSectorCard(ctx) {
     dim(ctx, 0.5);
     var sec = Run.sectors[Run.sectorIdx];
+    // pantheon emblem stamp, large and dim, centered above the sector title
+    var emb = getArt(PANTHEON_EMBLEM[SECTOR_PANTHEON[Run.sectorIdx] || 'OLYMPUS']);
+    if (emb) { ctx.save(); ctx.globalAlpha = 0.5; var es = 240; ctx.drawImage(emb, W / 2 - es / 2, H * 0.20, es, es); ctx.restore(); }
     ctx.textAlign = 'center';
     ctx.fillStyle = COL_CYAN; ctx.font = '600 40px Consolas, monospace';
     ctx.fillText('SECTOR ' + (Run.sectorIdx + 1) + ' / 3', W / 2, H * 0.36);
@@ -865,10 +924,45 @@
     }
   }
 
+  // STORYBOOK card art painted under the text: a god portrait (cover-fit, dimmed)
+  // for god cards, or the charm's relic icon (floating in the upper band) for
+  // charms. Near-black scrims keep the text zones legible. Returns true when art
+  // was actually painted (so the caller can shadow its text for contrast).
+  function drawCardArt(ctx, x, y, w, h, b) {
+    if (b.duo) return false;
+    var isCharm = b.kind === 'charm';
+    var slug = isCharm ? GOD_RELIC[b.god] : (b.god ? GOD_PORTRAIT[b.god] : null);
+    var img = getArt(slug);
+    if (!img) return false;
+    ctx.save();
+    roundRect(ctx, x + 4, y + 4, w - 8, h - 8, 15); ctx.clip();
+    if (isCharm) {
+      var s = Math.min(w * 0.6, h * 0.4);
+      ctx.globalAlpha = 0.92;
+      ctx.drawImage(img, x + w / 2 - s / 2, y + h * 0.30, s, s);
+    } else {
+      var scale = Math.max(w / img.width, h / img.height);
+      var dw = img.width * scale, dh = img.height * scale;
+      ctx.globalAlpha = 0.85;
+      ctx.drawImage(img, x + w / 2 - dw / 2, y + h / 2 - dh / 2, dw, dh);
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = 'rgba(5,8,11,0.34)'; ctx.fillRect(x, y, w, h);            // overall dim
+    var gt = ctx.createLinearGradient(0, y, 0, y + h * 0.46);                  // top: kind tag + name + epithet
+    gt.addColorStop(0, 'rgba(5,8,11,0.9)'); gt.addColorStop(1, 'rgba(5,8,11,0)');
+    ctx.fillStyle = gt; ctx.fillRect(x, y, w, h * 0.46);
+    var gb = ctx.createLinearGradient(0, y + h * 0.46, 0, y + h);              // bottom: desc + price
+    gb.addColorStop(0, 'rgba(5,8,11,0)'); gb.addColorStop(1, 'rgba(5,8,11,0.95)');
+    ctx.fillStyle = gb; ctx.fillRect(x, y + h * 0.46, w, h * 0.54);
+    ctx.restore();
+    return true;
+  }
+
   function drawCard(ctx, x, y, w, h, b, selected, price, sold) {
     var border = b.duo ? COL_GOLD : (RB[b.rarity] || RB.common);
     ctx.save();
     ctx.fillStyle = COL_PANEL; roundRect(ctx, x, y, w, h, 18); ctx.fill();
+    var hasArt = drawCardArt(ctx, x, y, w, h, b);
     if (b.duo) {                                         // rainbow rim for duos
       var grd = ctx.createLinearGradient(x, y, x + w, y + h);
       grd.addColorStop(0, '#ff77c8'); grd.addColorStop(0.33, '#9fd8ff'); grd.addColorStop(0.66, '#b6ff5a'); grd.addColorStop(1, '#ffd766');
@@ -887,6 +981,7 @@
       roundRect(ctx, x, y, w, h, 18); ctx.stroke(); ctx.shadowBlur = 0;
     }
     ctx.textAlign = 'center';
+    if (hasArt) { ctx.shadowColor = 'rgba(0,0,0,0.92)'; ctx.shadowBlur = 5; ctx.shadowOffsetY = 1; }   // keep text legible over the painting
     // kind + rarity tag
     ctx.fillStyle = border; ctx.font = '600 22px Consolas, monospace';
     ctx.fillText(kindLabel(b) + '  ·  ' + b.rarity.toUpperCase(), x + w / 2, y + 22);
@@ -930,7 +1025,7 @@
   }
 
   function drawShop(ctx) {
-    dim(ctx, 0.66);
+    drawScreenArt(ctx, '29-black-market', 0.42, 0.66);
     ctx.textAlign = 'center';
     ctx.fillStyle = COL_GOLD; ctx.font = '700 58px Consolas, monospace';
     spaced(ctx, 'BLACK MARKET', W / 2, H * 0.10, 8);

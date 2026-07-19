@@ -1233,8 +1233,13 @@
       else if (hz.type === 'ultpillar') {   // colossal gold staff-pillar (planted cover)
         var pa = Math.min(1, hz.timer);
         GL.draw(GL.SPR.GLOW, hz.x, H / 2, hz.halfW * 3.0, H, 0, 1, 0.75, 0.3, 0.5 * pa);
-        GL.draw(GL.SPR.CORE, hz.x, H / 2, hz.halfW * 1.6, H, 0, 1, 0.85, 0.45, 0.85 * pa);
-        GL.draw(GL.SPR.CORE, hz.x, H / 2, hz.halfW * 0.5, H, 0, 1, 1, 0.9, pa);
+        var rc = authCell('33-9-ruyi-jingu-bang');   // §9 Ruyi Jingu Bang — slammed down as a hard-edged pillar
+        if (rc >= 0) {
+          GL.draw(rc, hz.x, H / 2, hz.halfW * 2.0, H, 0, 1, 1, 1, pa);
+        } else {
+          GL.draw(GL.SPR.CORE, hz.x, H / 2, hz.halfW * 1.6, H, 0, 1, 0.85, 0.45, 0.85 * pa);
+          GL.draw(GL.SPR.CORE, hz.x, H / 2, hz.halfW * 0.5, H, 0, 1, 1, 0.9, pa);
+        }
         GL.draw(GL.SPR.RING, hz.x, G.player.y, hz.halfW * 3, hz.halfW * 3, G.time * 2, 1, 0.85, 0.4, 0.5 * pa);
       }
       else if (hz.type === 'serpent' && hz.trail) {
@@ -1246,8 +1251,17 @@
           GL.draw(GL.SPR.GLOW, hz.trail[ti], hz.trail[ti + 1], sz * 1.6, sz * 1.6, 0, col[0], col[1], col[2], 0.5);
           GL.draw(GL.SPR.CORE, hz.trail[ti], hz.trail[ti + 1], sz * 0.7, sz * 0.7, 0, col[0], col[1], col[2], 0.8);
         }
-        // head
-        GL.draw(GL.SPR.CORE, hz.x, hz.y, segR2, segR2, 0, 1, 1, 0.9, 0.9);
+        // head — authored Sky Serpent head (§9, nose-up → rotate to travel); the
+        // trailing coil above stays procedural. Procedural core on miss.
+        var shc = authCell('34-5-sky-serpent-head');
+        if (shc >= 0) {
+          var tln = hz.trail.length;
+          var shang = tln >= 4 ? Math.atan2(hz.y - hz.trail[tln - 3], hz.x - hz.trail[tln - 4]) + Math.PI / 2 : 0;
+          GL.draw(GL.SPR.GLOW, hz.x, hz.y, segR2 * 1.7, segR2 * 1.7, 0, 0.35, 1, 0.75, 0.5);
+          GL.draw(shc, hz.x, hz.y, segR2 * 2.1, segR2 * 2.1, shang, 1, 1, 1, 1);
+        } else {
+          GL.draw(GL.SPR.CORE, hz.x, hz.y, segR2, segR2, 0, 1, 1, 0.9, 0.9);
+        }
       }
       else if (hz.type === 'zap') {
         var za = Math.min(1, hz.timer);
@@ -1445,11 +1459,13 @@
   }
 
   function drawRavens() {
+    var rc = authCell('34-1-huginn-muninn');   // §9 raven sprite (head-up → rotate on dive)
     for (var i = 0; i < G.ravens.length; i++) {
       var r = G.ravens[i];
       var rot = r.state === 1 ? Math.atan2(r.ty - r.y, r.tx - r.x) + Math.PI / 2 : 0;  // dive aims at prey, else nose-up
       GL.draw(GL.SPR.GLOW, r.x, r.y, 46, 46, 0, 0.16, 0.17, 0.22, 0.5);                // near-black bird body (§2 Odin)
-      GL.draw(GL.SPR.SHIP_POP, r.x, r.y, 34, 34, rot, 0.2, 0.21, 0.28, 0.95);
+      if (rc >= 0) GL.draw(rc, r.x, r.y, 46, 46, rot, 1, 1, 1, 1);
+      else GL.draw(GL.SPR.SHIP_POP, r.x, r.y, 34, 34, rot, 0.2, 0.21, 0.28, 0.95);
       drawOwnedGem(r.x, r.y, 1);
     }
   }
@@ -1476,7 +1492,9 @@
     if (!G.gungnir.active) return;
     var g = G.gungnir, ang = g.ang + Math.PI / 2;
     GL.draw(GL.SPR.GLOW, g.x, g.y, 60, 170, ang, 1, 0.9, 0.5, 0.6);
-    GL.draw(GL.SPR.NEEDLE, g.x, g.y, 42, 190, ang, 1, 0.95, 0.6, 1);
+    var gc = authCell('33-2-gungnir');   // §9 Gungnir spear sprite (nose-up → rotate to travel)
+    if (gc >= 0) GL.draw(gc, g.x, g.y, 150, 220, ang, 1, 1, 1, 1);
+    else GL.draw(GL.SPR.NEEDLE, g.x, g.y, 42, 190, ang, 1, 0.95, 0.6, 1);
     GL.draw(GL.SPR.CORE, g.x, g.y, 26, 26, 0, 1, 1, 0.9, 0.9);
   }
   function markEnemy(e) { e.marked = true; e.markT = G.mods.odinMark ? 10 : 6; }
@@ -1743,15 +1761,30 @@
   // §5 owned-entity draw: roiling dark puffs + gold under-flicker, cyan heart in the core.
   function drawJudgement() {
     var t = G.time, life = Math.min(1, G.judge.timer);
+    var cc = authCell('34-3-thunder-court-storm-cloud');   // §9 storm-cloud sprite
     for (var i = 0; i < G.jclouds.length; i++) {
       var c = G.jclouds[i], flick = 0.5 + 0.5 * Math.sin(t * 3 + c.seed);
       GL.draw(GL.SPR.GLOW, c.x, c.y + 16, 140, 74, 0, 0.5 * flick, 0.36 * flick, 0.12, 0.5 * life);   // gold under-flicker
-      for (var p = 0; p < 4; p++) {
-        var pa = t * 0.6 + c.seed + p * 1.6, px = c.x + Math.cos(pa) * 36, py = c.y + Math.sin(pa) * 16;
-        GL.draw(GL.SPR.GLOW, px, py, 82, 62, 0, 0.10, 0.09, 0.14, 0.7 * life);                       // dark roiling puff
-        GL.draw(GL.SPR.CORE, px, py, 32, 24, 0, 0.06, 0.05, 0.09, 0.55 * life);
+      if (cc >= 0) {
+        GL.draw(cc, c.x, c.y, 180, 180, 0, 1, 1, 1, life);                                            // authored cumulus slab
+      } else {
+        for (var p = 0; p < 4; p++) {
+          var pa = t * 0.6 + c.seed + p * 1.6, px = c.x + Math.cos(pa) * 36, py = c.y + Math.sin(pa) * 16;
+          GL.draw(GL.SPR.GLOW, px, py, 82, 62, 0, 0.10, 0.09, 0.14, 0.7 * life);                      // dark roiling puff
+          GL.draw(GL.SPR.CORE, px, py, 32, 24, 0, 0.06, 0.05, 0.09, 0.55 * life);
+        }
       }
       drawOwnedGem(c.x, c.y, life);                                                                    // §5 cyan heart glint
+    }
+    // MIRROR REFLECTION (jadeMirror): the zhaoyaojing hangs between the two clouds,
+    // the bank point the chain-bolts ricochet off. §9 disc sprite; gem stays on top.
+    if (G.mods.jadeMirror && G.jclouds.length >= 2) {
+      var mx = (G.jclouds[0].x + G.jclouds[1].x) / 2, my = (G.jclouds[0].y + G.jclouds[1].y) / 2 + 46;
+      var mc = authCell('34-4-zhaoyaojing');
+      GL.draw(GL.SPR.GLOW, mx, my, 96, 96, 0, 1, 0.9, 0.5, 0.4 * life);
+      if (mc >= 0) GL.draw(mc, mx, my, 84, 84, 0, 1, 1, 1, life);
+      else { GL.draw(GL.SPR.RING, mx, my, 70, 70, t, 1, 0.85, 0.45, 0.9 * life); GL.draw(GL.SPR.CORE, mx, my, 30, 30, 0, 0.7, 0.9, 1, 0.7 * life); }
+      drawOwnedGem(mx, my, life);
     }
   }
 
@@ -1864,11 +1897,13 @@
     }
   }
   function drawWraiths() {
+    var wc = authCell('34-2-phobos-deimos');   // §9 dread-wraith sprite (head-up → rotate on dive)
     for (var i = 0; i < G.wraiths.length; i++) {
       var w = G.wraiths[i], a = Math.min(1, w.timer * 2);
       var rot = (w.state === 1 && w.target) ? Math.atan2(w.target.y - w.y, w.target.x - w.x) + Math.PI / 2 : 0;  // dive aims, else nose-up
       GL.draw(GL.SPR.GLOW, w.x, w.y, 150, 150, 0, 0.55, 0.02, 0.06, 0.55 * a);   // dread-red aura (§5 Ares body)
-      GL.draw(GL.SPR.SHIP_POP, w.x, w.y, 44, 44, rot, 0.7, 0.05, 0.1, a);        // dread-red body
+      if (wc >= 0) GL.draw(wc, w.x, w.y, 60, 60, rot, 1, 1, 1, a);
+      else GL.draw(GL.SPR.SHIP_POP, w.x, w.y, 44, 44, rot, 0.7, 0.05, 0.1, a);   // dread-red body
       drawOwnedGem(w.x, w.y, a);                                                 // §5 cyan heart (was a red core = read as enemy)
     }
   }
@@ -1963,10 +1998,12 @@
     }
   }
   function drawHammers() {
+    var mc = authCell('33-1-mjolnir');   // §9 Mjölnir sprite (tumbling side profile)
     for (var i = 0; i < G.hammers.length; i++) {
       var h = G.hammers[i], sz = h.big ? 130 : 78;
       GL.draw(GL.SPR.GLOW, h.x, h.y, sz * 1.5, sz * 1.5, 0, 0.5, 0.6, 0.75, 0.5);
-      GL.draw(GL.SPR.SHIP_MID, h.x, h.y, sz, sz, h.spin, 0.6, 0.66, 0.8, 1);
+      if (mc >= 0) GL.draw(mc, h.x, h.y, sz * 1.15, sz * 1.15, h.spin, 1, 1, 1, 1);
+      else GL.draw(GL.SPR.SHIP_MID, h.x, h.y, sz, sz, h.spin, 0.6, 0.66, 0.8, 1);
       GL.draw(GL.SPR.CORE, h.x, h.y, sz * 0.4, sz * 0.4, 0, 0.95, 0.35, 0.3, 0.7);
     }
   }
@@ -2238,11 +2275,13 @@
       }
       GL.draw(GL.SPR.STREAK, u.x, u.y, 60, 120, 0, 0.3, 1, 0.6, 0.9);   // dragon head
     } else if (u.god === 'quetz') {   // Sky Serpent coiled around the player
+      var uhc = authCell('34-5-sky-serpent-head');   // §9 head rides the lead coil segment
       for (var qk = 0; qk < 5; qk++) {
         var qa = u.ang + qk * (TAU / 5), qx = p.x + Math.cos(qa) * 150, qy = p.y + Math.sin(qa) * 150;
         var qcol = Patterns.hue(t * 0.4 + qk * 0.2);
         GL.draw(GL.SPR.GLOW, qx, qy, 120, 120, 0, qcol[0], qcol[1], qcol[2], 0.5);
-        GL.draw(GL.SPR.CORE, qx, qy, 44, 44, 0, qcol[0], qcol[1], qcol[2], 0.8);
+        if (qk === 0 && uhc >= 0) GL.draw(uhc, qx, qy, 130, 130, qa + Math.PI / 2, 1, 1, 1, 1);   // head leads the coil, tangent to the circle
+        else GL.draw(GL.SPR.CORE, qx, qy, 44, 44, 0, qcol[0], qcol[1], qcol[2], 0.8);
       }
     } else if (u.god === 'adoration') {   // worn heart-aura
       var ap = 0.5 + 0.5 * Math.sin(t * 4);
@@ -4623,7 +4662,29 @@
     hazTypeCount: function (type) { var n = 0; for (var i = 0; i < hazards.length; i++) if (hazards[i].active && hazards[i].type === type) n++; return n; },
     hazPos: function (type) { for (var i = 0; i < hazards.length; i++) if (hazards[i].active && hazards[i].type === type) return { x: hazards[i].x, y: hazards[i].y, r: hazards[i].r, halfW: hazards[i].halfW, timer: hazards[i].timer }; return null; },
     // per-foe ultimate state (verify only): great-hunt tag, adoration dwell, mire slow.
-    enemyUlt: function (i) { var e = Engine.enemies.items[i]; if (!e || !e.active) return null; return { huntTag: !!e.huntTag, adoreT: e.adoreT || 0, mireT: e.mireT || 0, stunT: e.stunT || 0, shakenT: e.shakenT || 0, weakStacks: e.weakStacks || 0, charmed: !!e.charmed, hp: e.hp, maxhp: e.maxhp, runes: e.runes || 0 }; }
+    enemyUlt: function (i) { var e = Engine.enemies.items[i]; if (!e || !e.active) return null; return { huntTag: !!e.huntTag, adoreT: e.adoreT || 0, mireT: e.mireT || 0, stunT: e.stunT || 0, shakenT: e.shakenT || 0, weakStacks: e.weakStacks || 0, charmed: !!e.charmed, hp: e.hp, maxhp: e.maxhp, runes: e.runes || 0 }; },
+    // ---- authored-art wiring verify surface (zero cost unless called) ----
+    // whether a named authored sprite (art/PROMPTS.md §8-9) has loaded into its
+    // atlas cell, and the running per-name draw counter incremented every time a
+    // draw site actually took the authored-sprite path (vs the procedural fallback).
+    authoredReady: function (name) { return GL.authoredSpr(name) >= 0; },
+    spriteDrawCount: function (name) { return spriteUse[name] || 0; },
+    spriteStats: function () { var o = {}; for (var k in spriteUse) o[k] = spriteUse[k]; return o; },
+    resetSpriteStats: function () { spriteUse = {}; },
+    // set an enemy's archetype (and boss name) so the per-archetype sprite path can
+    // be exercised; s0=0 keeps a mimic in its authored gold-loot disguise.
+    setArch: function (i, arch, name) { var e = Engine.enemies.items[i]; if (e && e.active) { e.arch = arch; if (name) e.name = name; if (arch === 'mimic') e.s0 = 0; } },
+    // drop an inert signature player shot of `kind` for a render (labrys 14, akontia
+    // 11, xiphos 12, doru 13, edict 7, loosed arrow 4) — faction 1 so it just draws.
+    spawnSigShot: function (kind, x, y) {
+      var s = allocShot(); if (!s) return -1;
+      s.x = x; s.y = y; s.vx = 0; s.vy = -1; s.radius = 16; s.scale = 42; s.damage = 0; s.age = 0.6; s.life = 30;
+      s.r = 1; s.g = 0.6; s.b = 0.35; s.pierce = 0; s.homing = false; s.turn = 0; s.kind = kind; s.faction = 1; s.big = true;
+      if (kind === 4) s.loosed = true;
+      return s._i;
+    },
+    // park a Mjölnir at (x,y) so drawHammers renders the §9 hammer sprite.
+    spawnHammer: function (x, y) { G.hammers.push({ x: x, y: y, state: 'out', vy: -600, t: 0, dmg: 1, kb: 0, big: true, spin: 0.7, hoverT: 0, hit: [], target: null, targetSeq: 0 }); return G.hammers.length; }
   };
 
   function detectClear() {
@@ -5248,6 +5309,40 @@
       GL.draw(GL.SPR.GOLD, g.x, g.y, g.scale * 0.5, g.scale * 0.6, g.rot, 1, 1, 0.9, fade);
     });
   }
+  // ---- authored-sprite wiring (art/PROMPTS.md §8-9) -------------------------
+  // Per-name draw counter (verify surface via Game.test.spriteStats) and the
+  // one helper every wired draw site funnels through: returns the authored atlas
+  // cell (and counts the hit) when the PNG has loaded, else -1 so the caller
+  // keeps its procedural / generic-slot fallback intact.
+  var spriteUse = {};
+  function authCell(name) {
+    var c = GL.authoredSpr(name);
+    if (c >= 0) spriteUse[name] = (spriteUse[name] || 0) + 1;
+    return c;
+  }
+  // enemy archetype (e.arch) -> authored sprite name. Bosses are keyed by e.name
+  // in ENEMY_SPR_NAME. Retinue keys (assessor/tribute/courtier/unweighed) are
+  // wired ahead of their spawns and resolve silently once those arch keys exist.
+  var ENEMY_SPR_ARCH = {
+    gunship: '32-2-gunship', aegis: '32-3-aegis-shieldbearer', weaver2: '32-4-weaver',
+    mimic: '32-5-gilded-mimic', splitter: '32-6-splitter', acolyte: '32-7-chorus-acolyte',
+    carrier: '32-8-carrier-hulk', moth: '32-9-blink-moth', gardener: '32-10-bullet-gardener',
+    apostate: '32-13-the-apostate',
+    assessor: '32-15-assessor', tribute: '32-16-tribute-bearer',
+    courtier: '32-17-gilded-courtier', unweighed: '32-18-unweighed-heart'
+  };
+  var ENEMY_SPR_NAME = { 'TALOS': '32-11-talos', 'AMMIT': '32-14-ammit', 'MIDAS': '32-12-midas', 'THE APOSTATE': '32-13-the-apostate' };
+  // Resolve the atlas cell an enemy should draw with: boss-name match first, then
+  // archetype, then the generic slot (e.spr). The GILDED MIMIC only wears its
+  // authored gold-loot disguise while dormant (e.s0 === 0); once it reveals it
+  // falls back to e.spr so the hostile popcorn read survives.
+  function enemyDrawCell(e) {
+    if (e.arch === 'mimic' && e.s0 !== 0) return e.spr;
+    var name = ENEMY_SPR_NAME[e.name] || ENEMY_SPR_ARCH[e.arch];
+    if (name) { var c = authCell(name); if (c >= 0) return c; }
+    return e.spr;
+  }
+
   function drawEnemies() {
     Engine.enemies.forEach(function (e) {
       var f = e.hitFlash > 0 ? 1 : 0;
@@ -5255,8 +5350,19 @@
       if (e.charmed) { er = 0.7; eg = 0.95; eb = 1; }   // §4 CHARMED: body recolors player-cyan (faction law)
       var r = er + (1 - er) * f, g = eg + (1 - eg) * f, bl = eb + (1 - eb) * f;
       GL.draw(GL.SPR.GLOW, e.x, e.y, e.scale * 1.5, e.scale * 1.5, 0, er, eg, eb, e.boss ? 0.5 : 0.35);
+      var cell = enemyDrawCell(e);
+      if (cell !== e.spr) {
+        // authored sprite carries its own faction-correct colour: draw near-white
+        // so it shows true, punch toward white on hit-flash, flip cyan when charmed.
+        var tr = 1, tg = 1, tb = 1;
+        if (e.charmed) { tr = 0.7; tg = 0.95; tb = 1; }
+        else if (f) { tr = tg = tb = 1 + 0.7 * f; }
+        GL.draw(cell, e.x, e.y, e.scale, e.scale, e.rot, tr, tg, tb, 1);
+        if (e.boss) GL.draw(cell, e.x, e.y, e.scale * 0.6, e.scale * 0.6, e.rot, 1, 1, 1, 0.4 + 0.2 * Math.sin(G.time * 4));
+      } else {
       GL.draw(e.spr, e.x, e.y, e.scale, e.scale, e.rot, r, g, bl, 1);
       if (e.boss) GL.draw(e.spr, e.x, e.y, e.scale * 0.6, e.scale * 0.6, e.rot, 1, 1, 1, 0.4 + 0.2 * Math.sin(G.time * 4));
+      }
       // TALOS THE NAIL — the glowing ankle weak point (the only thing that can be
       // hurt in the final phase): a green-gold ichor node, pulsing so it reads.
       if (e.nailActive) {
@@ -5480,6 +5586,15 @@
         GL.draw(GL.SPR.CORE, s.x, s.y, s.scale * 0.4, s.scale * 0.5, 0, 1, 1, 1, 0.9);
         return;
       }
+      // ARTEMIS THE LOOSED ARROW (kind 4 special) — great moon-silver arrow (§9).
+      if (s.kind === 4 && s.loosed) {
+        var lc = authCell('33-8-loosed-arrow');
+        if (lc >= 0) {
+          GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 1.0, s.scale * 3.0, ang, 0.7, 0.85, 1.0, 0.5);
+          GL.draw(lc, s.x, s.y, s.scale * 2.4, s.scale * 2.4, ang, 1, 1, 1, 1);
+          return;
+        }
+      }
       if (s.crescent) {
         // broad crescent blade — wide across its travel; brightens as it cleaves
         var cw = s.scale, perp = ang + Math.PI / 2;
@@ -5507,6 +5622,16 @@
   // broad-headed doru, and a mirrored twin-head labrys (unmistakable vs Guan Yu).
   function drawArmoryShot(s, ang) {
     var sc = s.scale, r = s.r, g = s.g, b = s.b, sp = s.age * 14;
+    // authored Ares armory sprites (§9): akontia/xiphos/doru fly nose-first; the
+    // labrys spins (radially symmetric). Soft additive glow first to seat it in
+    // the bloom field, then the sprite in its own colours; procedural on miss.
+    var aname = s.kind === 11 ? '33-4-akontia' : s.kind === 12 ? '33-5-xiphos' : s.kind === 13 ? '33-6-doru-bundle' : '33-3-labrys';
+    var ac = authCell(aname);
+    if (ac >= 0) {
+      if (s.kind === 14) { GL.draw(GL.SPR.GLOW, s.x, s.y, sc * 1.5, sc * 1.5, sp, r, g, b, 0.45); GL.draw(ac, s.x, s.y, sc * 1.7, sc * 1.7, sp, 1, 1, 1, 1); }
+      else { GL.draw(GL.SPR.GLOW, s.x, s.y, sc * 0.8, sc * 2.0, ang, r, g, b, 0.4); GL.draw(ac, s.x, s.y, sc * 1.9, sc * 1.9, ang, 1, 1, 1, 1); }
+      return;
+    }
     if (s.kind === 11) {          // akontia javelin — slim shaft + small bronze leaf point
       GL.draw(GL.SPR.STREAK, s.x, s.y, sc * 0.18, sc * 1.5, ang, r, g, b, 0.9);          // shaft
       GL.draw(GL.SPR.SHARD, s.x + Math.sin(ang) * 0 - Math.sin(ang) * sc * 0.5, s.y - Math.cos(ang) * sc * 0.5, sc * 0.34, sc * 0.5, ang, 0.9, 0.65, 0.3, 0.95);   // leaf point
@@ -5536,6 +5661,16 @@
   var EV = [0.79, 0.6, 1.0], EG = [1, 0.82, 0.4];   // violet body, gold border
   function drawEdict(s, ang) {
     var sc = s.scale, style = GL.edictStyle;
+    // authored §9 edict sprite (33.7 was genned for the live style-A scroll-talisman);
+    // styles B/C keep their procedural treatment. Sprite is nose-up → rotate to travel.
+    if (style === 'A') {
+      var ec = authCell('33-7-imperial-edict');
+      if (ec >= 0) {
+        GL.draw(GL.SPR.GLOW, s.x, s.y, sc * 0.7, sc * 1.1, ang, EG[0], EG[1], EG[2], 0.4);
+        GL.draw(ec, s.x, s.y, sc * 1.25, sc * 1.25, ang, 1, 1, 1, 1);
+        return;
+      }
+    }
     var ux = Math.sin(ang), uy = -Math.cos(ang);    // unit vector toward travel (tablet "up")
     var rx = Math.cos(ang), ry = Math.sin(ang);      // perpendicular (tablet "right")
     if (style === 'B') {                             // hanging vertical banner + ribbon trail
@@ -5824,12 +5959,25 @@
       hud.fillText('✦ COMMUNION · ' + G.communion, W - 34, y + 8);
     }
   }
+  var charmNameGod = null;   // '◈ <NAME>' loadout line -> god key, built once from Run.CHARMS
+  function charmGodByLine(line) {
+    if (!charmNameGod) { charmNameGod = {}; if (Run.CHARMS) for (var k in Run.CHARMS) charmNameGod['◈ ' + Run.CHARMS[k].name] = Run.CHARMS[k].god; }
+    return charmNameGod[line] || null;
+  }
   function drawLoadout() {
     var lines = Game.upgradeSummary();
     hud.textAlign = 'right';
     var y = 244;
     hud.font = '500 22px Consolas, monospace';
-    for (var i = 0; i < lines.length; i++) { hud.fillStyle = 'rgba(150,220,235,0.7)'; hud.fillText(lines[i], W - 34, y + i * 26); }
+    for (var i = 0; i < lines.length; i++) {
+      hud.fillStyle = 'rgba(150,220,235,0.7)'; hud.fillText(lines[i], W - 34, y + i * 26);
+      // charm lines get their §7 relic icon stamped to the left of the text
+      if (lines[i].charAt(0) === '◈' && Run.getArt && Run.godRelic) {
+        var slug = Run.godRelic(charmGodByLine(lines[i]));
+        var img = slug ? Run.getArt(slug) : null;
+        if (img) { var tw = hud.measureText(lines[i]).width; hud.drawImage(img, W - 34 - tw - 30, y + i * 26 - 19, 24, 24); }
+      }
+    }
     var dy = y + lines.length * 26 + 6;
     if (Run.DUOS) {
       hud.font = '700 20px Consolas, monospace';

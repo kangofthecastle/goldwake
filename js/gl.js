@@ -714,8 +714,10 @@
     'enemy-boss': { spr: GL.SPR.SHIP_BOSS,   rot: Math.PI }
   };
 
-  function applyOverride(slot, img) {
-    var cfg = SPRITE_SLOTS[slot];
+  // Composite one loaded PNG into atlas cell `cell`, rotated by `rot` at paste
+  // time (enemy art faces DOWN and is rotated pi to land nose-up in the cell,
+  // matching the procedural nose-up convention; player-side art is pasted as-is).
+  function compositeSprite(cell, rot, img) {
     // Compose on a black-cleared offscreen cell (NOT the shared atlas canvas,
     // so a tainted file:// image can never taint the procedural atlas source).
     var off = document.createElement('canvas');
@@ -726,17 +728,22 @@
     var dw = img.width * sc, dh = img.height * sc;
     oc.save();
     oc.translate(CELL / 2, CELL / 2);
-    if (cfg.rot) oc.rotate(cfg.rot);
+    if (rot) oc.rotate(rot);
     oc.drawImage(img, -dw / 2, -dh / 2, dw, dh);
     oc.restore();
     // getImageData throws SecurityError here if the image was cross-origin
     // (Chrome file:// probe) — caller catches and keeps the procedural cell.
     var data = oc.getImageData(0, 0, CELL, CELL);
-    var rc = cellRect(cfg.spr);
+    var rc = cellRect(cell);
     gl.bindTexture(gl.TEXTURE_2D, atlasTex);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, rc.x, rc.y, CELL, CELL, gl.RGBA, gl.UNSIGNED_BYTE, premultiplied(data));
+  }
+
+  function applyOverride(slot, img) {
+    var cfg = SPRITE_SLOTS[slot];
+    compositeSprite(cfg.spr, cfg.rot, img);
     console.info('HUBRIS: authored sprite loaded for slot "' + slot + '"');
   }
 
@@ -763,6 +770,70 @@
       })(slot);
     }
   }
+
+  // ---- authored per-archetype / projectile / owned-entity sprites -----------
+  // Beyond the 5 generic ship slots, the 2026-07-18 kit-art rework ships named
+  // sprites for every enemy archetype, signature projectile and owned entity
+  // (art/PROMPTS.md §8-9). Each claims a fresh atlas cell (cells 19+, the
+  // procedural set ends at SPR.STAR=18) composited from the same registry/probe
+  // channels. game.js asks GL.authoredSpr(name) for the cell index (-1 until the
+  // PNG lands) and falls back to a generic slot, then procedural, when absent.
+  // ORIENTATION follows the slot convention: enemy PNGs (name '32-*') face DOWN,
+  // rotated pi at paste so they store nose-up and face down again on screen;
+  // projectiles + owned entities ('33-*'/'34-*') are authored nose-UP (rot 0)
+  // and the draw site rotates them to travel/heading, exactly like the
+  // procedural silhouettes they replace.
+  var AUTH_BASE = GL.SPR.STAR + 1;   // 19 — first free atlas cell after the procedural set
+  var authored = {};                 // name -> { cell, rot, ready }
+  var AUTH_NAMES = [
+    '32-2-gunship', '32-3-aegis-shieldbearer', '32-4-weaver', '32-5-gilded-mimic',
+    '32-6-splitter', '32-7-chorus-acolyte', '32-8-carrier-hulk', '32-9-blink-moth',
+    '32-10-bullet-gardener', '32-11-talos', '32-12-midas', '32-13-the-apostate',
+    '32-14-ammit', '32-15-assessor', '32-16-tribute-bearer', '32-17-gilded-courtier',
+    '32-18-unweighed-heart',
+    '33-1-mjolnir', '33-2-gungnir', '33-3-labrys', '33-4-akontia', '33-5-xiphos',
+    '33-6-doru-bundle', '33-7-imperial-edict', '33-8-loosed-arrow', '33-9-ruyi-jingu-bang',
+    '34-1-huginn-muninn', '34-2-phobos-deimos', '34-3-thunder-court-storm-cloud',
+    '34-4-zhaoyaojing', '34-5-sky-serpent-head'
+  ];
+  (function initAuthored() {
+    for (var i = 0; i < AUTH_NAMES.length; i++) {
+      var name = AUTH_NAMES[i];
+      authored[name] = { cell: AUTH_BASE + i, rot: name.charAt(0) === '3' && name.charAt(1) === '2' ? Math.PI : 0, ready: false };
+    }
+  })();
+
+  function loadAuthored() {
+    // Give every authored cell its atlas UV region (buildAtlas only records the
+    // procedural cells 0..18). Same 1px inset formula so GL.draw can index them.
+    for (var nm in authored) {
+      var rc = cellRect(authored[nm].cell), pad = 1.0;
+      regions[authored[nm].cell] = [(rc.x + pad) / ATLAS_SIZE, (rc.y + pad) / ATLAS_SIZE, (CELL - pad * 2) / ATLAS_SIZE, (CELL - pad * 2) / ATLAS_SIZE];
+    }
+    var registry = (typeof window !== 'undefined' && window.SPRITES) || {};
+    var isChromium = /Chrome\/|Chromium\/|HeadlessChrome/.test(navigator.userAgent);
+    var canProbe = !(location.protocol === 'file:' && isChromium);
+    for (var name in authored) {
+      (function (name) {
+        var a = authored[name];
+        var src = registry[name] ? registry[name]
+          : (canProbe ? 'art/sprites/' + name + '.png' : null);
+        if (!src) return;
+        var img = new Image();
+        img.onload = function () {
+          try { compositeSprite(a.cell, a.rot, img); a.ready = true; }
+          catch (e) { /* tainted / bad image: keep the generic/procedural fallback */ }
+        };
+        img.onerror = function () { /* no art for this sprite: fall back */ };
+        img.src = src;
+      })(name);
+    }
+  }
+
+  // Atlas cell index for a named authored sprite, or -1 until (and unless) it
+  // has loaded. Callers draw the returned cell with GL.draw and white tint to
+  // show the sprite's own colours; -1 means fall back to a generic slot.
+  GL.authoredSpr = function (name) { var a = authored[name]; return (a && a.ready) ? a.cell : -1; };
 
   // ---- drop-in painted backdrop layers --------------------------------------
   // Same doctrine as the sprite overrides: procedural parallax ships now (drawn
@@ -1167,6 +1238,7 @@
 
     buildAtlas();
     loadOverrides();   // async; the game renders the procedural cells until (and unless) art lands
+    loadAuthored();    // async; per-archetype / projectile / owned-entity sprites (cells 19+)
     buildBatcher();
     buildBackdropGL();
     loadBackdrops();   // async; painted parallax layers drop in, else procedural
