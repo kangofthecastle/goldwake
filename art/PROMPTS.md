@@ -997,9 +997,11 @@ color" negative for those rows.
 3+ per volley but are listed below because their silhouettes exceed what the
 procedural atlas draws well — gen them small-readable), beams, the tidal wall,
 the Bifröst band and dawn-seam, the Skyfall column, splinter shards, coil
-rings, rune glyphs, status glyphs, all telegraphs and FX. **Engine retints,
-not gens:** Wukong's hair-clones and Loki's Shadow-Twin are tinted copies of
-the player ship (#31).
+rings, telegraphs, and pure-motion FX. **Carve-out (owner 2026-07-19):**
+symbolic identity-marks and the burn flame are generated after all — see
+**Section 10** (rune sheet, status-mark sheet, flame flipbook). **Engine
+retints, not gens:** Wukong's hair-clones and Loki's Shadow-Twin are tinted
+copies of the player ship (#31).
 
 ### 33. Signature projectile template
 
@@ -1100,3 +1102,75 @@ Substitutions:
 
 (TALOS's orbiting RIVETS and BRONZE SPLINTERS stay procedural — too small to
 carry authored art.)
+
+---
+
+## Section 10 — Glyph & flame sheets (owner 2026-07-19: "did we image gen some of the status stuff eg runes… or being on fire")
+
+Symbolic identity-marks earn authored art even at 10–20px — they are SYMBOLS
+whose whole job is to be read and counted, unlike motion-FX which stay
+procedural. All three prompts are **sheet gens** (one image, evenly-spaced
+grid, generous margins, fully separated cells, transparent ground) sliced into
+individual files after. Marks must be **near-solid flat shapes with no
+gradients and no fine interior detail** — they render tiny, over enemies,
+under bloom; the engine tints and glows them, so deliver them as crisp
+light-on-transparent stamps. Procedural fallback stays live until wired.
+
+### 35. Rune sheet — Odin's NINE NIGHTS
+
+```
+Sprite sheet for a vertical bullet-hell, 3x3 grid on a fully TRANSPARENT
+ground: nine distinct carved Norse runes in the Elder Futhark style — angular,
+stave-based, no curves, each built from 2-4 bold straight strokes as if
+chisel-carved. Each rune is a single near-solid flat glowing mark, pale gold,
+no gradients, no outline, no decoration, no background; every rune clearly
+different from the others at a glance. These render at ~12 pixels tall on
+enemy hulls in-game: maximum boldness, zero fine detail. Even spacing, wide
+margins, nothing touching cell edges. Negative: no photorealism, no 3D, no
+texture, no knotwork ornament, no text or lettering other than the rune
+shapes themselves, no watermark, no background of any kind.
+```
+
+Deliver sliced as `35-1-rune.png` … `35-9-rune.png` (order = carve order; the
+9th is THE NINTH RUNE and may be ~15% bolder than the rest).
+
+### 36. Status-mark sheet — identity glyphs
+
+```
+Sprite sheet for a vertical bullet-hell, single row of SIX cells on a fully
+TRANSPARENT ground, each cell one flat symbolic mark, near-solid, no
+gradients, no outlines, no backgrounds, built to read at ~14 pixels: (1) a
+tiny balance scales tipping LEFT, gold; (2) the same scales LEVEL, gold; (3)
+the same scales tipping RIGHT harder, gold — three tip-states of one scales
+glyph, identical construction, only the beam angle changes; (4) a triskele of
+three tiny curved daggers radiating from a center point, green; (5) one
+crisp right-angle corner bracket like a picture-frame corner, amber; (6) a
+small square imperial seal-stamp mark with one notch, violet. Even spacing,
+wide margins, nothing touching cell edges. Negative: no photorealism, no 3D,
+no texture, no fine interior detail, no text, no watermark, no background.
+```
+
+Deliver sliced as `36-1-scales-a.png`, `36-2-scales-b.png`,
+`36-3-scales-c.png` (Anubis THE WEIGHING tip-states), `36-4-triskele.png`
+(Loki MISCHIEF), `36-5-bracket.png` (MARKED corner, engine places 4 rotated
+copies), `36-6-seal.png` (Jade seal brand).
+
+### 37. Flame flipbook — BURN / on-fire
+
+```
+Sprite sheet for a vertical bullet-hell, single row of SIX cells on a fully
+TRANSPARENT ground: one small flame tongue in six consecutive animation
+frames — a looping cycle of the same flame licking upward, frame to frame the
+tip sways and a spark detaches and dies. Bold simple flame silhouette,
+near-solid: white-yellow core filling most of the body, brief red-orange tip,
+no gradients beyond that two-tone read, no smoke, no glow halo (the engine
+adds bloom), no background. Each flame ~5x wider margins than its body;
+frames identical in size and base position so they cycle cleanly at 12
+frames per second. Built to read at ~16 pixels tall. Negative: no
+photorealism, no 3D, no texture, no embers cloud, no text, no watermark, no
+background.
+```
+
+Deliver sliced as `37-1-flame.png` … `37-6-flame.png`; the engine cycles
+~12Hz at the UNDERFOOT status zone (§4 BOONS.md), and may stack 2-3 offset
+copies for heavily burning or boss-scale foes.
