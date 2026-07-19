@@ -1220,11 +1220,16 @@
       }
       else if (hz.type === 'staff') {
         var pa = Math.min(1, hz.timer * 3);
-        GL.draw(GL.SPR.GLOW, hz.x, H / 2, hz.halfW * 3.0, H, 0, 1, 0.55, 0.2, 0.4 * pa);
         var sc = authCell('33-9-ruyi-jingu-bang');   // §9 Ruyi Jingu Bang — the special's slam IS the staff
         if (sc >= 0) {
-          GL.draw(sc, hz.x, H / 2, hz.halfW * 2.0, H, 0, 1, 1, 1, pa);
+          // full staff visible, gold end-caps on screen at both edges; drawn twice so the
+          // dark shaft reads solid under additive blending
+          GL.draw(GL.SPR.GLOW, hz.x, H / 2, hz.halfW * 1.6, H, 0, 1, 0.8, 0.45, 0.35 * pa);
+          var sfr = H * 1.06;
+          GL.draw(sc, hz.x, H / 2, sfr, sfr, 0, 1, 1, 1, pa);
+          GL.draw(sc, hz.x, H / 2, sfr, sfr, 0, 1, 1, 1, 0.85 * pa);
         } else {
+          GL.draw(GL.SPR.GLOW, hz.x, H / 2, hz.halfW * 3.0, H, 0, 1, 0.55, 0.2, 0.4 * pa);
           GL.draw(GL.SPR.CORE, hz.x, H / 2, hz.halfW * 1.5, H, 0, 1, 0.8, 0.4, 0.8 * pa);
           GL.draw(GL.SPR.CORE, hz.x, H / 2, hz.halfW * 0.5, H, 0, 1, 1, 0.9, 0.9 * pa);
         }
@@ -1237,11 +1242,14 @@
       }
       else if (hz.type === 'ultpillar') {   // colossal gold staff-pillar (planted cover)
         var pa = Math.min(1, hz.timer);
-        GL.draw(GL.SPR.GLOW, hz.x, H / 2, hz.halfW * 3.0, H, 0, 1, 0.75, 0.3, 0.5 * pa);
         var rc = authCell('33-9-ruyi-jingu-bang');   // §9 Ruyi Jingu Bang — slammed down as a hard-edged pillar
         if (rc >= 0) {
-          GL.draw(rc, hz.x, H / 2, hz.halfW * 2.0, H, 0, 1, 1, 1, pa);
+          GL.draw(GL.SPR.GLOW, hz.x, H / 2, hz.halfW * 1.6, H, 0, 1, 0.8, 0.45, 0.4 * pa);
+          var rfr = H * 1.06;   // full staff, caps on screen, drawn twice for solidity
+          GL.draw(rc, hz.x, H / 2, rfr, rfr, 0, 1, 1, 1, pa);
+          GL.draw(rc, hz.x, H / 2, rfr, rfr, 0, 1, 1, 1, 0.85 * pa);
         } else {
+          GL.draw(GL.SPR.GLOW, hz.x, H / 2, hz.halfW * 3.0, H, 0, 1, 0.75, 0.3, 0.5 * pa);
           GL.draw(GL.SPR.CORE, hz.x, H / 2, hz.halfW * 1.6, H, 0, 1, 0.85, 0.45, 0.85 * pa);
           GL.draw(GL.SPR.CORE, hz.x, H / 2, hz.halfW * 0.5, H, 0, 1, 1, 0.9, pa);
         }
