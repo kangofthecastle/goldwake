@@ -125,6 +125,27 @@
   Run.GODS = GODS;
   var GOD_KEYS = ['zeus', 'poseidon', 'artemis', 'aphrodite', 'ares', 'heimdall', 'ra', 'anubis', 'loki', 'odin', 'wukong', 'quetz', 'thor', 'guanyu', 'jade'];
 
+  // §2.5 ULTIMATES — god-tied C-key burst transforms. [name, DESC ▸HOW] per the §7
+  // three-line contract (no ★-line: ultimates have no star levels first wave).
+  var ULTS = {
+    zeus:      ['OLYMPIAN STORM',        'Lightning smites every living foe at once. ▸ Instant screen-wide nuke; non-bosses are Stunned.'],
+    poseidon:  ['THE DELUGE',            'A calm-water zone floods where you stand. ▸ Enemy bullets entering it die; foes inside slow.'],
+    artemis:   ['THE GREAT HUNT',        'Time nearly stops; you keep flying. ▸ Foes your lane crosses take a precise arrow on resume.'],
+    aphrodite: ['ADORATION',             'A heart-aura clings to you 5s. ▸ Foes that dwell inside are charmed; bosses Weaken.'],
+    ares:      ['ARISTEIA',              'Pinned FRENZY and doubled volleys. ▸ Each kill extends it (cap 8s); no clear, no safety.'],
+    ra:        ['NOON OF THE DUAT',      'The solar barque rides the top, tracking you. ▸ A CORONA beam pours down your lane 3s.'],
+    anubis:    ['THE FINAL WEIGHING',    'Judge the whole field at once. ▸ Wounded foes are devoured, bosses bitten; the whole spared.'],
+    loki:      ['DOPPELGÄNGER',          'A perfect copy fights beside you 6s. ▸ Fires your attack; casts your special once.'],
+    odin:      ['ALLFATHER\'S EYE',      'Every bolt carves a rune, on any foe, 6s. ▸ Pure study; the damage comes after.'],
+    thor:      ['GIANT\'S END',          'Mjölnir grows colossal and orbits you 4s. ▸ Hurls foes to the wall; smashes bullets from its arc.'],
+    heimdall:  ['DAWNBREAK',             'The whole field becomes the bridge 4s. ▸ Every shot a spectrum lance; all foes Marked.'],
+    wukong:    ['THE WORLD-PILLAR',      'Plant the staff as standing cover. ▸ A Stun ring, then the only wall bullets cannot cross.'],
+    guanyu:    ['GREEN DRAGON ASCENDS',  'A blade-dragon trails your every move 3s. ▸ Drag it through the crowd for carving ticks.'],
+    jade:      ['MANDATE OF HEAVEN',     'Freeze, gild, and fire the gold back. ▸ The default burst\'s strict upgrade: bolts + 25% gold.'],
+    quetz:     ['THE FIFTH SUN RISES',   'The serpent coils around you 4s. ▸ Eats every bullet it touches into your gauge.']
+  };
+  Run.ULTS = ULTS;
+
   // passive god CHARMS — collected through a run, one per god, NOT gated on owning
   // that god: this is how gods you didn't pick still touch your run.
   var CHARMS = {
@@ -231,6 +252,9 @@
   // ---- boon template builders -----------------------------------------
   function tAttack(g, swap) { var G = GODS[g]; return { kind: 'transformA', god: g, slot: 'attack', swap: !!swap, name: G.name, epithet: G.epithet, desc: G.attack, css: G.css }; }
   function tSpecial(g, swap) { var G = GODS[g]; return { kind: 'transformS', god: g, slot: 'special', swap: !!swap, name: G.name, epithet: G.epithet, desc: G.special, css: G.css }; }
+  // §2.5 — ultimate card: epithet is the ULTIMATE'S name (the god name is the card name);
+  // id=god so the verify seam (Run._poolHas) can find it. No star levels, so no mag.
+  function tUltimate(g, swap) { var G = GODS[g], U = ULTS[g]; return { kind: 'ultimate', god: g, id: g, slot: 'ultimate', swap: !!swap, name: G.name, epithet: U[0], desc: U[1], css: G.css }; }
   function tMod(g, id, desc) { var G = GODS[g]; return { kind: 'mod', god: g, id: id, name: G.name, epithet: G.epithet, desc: desc, css: G.css }; }
   function tScale(id, name, desc) { return { kind: 'scale', id: id, name: name, epithet: 'battle upgrade', desc: desc, css: COL_CYAN }; }
   function tGeneric(id, name, desc) { return { kind: 'generic', id: id, name: name, epithet: 'battle upgrade', desc: desc, css: COL_CYAN }; }
@@ -269,6 +293,7 @@
     }
     if (b.kind === 'levelA' || b.kind === 'levelS') rar = tierOfMag(b.mag); // border reflects the new tier
     if (b.duo) rar = 'epic';
+    if (b.kind === 'ultimate') rar = 'epic';   // §2.5: ultimates are always epic (no star tiers)
     b.rarity = rar;
     if (shop) b.price = priceFor(b);
     return b;
@@ -347,6 +372,14 @@
     // transform LEVEL-UP (pom) cards — your own equipped god, up the ladder
     if (st.attackGod && st.attackR < 3.5) push(tLevel('attack', st.attackGod), 10);
     if (st.specialGod && st.specialR < 3.5) push(tLevel('special', st.specialGod), 10);
+    // §2.5 ULTIMATES — offered only while that god holds the ATTACK or SPECIAL slot
+    // (OFFER PATHING §7: the ultimate slot gates the same way). While the slot is
+    // empty, offer the equipped gods' ultimates; once filled, offer the OTHER equipped
+    // god's ultimate as a swap (picking it replaces the slot).
+    var eqGods = [];
+    if (st.attackGod) eqGods.push(st.attackGod);
+    if (st.specialGod && st.specialGod !== st.attackGod) eqGods.push(st.specialGod);
+    for (var ei = 0; ei < eqGods.length; ei++) { if (st.ultimateGod !== eqGods[ei]) push(tUltimate(eqGods[ei], !!st.ultimateGod), 4); }
     // DUO boons (gated on the exact attack+special pair, one-shot). Some duos
     // additionally require a god in a SPECIFIC slot (their hook keys off that
     // god's attack- or special-slot ability), declared via needSlot.
@@ -722,7 +755,7 @@
   function kindLabel(b) {
     var s = b.kind === 'transformA' ? 'ATTACK BOON' : b.kind === 'transformS' ? 'SPECIAL BOON'
       : b.kind === 'levelA' ? 'LEVEL UP · ATK' : b.kind === 'levelS' ? 'LEVEL UP · SPC'
-      : b.kind === 'duo' ? '✦ DUO ✦'
+      : b.kind === 'duo' ? '✦ DUO ✦' : b.kind === 'ultimate' ? '◆ ULTIMATE ◆'
       : b.kind === 'mod' ? 'GOD BOON' : b.kind === 'charm' ? 'CHARM' : 'UPGRADE';
     return b.swap ? 'SWAP · ' + s : s;
   }
@@ -841,6 +874,12 @@
       grd.addColorStop(0, '#ff77c8'); grd.addColorStop(0.33, '#9fd8ff'); grd.addColorStop(0.66, '#b6ff5a'); grd.addColorStop(1, '#ffd766');
       ctx.strokeStyle = grd; ctx.lineWidth = selected ? 8 : 6; ctx.shadowColor = COL_GOLD; ctx.shadowBlur = 36;
       roundRect(ctx, x, y, w, h, 18); ctx.stroke(); ctx.shadowBlur = 0;
+    } else if (b.kind === 'ultimate') {                  // §2.5: white-gold DOUBLE rim (rainbow stays duo-only)
+      ctx.shadowColor = COL_GOLD; ctx.shadowBlur = selected ? 34 : 22;
+      ctx.strokeStyle = COL_GOLD; ctx.lineWidth = selected ? 8 : 6;
+      roundRect(ctx, x, y, w, h, 18); ctx.stroke(); ctx.shadowBlur = 0;
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;    // inner white rim
+      roundRect(ctx, x + 6, y + 6, w - 12, h - 12, 14); ctx.stroke();
     } else {
       ctx.lineWidth = selected ? 7 : 3;
       ctx.strokeStyle = selected ? '#ffffff' : border;
@@ -938,6 +977,7 @@
     var extra = [];
     if (st.attackGod) extra.push('ATK ' + GODS[st.attackGod].name);
     if (st.specialGod) extra.push('SPC ' + GODS[st.specialGod].name);
+    if (st.ultimateGod) extra.push('ULT ' + (ULTS[st.ultimateGod] ? ULTS[st.ultimateGod][0] : GODS[st.ultimateGod].name));
     var all = extra.concat(lines);
     if (!all.length) return;
     var x = W - 300, y = H - 40 - all.length * 30;
