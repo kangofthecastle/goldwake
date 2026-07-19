@@ -536,6 +536,11 @@
   var BOLT_SEG_CAP = 640;    // hard per-frame drawn-segment cap (readability)
   var _bScrA = new Float32Array(BOLT_PTS * 2);   // midpoint-displacement scratch
   var _bScrB = new Float32Array(BOLT_PTS * 2);
+  var _mScr = new Float32Array(16);              // ATTACK mini-bolt path scratch (no per-frame alloc)
+  // Frame-bucketed value hash [0,1): stable within a re-jag bucket so an attack
+  // mini-bolt keeps ONE jagged shape for a few frames instead of shimmering every
+  // frame. Pure ES5, allocation-free (classic sin-fract hash).
+  function jhash(seed, i) { var x = Math.sin(seed * 12.9898 + i * 78.233) * 43758.5453; return x - Math.floor(x); }
   var bolts = [];
   (function initBolts() {
     for (var i = 0; i < BOLT_MAX; i++) {
@@ -600,11 +605,18 @@
     b.minX = mnx; b.maxX = mxx; b.minY = mny; b.maxY = mxy;
   }
   function applyBoltStyle(b, opts) {
-    var st = GL.lightningStyle, big = opts && opts.big;
-    if (st === 'B' || st === 'C') { b.levels = 5; b.rough = 0.34; b.coreW = 10; b.hazeW = 30; b.branches = 2; b.strikesLeft = 3; b.impact = 1.4; b.sheet = (st === 'C'); }
-    else { b.levels = 4; b.rough = 0.22; b.coreW = 7; b.hazeW = 22; b.branches = 0; b.strikesLeft = 2; b.impact = 1.0; b.sheet = false; }
-    if (big) { if (b.branches < 1) b.branches = 1; b.impact *= 1.3; b.coreW += 2; b.sheet = b.sheet || (st === 'C'); }
-    b.strikeDur = (0.10 + (big ? 0.03 : 0)) / (b.strikesLeft + 1);   // ~90-140ms total across strikes
+    var st = GL.lightningStyle, big = opts && opts.big, hop = opts && opts.hop, col = opts && opts.column;
+    // PRESENCE PASS: cores/hazes scaled for a 1080-wide field read at ~540 (half
+    // scale) — brightness lives in the thin core, not fat glow (danmaku law).
+    if (st === 'B' || st === 'C') { b.levels = 5; b.rough = 0.34; b.coreW = 13; b.hazeW = 34; b.branches = 2; b.strikesLeft = 3; b.impact = 1.4; b.sheet = (st === 'C'); }
+    else { b.levels = 4; b.rough = 0.22; b.coreW = 9; b.hazeW = 24; b.branches = 0; b.strikesLeft = 2; b.impact = 1.0; b.sheet = false; }
+    if (big) { if (b.branches < 1) b.branches = 1; b.impact *= 1.3; b.coreW += 3; b.sheet = b.sheet || (st === 'C'); }
+    // CHAIN HOP — each jump is a bold EVENT: ~2× core, wider haze, a harder impact pop.
+    if (hop) { b.coreW = b.coreW * 1.9 + 4; b.hazeW *= 1.5; b.impact *= 1.6; if (b.branches < 1) b.branches = 1; if (b.strikesLeft < 3) b.strikesLeft = 3; }
+    // SKYFALL column strand — tall, holds through the cast window with extra restrikes.
+    if (col) { b.coreW += 4; b.hazeW += 8; b.strikesLeft = 4; b.impact *= 1.4; if (b.branches < 2) b.branches = 2; }
+    // persistence ~3× the old ~0.10s: total visible life is the numerator (~0.30-0.40s across restrikes).
+    b.strikeDur = (0.30 + (big ? 0.09 : 0) + (hop ? 0.06 : 0) + (col ? 0.10 : 0)) / (b.strikesLeft + 1);
   }
   // Spawn a single-leg bolt A->B tinted `col`. opts: {big, delay}. Pooled.
   function boltSpawn(ax, ay, bx, by, col, opts) {
@@ -632,6 +644,9 @@
   // Legacy entry point — every existing caller (chain lightning, SKYFALL forks,
   // duo arcs, HAVOC, boss telegraphs, hazards) routes through the bolt system.
   function arcFx(x1, y1, x2, y2, col) { boltSpawn(x1, y1, x2, y2, col, 0); }
+  // A CHAIN HOP is an event, not a hairline: bold core, wider haze, big impact pop,
+  // ~0.36s life across restrikes. Used by chainLightning's jumps + collapses.
+  function arcHop(x1, y1, x2, y2, col) { return boltSpawn(x1, y1, x2, y2, col, { hop: true }); }
   function updateBolts(dt) {
     for (var i = 0; i < BOLT_MAX; i++) {
       var b = bolts[i]; if (!b.active) continue;
@@ -667,8 +682,8 @@
       var tf = taper ? (1 - i * inv * 0.8) : 1;                       // width/alpha falloff toward a branch tip
       var cwi = cw * tf, hwi = hw * (0.55 + 0.45 * tf), af = env * tf;
       var ov = cwi * 0.4 + 2;                                         // small overlap: fills the kink notch without doubling into beads
-      GL.draw(GL.SPR.BOLT, mx, my, hwi, len + ov, rot, r, g, bb, 0.12 * af);      // soft coloured haze underlay
-      GL.draw(GL.SPR.BOLT, mx, my, cwi, len + ov, rot, wr, wg, wb, 0.95 * af);    // thin white-hot core
+      GL.draw(GL.SPR.BOLT, mx, my, hwi, len + ov, rot, r, g, bb, 0.15 * af);      // soft coloured haze underlay
+      GL.draw(GL.SPR.BOLT, mx, my, cwi, len + ov, rot, wr, wg, wb, 0.98 * af);    // thin white-hot core
       if (havePrev) {                                                 // subtle notch-fill glint ONLY at sharp kinks (never a bead on a soft run)
         var bend = 1 - (pux * ux + puy * uy);                        // 0 = straight .. 2 = full reversal
         if (bend > 0.12) {
@@ -1204,7 +1219,19 @@
     G.skyfall.x = colX; G.skyfall.t = 0.22;
     G.flashAll = Math.max(G.flashAll, 0.2); addShake(6);
     if (SFX.zeusCrack) SFX.zeusCrack();   // Pass4: SKYFALL column crack
-    for (var i = 0; i < 6; i++) flash(colX + (Math.random() - 0.5) * 36, 100 + i * 300, [0.7, 0.85, 1], 90, 0.18);
+    skyfallColumn(colX, primary);
+  }
+  // ZEUS SKYFALL strike — a real multi-strand bolt from the top edge down to the
+  // strike point (2-3 overlaid ribbon strands with slight path divergence), holding
+  // via each strand's restrikes across the ~0.35s cast window, a white-hot impact core
+  // and a ground-flash at the base. Replaces the old stacked-oval column entirely.
+  function skyfallColumn(colX, primary) {
+    var baseY = primary ? Math.max(primary.y, H * 0.5) : H * 0.72;
+    boltSpawn(colX - 16, -24, colX + 6, baseY, [0.66, 0.88, 1.0], { big: true, column: true });
+    boltSpawn(colX, -24, colX, baseY, [0.82, 0.94, 1.0], { big: true, column: true });
+    boltSpawn(colX + 18, -24, colX - 8, baseY, [0.66, 0.88, 1.0], { big: true, column: true });
+    flash(colX, baseY, [0.8, 0.9, 1.0], 150, 0.22);            // ground-flash at the base
+    ringShock(colX, baseY, [0.7, 0.85, 1.0], 60, 3200, 0.45);
   }
   // ARTEMIS THE LOOSED ARROW — fastest moon-silver needle; pierces everything (999),
   // always precise, Marks each pierced foe; the FIRST struck becomes the Hunted at 8.
@@ -1370,6 +1397,9 @@
         if (hz.tick <= 0) {
           hz.tick = 0.2;
           Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; var dx = hz.x - e.x, dy = hz.y - e.y; if (dx * dx + dy * dy < hz.r * hz.r) { damageEnemy(e, hz.dmg, false); arcFx(hz.x, hz.y, e.x, e.y, [0.7, 0.9, 1.0]); } });
+          // ambient internal crackle so the field reads as live lightning even with no target in reach
+          var zaa = Math.random() * TAU, zar = hz.r * (0.5 + Math.random() * 0.5);
+          arcFx(hz.x, hz.y, hz.x + Math.cos(zaa) * zar, hz.y + Math.sin(zaa) * zar, [0.7, 0.9, 1.0]);
         }
         if (hz.timer <= 0) hz.active = false;
       }
@@ -1491,9 +1521,12 @@
         }
       }
       else if (hz.type === 'zap') {
-        var za = Math.min(1, hz.timer);
-        GL.draw(GL.SPR.GLOW, hz.x, hz.y, hz.r * 2.0, hz.r * 2.0, hz.rot, 0.6, 0.85, 1.0, 0.3 * za);
-        GL.draw(GL.SPR.CORE, hz.x, hz.y, hz.r * 0.4, hz.r * 0.4, 0, 0.8, 0.95, 1.0, 0.6 * za);
+        // a thin charged boundary ring + faint core — the crackle IS the bolts spawned
+        // on tick (updateHazards), not a stacked glow oval.
+        var za = Math.min(1, hz.timer), zp = 0.85 + 0.15 * Math.sin(G.time * 22);
+        GL.draw(GL.SPR.GLOW, hz.x, hz.y, hz.r * 1.4, hz.r * 1.4, 0, 0.35, 0.6, 1.0, 0.10 * za);   // faint charged air
+        GL.draw(GL.SPR.RING, hz.x, hz.y, hz.r * 2.0 * zp, hz.r * 2.0 * zp, G.time * 1.5, 0.55, 0.85, 1.0, 0.45 * za);
+        GL.draw(GL.SPR.CORE, hz.x, hz.y, hz.r * 0.22, hz.r * 0.22, 0, 0.85, 0.95, 1.0, 0.5 * za);
       }
       else if (hz.type === 'sweep') {
         // colossal jade-green crescent: a full-width blade whose edges trail
@@ -1617,16 +1650,14 @@
       }
     }
   }
-  // ZEUS SKYFALL — a stacked white column full-height on colX, x-jitter/frame.
+  // ZEUS SKYFALL — the column IS a multi-strand bolt now (spawned in skyfallColumn,
+  // drawn by drawBolts). This only ticks the state the strike shares with the test
+  // getter + adds a faint down-column ambient wash while the strike is live (no ovals).
   function drawSkyfall() {
     if (G.skyfall.t <= 0) return;
     G.skyfall.t -= Engine.DT;
     var a = Math.min(1, G.skyfall.t / 0.22), x = G.skyfall.x;
-    for (var i = 0; i < 14; i++) {
-      var jx = x + (Math.random() - 0.5) * 36, sy = 40 + i * (H / 14);
-      GL.draw(GL.SPR.GLOW, jx, sy, 70, H / 12, 0, 0.6, 0.85, 1, 0.5 * a);
-      GL.draw(GL.SPR.CORE, jx, sy, 22, H / 13, 0, 0.9, 0.95, 1, 0.9 * a);
-    }
+    GL.draw(GL.SPR.GLOW, x, H * 0.42, 120, H * 0.9, 0, 0.55, 0.8, 1.0, 0.10 * a);   // subtle column wash, not a bead-stack
   }
 
   function nearestEnemy(x, y) {
@@ -2894,7 +2925,8 @@
       s.vx = Math.cos(a) * spd; s.vy = Math.sin(a) * spd;
       s.radius = guan ? (isClone ? 22 : 30) * ww : 14; s.damage = dmg; s.age = 0; s.life = 1.6; s.scale = guan ? (isClone ? 40 : 56) * ww : 44;
       s.pierce = guan ? (G.mods.guanWide ? 3 : 2) : (quetz ? (G.mods.quetzPierce ? 2 : 1) : 0);
-      s.kind = guan ? 6 : 0;
+      // ZEUS THE STORM — the projectile IS lightning: a crackling ribbon mini-bolt (kind 3).
+      s.kind = guan ? 6 : (G.attackGod === 'zeus' && sig ? 3 : 0);
       s.faction = 0; s.big = false; s.cloneShot = !!isClone;
       s.crescent = guan;
       if (guan) { s.r = 0.30; s.g = 0.95; s.b = 0.55; }
@@ -3151,14 +3183,14 @@
     for (var j = 0; j < jumps; j++) {
       var best = zapNearest(fx, fy, hitList);
       if (!best) break;
-      arcFx(fx, fy, best.x, best.y, col);
+      arcHop(fx, fy, best.x, best.y, col);
       damageEnemy(best, dmg, false);
       used++;
       hitList.push(best);
       // zeusFork: also strike a second nearby target this jump
       if (G.mods.zeusFork) {
         var fork = zapNearest(fx, fy, hitList);
-        if (fork) { arcFx(fx, fy, fork.x, fork.y, col); damageEnemy(fork, dmg * 0.7, false); hitList.push(fork); }
+        if (fork) { arcHop(fx, fy, fork.x, fork.y, col); damageEnemy(fork, dmg * 0.7, false); hitList.push(fork); }
       }
       fx = best.x; fy = best.y;
     }
@@ -3166,10 +3198,12 @@
     // chain fired at a lone boss is never wasted.
     var unspent = jumps - used;
     if (unspent > 0 && !origin.dying) {
-      arcFx(origin.x - 40, origin.y - 40, origin.x, origin.y, col);
+      arcHop(origin.x - 40, origin.y - 40, origin.x, origin.y, col);
       damageEnemy(origin, dmg * 0.5 * unspent, false);
     }
     if (G.mods.zeusCrit && !origin.dying) damageEnemy(origin, dmg * 0.6, true);
+    // A big chain momentarily lights the whole field — a subtle ambient flash on 3+ hops.
+    if (used >= 3) G.flashAll = Math.max(G.flashAll, 0.05 + Math.min(0.05, (used - 3) * 0.015));
   }
   function zapNearest(fx, fy, hitList) {
     var best = null, bd = 340 * 340;
@@ -6289,6 +6323,8 @@
   function drawShots() {
     Engine.shots.forEach(function (s) {
       var ang = Math.atan2(s.vy, s.vx) + Math.PI / 2;
+      // ZEUS THE STORM (kind 3) — the shot is a crackling ribbon mini-bolt, not a streak.
+      if (s.kind === 3) { drawMiniBolt(s); return; }
       // ARTEMIS arrow-needle (kind 9): silver-white body + moon-blue rim, oriented.
       if (s.kind === 9) {
         var hac9 = authCell('33-11-hunt-arrow');   // §9 volley arrow — nose-up → rotate to travel
@@ -6394,6 +6430,48 @@
         GL.draw(GL.SPR.CORE, s.x, s.y, s.scale * 0.32, s.scale * 0.32, 0, 1, 1, 1, 0.9);
       }
     });
+  }
+  // ZEUS THE STORM projectile — a SHORT crackling ribbon mini-bolt jagged along the
+  // travel direction, drawn on the same BOLT texture two-pass (coloured haze under a
+  // near-white core) as the chain bolts, so the attack READS as lightning at natural
+  // scale. The jag re-rolls on a frame BUCKET (not per-frame) so it crackles without
+  // shimmering. Budget: 4 segments × 2 passes + nose flash (+ occasional 1-seg fork) —
+  // ~9-10 GL.draws per shot. No per-frame allocation (fixed _mScr scratch).
+  function drawMiniBolt(s) {
+    var vx = s.vx, vy = s.vy, sp = Math.sqrt(vx * vx + vy * vy) || 1;
+    var ux = vx / sp, uy = vy / sp, px = -uy, py = ux;          // travel unit + perpendicular
+    var L = s.scale * 2.4, half = L * 0.5, amp = s.scale * 0.6;
+    var bucket = Math.floor(G.time * 22), seed = (s.fireId % 1000) + bucket * 33.7;
+    var N = 4, i;                                               // 4 segments -> 5 points
+    for (i = 0; i <= N; i++) {
+      var t = i / N, along = -half + L * t;
+      var env = Math.sin(Math.PI * t);                          // 0 at both tips -> stays a lance on-axis
+      var lat = (jhash(seed, i) - 0.5) * amp * env;
+      _mScr[i * 2] = s.x + ux * along + px * lat;
+      _mScr[i * 2 + 1] = s.y + uy * along + py * lat;
+    }
+    var r = s.r, g = s.g, b = s.b, wr = r * 0.35 + 0.65, wg = g * 0.35 + 0.65, wb = b * 0.35 + 0.65;
+    var cw = s.scale * 0.30, hw = s.scale * 0.66;
+    for (i = 0; i < N; i++) {
+      var x0 = _mScr[i * 2], y0 = _mScr[i * 2 + 1], x1 = _mScr[i * 2 + 2], y1 = _mScr[i * 2 + 3];
+      var dx = x1 - x0, dy = y1 - y0, len = Math.sqrt(dx * dx + dy * dy); if (len < 0.5) continue;
+      var mx = (x0 + x1) * 0.5, my = (y0 + y1) * 0.5, rot = Math.atan2(-dx, dy), ov = cw * 0.4 + 2;
+      GL.draw(GL.SPR.BOLT, mx, my, hw, len + ov, rot, r, g, b, 0.34);             // coloured haze underlay
+      GL.draw(GL.SPR.BOLT, mx, my, cw, len + ov, rot, wr, wg, wb, 0.95);          // near-white core (2x the old lance read)
+    }
+    // occasional micro-fork off a mid vertex (bucketed, so it flickers not shimmers)
+    if (jhash(seed, 9) > 0.62) {
+      var fi = 1 + ((jhash(seed, 11) * 2) | 0);                 // vertex 1 or 2
+      var fx0 = _mScr[fi * 2], fy0 = _mScr[fi * 2 + 1];
+      var fa = Math.atan2(uy, ux) + (jhash(seed, 12) < 0.5 ? -1 : 1) * 1.0, fl = s.scale * 0.7;
+      var fx1 = fx0 + Math.cos(fa) * fl, fy1 = fy0 + Math.sin(fa) * fl;
+      var frot = Math.atan2(-(fx1 - fx0), fy1 - fy0);
+      GL.draw(GL.SPR.BOLT, (fx0 + fx1) * 0.5, (fy0 + fy1) * 0.5, cw * 0.7, fl, frot, wr, wg, wb, 0.6);
+    }
+    // white-hot leading tip: a SHORT stretched BOLT (not a round bead) so a dense
+    // stream never reads as a string of pearls — just hot dart-heads on jagged cracks.
+    var nx = s.x + ux * half, ny = s.y + uy * half, trot = Math.atan2(-ux, uy);
+    GL.draw(GL.SPR.BOLT, nx - ux * s.scale * 0.16, ny - uy * s.scale * 0.16, cw * 1.15, s.scale * 0.54, trot, 1, 1, 1, 0.92);
   }
   // ARES GREEK ARMORY procedural silhouettes (composed from the existing atlas —
   // no new atlas cells): a slim leaf-point javelin, a waisted xiphos leaf-blade, a
