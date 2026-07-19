@@ -1159,6 +1159,44 @@
     n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.008);
   };
 
+  // CURSED-GOLD petrify: the player gilds into a statue. A heavy metallic "clank"
+  // (descending detuned squares through a closing lowpass — the body seizing) with
+  // a bright crystalline shimmer on top (the gold-leaf setting). ~0.4s, dry.
+  SFX.petrify = function () {
+    if (!ready || muted) return;
+    var t = now();
+    // seizing body: two detuned squares sweeping down through a closing filter
+    var f = ctx.createBiquadFilter(); f.type = 'lowpass';
+    f.frequency.setValueAtTime(2600, t); f.frequency.exponentialRampToValueAtTime(240, t + 0.34);
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.11, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+    g.connect(master); f.connect(g);
+    var freqs = [300, 302, 150];
+    for (var i = 0; i < freqs.length; i++) {
+      var o = ctx.createOscillator(); o.type = 'square';
+      o.frequency.setValueAtTime(freqs[i] * 1.6, t);
+      o.frequency.exponentialRampToValueAtTime(freqs[i] * 0.5, t + 0.3);
+      o.connect(f); o.start(t); o.stop(t + 0.44);
+    }
+    // gold-leaf shimmer: a bright triangle ping high up, quick decay
+    var s = ctx.createOscillator(); s.type = 'triangle';
+    s.frequency.setValueAtTime(1760, t);
+    s.frequency.exponentialRampToValueAtTime(2640, t + 0.05);
+    var sg = ctx.createGain();
+    sg.gain.setValueAtTime(0.0001, t);
+    sg.gain.exponentialRampToValueAtTime(0.045, t + 0.01);
+    sg.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    s.connect(sg); sg.connect(master); s.start(t); s.stop(t + 0.24);
+    // impact crunch: a short lowpassed noise thud on the seize
+    var n = noiseVoice(t, 0.08, null);
+    var nf = ctx.createBiquadFilter(); nf.type = 'lowpass'; nf.frequency.setValueAtTime(1200, t);
+    n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
+    n.g.gain.setValueAtTime(0.06, t);
+    n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+  };
+
   // ---- dev helper: audition -------------------------------------------------
   // SFX.audition()      -> plays every patch in sequence ~0.5s apart, console.log
   //                        the name as each fires (owner auditions from console).
@@ -1185,6 +1223,7 @@
     ['vauntBonus',   function () { SFX.vauntBonus(); }],
     ['vaunt',        function () { SFX.vaunt(); }],
     ['bossPhase',    function () { SFX.bossPhase(); }],
+    ['petrify',      function () { SFX.petrify(); }],
     ['death',        function () { SFX.death(); }]
   ];
   SFX.audition = function (name) {

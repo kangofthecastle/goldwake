@@ -475,27 +475,30 @@ traditions (Egyptian only), no gore, no pure black #000000, no text or
 lettering, no busy particle noise, no watermark.
 ```
 
-### 24. THE GILDED SOVEREIGN — final boss
+### 24. MIDAS — the gilded king (final boss)
 
 ```
-Painted card portrait, storybook style: THE GILDED SOVEREIGN, the final throne of
-gold — one iconic silhouette (a towering crowned figure fused into its own
-throne) plus one secondary motif (three concentric halo-rings behind it, one per
-phase, the outermost broken); its body an armature of coins, crown-spikes and
-molten gold, a single white-hot slit where a face would be, read in 2-3 marks.
-Game-native gilded royalty only, belonging to no real-world mythology. Human
-scale against impossible scale: a minute glowing ship rising toward it from the
-bottom edge. Imperfect asymmetry — coins spilling loose from one shoulder.
-Broad painted planes; majestic, sacred, avaricious — never grimy. Must read as a
-flat silhouette at thumbnail size. Palette: near-black ground #05080b, gold
-#ffd766 utterly dominant, white-hot core with a danger-red #ff5a6e rim on the
-face-slit only, faint cyan #5fe6ff on the ship, warm near-black outline #231A20
-with the outer contour 3x the weight of interior lines, restrained gold-leaf
-grain. Deliver: PNG, 2:3 portrait, on a transparent or near-black #05080b ground
-— never white or light gray. Negative: no photorealism, no airbrushed or plastic
-gradients, no glossy 3D render, no mixed mythological traditions, no real-world
-religious motifs, no pure black #000000, no text or lettering, no busy particle
-noise, no watermark.
+Painted card portrait, storybook style: MIDAS, the gilded king — a gaunt, hollow-
+eyed monarch whose curse has consumed him. One iconic silhouette (a lean crowned
+figure, robes and skin half-turned to hardened gold, reaching with one open,
+grasping hand) plus one secondary motif (a heaped, hungry HOARD of coins and
+treasure dragging at his feet and rising around him, some of it flowing UP toward
+his grasping hand as if he is drinking it in). Read in 2-3 marks: sunken eye,
+grasping hand, the crown. Drawn in the Greek votive tradition — a temple-offering
+plaque / archaic Hellenic king, laurel and chiton turned to metal — belonging to
+that tradition and no other. Human scale against impossible scale: a minute
+glowing ship rising toward him from the bottom edge, small beside the mountain of
+gold. Imperfect asymmetry — one shoulder fully petrified and cracking, coins
+spilling loose. Broad painted planes; avaricious, starving, tragic — a king
+drowned in his own wealth, never grimy. Must read as a flat silhouette at
+thumbnail size. Palette: near-black ground #05080b, gold #ffd766 utterly
+dominant, a warm rose #ff5a6e accent in the shadows and grasping-hand glow, faint
+cyan #5fe6ff on the ship, warm near-black outline #231A20 with the outer contour
+3x the weight of interior lines, restrained gold-leaf grain. Deliver: PNG, 2:3
+portrait, on a transparent or near-black #05080b ground — never white or light
+gray. Negative: no photorealism, no airbrushed or plastic gradients, no glossy
+3D render, no mixed mythological traditions, no pure black #000000, no text or
+lettering, no busy particle noise, no watermark.
 ```
 
 ### 25. THE APOSTATE — renegade elite
@@ -745,5 +748,5 @@ Substitutions:
 | 32.9 | BLINK MOTH — a teleporting skirmisher | two wide serrated moth wings around a barely-there body | `#ff5ae0` |
 | 32.10 | BULLET GARDENER — a seeder of bullet gardens | a coiled thorned planter form trailing three seed-pod stems | `#ff77c8` |
 | 32.11 | TALOS — field sprite of the bronze sentinel boss | a great open bronze ring with a single molten core-eye hub at its center | `#ff8a5a` |
-| 32.12 | THE GILDED SOVEREIGN — field sprite of the final boss | a crowned throne-slab, coin-armored, three regalia spikes | `#ffd766` (white-hot core reserved for its unavoidable attacks) |
+| 32.12 | MIDAS — field sprite of the gilded king (final boss) | a gaunt crowned figure half-turned to gold, one grasping hand, a heaped hoard dragging at his feet | `#ffd766` (white-hot core reserved for its unavoidable attacks) |
 | 32.13 | THE APOSTATE — field sprite of the renegade elite | a lean asymmetric duelist dart carrying two mismatched relic pods, one glowing warm and one cool (its stolen boons — the sole enemy permitted a cool glint) | `#ff5ae0` |

@@ -65,7 +65,8 @@
       color: o.color || col,
       accel: o.accel, accel2: o.accel2, accelSwitchT: o.accelSwitchT, angVel: o.angVel,
       minSpeed: o.minSpeed, maxSpeed: o.maxSpeed, life: o.life,
-      radius: o.radius, scale: o.scale, spin: o.spin
+      radius: o.radius, scale: o.scale, spin: o.spin,
+      burstY: o.burstY, gild: o.gild
     };
   }
   function angDiff(a, b) { var d = a - b; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return d; }
@@ -119,6 +120,10 @@
     b.spr = FAM_SPR[fam];
     b.oriented = (fam === FAM.KUNAI || fam === FAM.SHARD);
     b.spin = (o.spin != null) ? o.spin : FAM_SPIN[fam];
+    // boss-concept rework: reset per-alloc so pooled reuse never inherits a stale
+    // boulder burst line or gilded-trail flag from the slot's prior occupant.
+    b.burstY = o.burstY || 0;
+    b.gild = !!o.gild;
     b.flash = 0.1;
     b.age = 0;
     b.grazed = false;

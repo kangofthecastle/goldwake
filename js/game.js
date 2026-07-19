@@ -198,6 +198,9 @@
       charmElite: 1, critBonus: 0, charmShop: 0, noSpill: false, rerollHalf: false, keepMult: false, vauntBonusMul: 1, charmMark: 0,
       // ghost dodge (Shift tap-and-release dash; a held Shift is pure focus)
       dash: { cd: 0, active: 0, dirx: 0, diry: 0, ghosts: [], shiftT: 0, pend: false, pendx: 0, pendy: 0, wasFocus: false },
+      // MIDAS cursed-gold gilding: t = freeze remaining (input ignored, invuln,
+      // gold-statue), graceT = post-freeze window that blocks chain-freezing.
+      freeze: { t: 0, graceT: 0 },
       // scaling
       stats: { atkDmg: opts.baseDmg || 1, atkRate: 1, spDmg: 1, spRecharge: 1 },
       // retained generics
@@ -524,7 +527,8 @@
   // ---------------------------------------------------------------------
   // gold + wallet
   // ---------------------------------------------------------------------
-  function spawnGold(x, y, count, value, bank, life) {
+  var THEFT_SPEED = 260;   // MIDAS gold-theft drift (px/s) once gold is past the magnet
+  function spawnGold(x, y, count, value, bank, life, cursed) {
     for (var i = 0; i < count; i++) {
       var g = Engine.gold.alloc(); if (!g) return;
       var a = Math.random() * TAU, s = 120 + Math.random() * 260;
@@ -532,41 +536,83 @@
       g.age = 0; g.life = life || (11 + Math.random() * 3);
       g.value = value; g.rot = Math.random() * TAU; g.angVel = (Math.random() - 0.5) * 8;
       g.scale = 20; g.homing = false; g.magnet = 240; g.bank = bank || 0;
+      g.cursed = !!cursed;   // pooled hygiene: every coin declares its curse state
       g.r = 1; g.g = 0.78; g.b = 0.24;
     }
   }
-  function homeAllGold() { Engine.gold.forEach(function (g) { g.homing = true; }); }
+  // cursed gold is never auto-homed (deliberate walk-into pickup only), so a
+  // phase-transition homeAll can't vacuum a fresh cursed coin into the player.
+  function homeAllGold() { Engine.gold.forEach(function (g) { if (!g.cursed) g.homing = true; }); }
+  // MIDAS is alive + fighting: uncollected loot drifts to HIM (the gold-theft loop).
+  function midasFight() { var b = G.boss; return !!(b && b.isMidas && b.arrived && !b.dying); }
 
   function updateGold(dt) {
     var px = G.player.x, py = G.player.y;
     var vauntOn = G.vaunt.active;
     var magR = MAGNET_R * (1 + G.up.magnet);
+    var thief = midasFight() ? G.boss : null;   // only steals while alive; zero cost otherwise
     Engine.gold.forEach(function (g) {
       g.age += dt; g.rot += g.angVel * dt;
       var dx = px - g.x, dy = py - g.y, d2 = dx * dx + dy * dy;
-      var homing = g.homing || vauntOn || d2 < magR * magR;
-      if (homing && G.player.alive) {
+      // cursed gold ignores the magnet entirely — it must be walked into.
+      var toPlayer = (g.homing || vauntOn || d2 < magR * magR) && !g.cursed;
+      if (toPlayer && G.player.alive) {
         var d = Math.sqrt(d2) || 1;
         g.magnet = Math.min(g.magnet + 2600 * dt, 1900);
         g.vx = (dx / d) * g.magnet; g.vy = (dy / d) * g.magnet;
+      } else if (thief && !g.cursed) {
+        // GOLD THEFT: constant ~260px/s vacuum toward MIDAS (apotheosis rescues it —
+        // vauntOn flips gold to toPlayer above, so cashing out beats the theft).
+        var tx = thief.x - g.x, ty = thief.y - g.y, td = Math.sqrt(tx * tx + ty * ty) || 1;
+        g.vx = (tx / td) * THEFT_SPEED; g.vy = (ty / td) * THEFT_SPEED;
       } else { g.vx *= 0.95; g.vy = g.vy * 0.95 + 20 * dt; }
       g.x += g.vx * dt; g.y += g.vy * dt;
       if (G.player.alive && d2 < 46 * 46) { collectGold(g); Engine.gold.release(g); return; }
+      // MIDAS eats loot into his hoard (spilled back as a jackpot on death) — but
+      // only gold in the DRIFT-TO-BOSS state. A coin the player is already
+      // magnetizing (toPlayer: homing / vaunt / inside magnet) is theirs and can't
+      // be snatched at point-blank, so the point-blank play HUBRIS rewards isn't
+      // punished. Banked premium rides into the hoard alongside value (tracked
+      // separately, in wallet units) so the jackpot repays full stolen worth.
+      if (thief && !g.cursed && !toPlayer) {
+        var bx = thief.x - g.x, by = thief.y - g.y, br = thief.radius + 30;
+        if (bx * bx + by * by < br * br) { thief.hoard += g.value; thief.hoardBank += (g.bank || 0); thief.hoardCount++; flash(g.x, g.y, [1, 0.82, 0.3], 30, 0.16); Engine.gold.release(g); return; }
+      }
       if (g.age >= g.life || g.y > H + 120) Engine.gold.release(g);
     });
   }
   var goldCombo = 0, goldComboT = 0;
   function collectGold(g) {
     goldCombo++; goldComboT = 0.55;
+    var cm = g.cursed ? 2 : 1;   // CURSED GOLD is worth 2x — the greed temptation is real
     var gw = G.up.goldWorth * (G.communion === 'KEMET' ? 1.15 : 1);   // Rite of Two Suns
-    addScore(GOLD_VALUE * g.value * G.mult * gw);
-    addGauge(GOLD_GAUGE * g.value);
-    var bank = g.bank > 0 ? g.bank : Math.round(BANK_PER_SHARD * g.value * gw);
+    addScore(GOLD_VALUE * g.value * cm * G.mult * gw);
+    addGauge(GOLD_GAUGE * g.value * cm);
+    var bank = g.bank > 0 ? g.bank : Math.round(BANK_PER_SHARD * g.value * cm * gw);
     bank = Math.round(bank * hMult());   // HUBRIS multiplies all gold earned
     G.wallet += bank;
     Run.addCareerGold(bank);
     SFX.gold(goldCombo);
-    flash(g.x, g.y, [1, 0.85, 0.4], 40, 0.14);
+    flash(g.x, g.y, g.cursed ? [1, 0.75, 0.2] : [1, 0.85, 0.4], g.cursed ? 60 : 40, g.cursed ? 0.2 : 0.14);
+    if (g.cursed) gildPlayer(g.x, g.y);   // the curse bites: a golden statue, briefly
+  }
+  // CURSED GOLD pickup gilds the player: frozen ~0.45s (no move/fire/dodge), fully
+  // invulnerable, gold-statue tint, a petrify sting — but NOT a hit (HUBRIS intact).
+  // Gated so pickups mid-freeze / mid-grace can't stack or chain-freeze, and so it
+  // can never fire during the death or clear sequence.
+  function gildPlayer(x, y) {
+    if (G.mode !== 'playing') return;
+    if (!G.player.alive) return;
+    if (G.freeze.t > 0 || G.freeze.graceT > 0) return;
+    G.freeze.t = 0.45;
+    G.player.invuln = Math.max(G.player.invuln, 0.55);   // covers the whole freeze + a sliver
+    // A statue does not keep dashing: cancel any in-flight dash so it can't RESUME
+    // in its old direction on unfreeze (active/dir survive the freeze early-return).
+    G.dash.active = 0; G.dash.dirx = 0; G.dash.diry = 0; G.dash.pend = false;
+    SFX.petrify();
+    ringShock(x, y, [1, 0.8, 0.3], 70, 2600, 0.5);
+    flash(G.player.x, G.player.y, [1, 0.85, 0.4], 220, 0.3);
+    addShake(JUICE.shakeSmall);
   }
 
   // ---------------------------------------------------------------------
@@ -620,7 +666,7 @@
     v.timer = v.duration; v.killCount = 0; v.ready = false;
     G.mult = 3; G.multDecayT = 0;
     G.player.invuln = Math.max(G.player.invuln, VAUNT_SHIELD);
-    cancelBulletsToGold(false);
+    cancelBulletsToGold(midasFight());   // vs MIDAS, the cancelled gold is CURSED
     ringShock(G.player.x, G.player.y, [1, 0.85, 0.35], 60, 3200, 0.6);
     ringShock(G.player.x, G.player.y, [0.4, 0.95, 1], 40, 2400, 0.45);
     flash(G.player.x, G.player.y, [1, 0.95, 0.7], 260, 0.3);
@@ -803,11 +849,13 @@
     v.gauge = 0; v.ready = false;
     addShake(4);
   }
+  // midas=true: the cancelled attacks are HIS, so the gold spawns CURSED (converting
+  // Midas' fire is the only cursed-gold source — his apotheosis + phase cancels).
   function cancelBulletsToGold(midas) {
     var val = 0.5, n = 0;
     Engine.bullets.forEach(function (b) {
-      if (Engine.gold.freeTop > 0) spawnGold(b.x, b.y, 1, val);
-      flash(b.x, b.y, [1, 0.8, 0.3], 22, 0.12);
+      if (Engine.gold.freeTop > 0) spawnGold(b.x, b.y, 1, val, 0, 0, midas);
+      flash(b.x, b.y, midas ? [1, 0.72, 0.22] : [1, 0.8, 0.3], 22, 0.12);
       Engine.bullets.release(b); n++;
     });
     // golden cascade that scales with how full the screen was (the denser the
@@ -1167,6 +1215,12 @@
     });
     return best;
   }
+  // Steering target for a homing shot: TALOS' body is immune during THE NAIL —
+  // only the ankle nail hitbox drains. Homing/aimed shots must seek the nail, or
+  // they clank off the immune body forever (~92px above the weak point). Non-nail
+  // enemies just report their center.
+  function aimTargetX(e) { return (e && e.nailActive) ? e.nailX : (e ? e.x : 0); }
+  function aimTargetY(e) { return (e && e.nailActive) ? e.nailY : (e ? e.y : 0); }
 
   // ODIN — ravens
   function updateRavens(dt) {
@@ -1392,7 +1446,7 @@
   }
   function fireVerdictEdict(target, big, dmg) {
     var s = allocShot(); if (!s) return;
-    var a = Math.atan2(target.y - (G.player.y - 30), target.x - G.player.x);
+    var a = Math.atan2(aimTargetY(target) - (G.player.y - 30), aimTargetX(target) - G.player.x);
     var sp = 1100;
     s.x = G.player.x; s.y = G.player.y - 30;
     s.vx = Math.cos(a) * sp; s.vy = Math.sin(a) * sp;
@@ -1627,6 +1681,26 @@
       if (p.respawnT <= 0) { p.dead = false; p.alive = true; p.x = W / 2; p.y = H - 300; p.invuln = 2.0; }
       return;
     }
+    // CURSED-GOLD gild: a golden statue — no input, no fire, no dodge, invulnerable.
+    // Ticks only inside updateCombat, so pause/hitstop freeze it too (no deadlock).
+    if (G.freeze.t > 0) {
+      G.freeze.t -= dt;
+      // Keep the timers that MUST keep ticking through the freeze alive here (the
+      // early return skips their usual decrements below):
+      //  - invuln: gild grants ~0.55s expecting the freeze (~0.45s) to burn it down
+      //    so only a ~0.1s sliver survives unfreeze — the freeze itself is the
+      //    i-frame, not a bankable shield. Without this it would stack to ~1.0s.
+      //  - dash.cd keeps cooling; the Shift edge state is held coherent so a tap
+      //    or release WHILE gilded can't fire a ghost dodge on the first live frame.
+      if (p.invuln > 0) p.invuln -= dt;
+      p.invuln = Math.max(p.invuln, 0.06);   // but never drop to hittable mid-statue
+      if (G.dash.cd > 0) G.dash.cd -= dt;
+      G.dash.wasFocus = Engine.focusHeld();  // absorb Shift edges silently
+      G.dash.pend = false; G.dash.shiftT = 0;
+      if (G.freeze.t <= 0) { G.freeze.t = 0; G.freeze.graceT = 0.8; }   // grace blocks chain-freeze
+      return;
+    }
+    if (G.freeze.graceT > 0) G.freeze.graceT -= dt;
     var mv = Engine.readMove();
     var focus = Engine.focusHeld();
     // Ghost dodge — tap-vs-hold discrimination, dash fires on RELEASE:
@@ -1699,7 +1773,7 @@
   function fireEdict() {
     var s = allocShot(); if (!s) return;
     var target = nearestEnemy(G.player.x, G.player.y - 40);
-    var a = target ? Math.atan2(target.y - (G.player.y - 30), target.x - G.player.x) : UP;
+    var a = target ? Math.atan2(aimTargetY(target) - (G.player.y - 30), aimTargetX(target) - G.player.x) : UP;
     var sp = 920;
     s.x = G.player.x; s.y = G.player.y - 30;
     s.vx = Math.cos(a) * sp; s.vy = Math.sin(a) * sp;
@@ -1780,7 +1854,7 @@
       if (s.homing && s.turn > 0) {                       // Jade edict homing
         var t = nearestEnemy(s.x, s.y);
         if (t) {
-          var desired = Math.atan2(t.y - s.y, t.x - s.x);
+          var desired = Math.atan2(aimTargetY(t) - s.y, aimTargetX(t) - s.x);   // seek the nail, not the immune body
           var cur = Math.atan2(s.vy, s.vx);
           var d = desired - cur;
           while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU;
@@ -1798,7 +1872,7 @@
 
   function playerHit() {
     var p = G.player;
-    if (!p.alive || p.invuln > 0 || G.vaunt.active || G.vaunt.mercy > 0) return;
+    if (!p.alive || p.invuln > 0 || G.vaunt.active || G.vaunt.mercy > 0 || G.freeze.t > 0) return;
     p.alive = false; p.dead = true; p.respawnT = 1.4;
     G.lives--;
     G.waveHits++;                                         // breaks UNTOUCHED for this wave
@@ -1862,6 +1936,11 @@
     e.pathSegs = null; e.segI = 0; e.segT = 0; e.sx = 0; e.sy = 0;
     e.holdX = 0; e.holdY = 0; e.retreatAt = 0; e.didRetreat = false;
     e.arrived = false; e.phaseT = 0; e.breathT = 0; e.segFloorHp = 0; e.segBounds = null;
+    // boss-concept rework: MUST reset on pooled reuse or a fresh enemy inherits the
+    // prior occupant's MIDAS gold-theft flag (spawns cursed cancel gold!) or the
+    // TALOS nail immunity (body would take 0 damage). This was a real leak.
+    e.isMidas = false; e.hoard = 0; e.hoardBank = 0; e.hoardCount = 0;
+    e.nailActive = false; e.nailR = 0; e.nailX = 0; e.nailY = 0;
     e.onDeath = null; e.onUpdate = null;
     // formation membership: stamped with the current wave's squadron id (0 = none,
     // e.g. boss waves) and counted once toward FORMATION WIPE tracking. formCounted
@@ -2746,8 +2825,9 @@
     // recenter position — no horizontal snap-back on the next phase's tick.
     e.breathFloor = e.hp;
     e.script = null;                       // silent through the breath
+    if (ph.onEnter) ph.onEnter(e, cfg);    // phase hook (TALOS arms the nail here)
     if (transition) {
-      cancelBulletsToGold(false); homeAllGold();   // generic full-field cancel to gold
+      cancelBulletsToGold(e.isMidas); homeAllGold();   // full-field cancel to gold (CURSED vs MIDAS)
       ringShock(e.x, e.y, [1, 0.92, 0.45], 90, 3200, 0.75);
       flash(e.x, e.y, [1, 0.92, 0.6], 360, 0.45);
       addShake(JUICE.shakeMedium); SFX.bossPhase(); hitstop(JUICE.hsBossPhase);
@@ -2765,6 +2845,9 @@
   }
   function bossTick(e, dt, phases, cfg) {
     e.t += dt; e.rot = Math.PI;
+    // TALOS nail tracks the ankle and sways as he lurches (updated every frame,
+    // including the transition breath, so it never renders/collides at the origin).
+    if (e.nailActive) { e.nailX = e.x + Math.sin(e.t * 4) * 16; e.nailY = e.y + e.scale * 0.44; }
     if (!e.arrived) {                      // entry descent from off-screen
       e.y += 175 * dt;
       if (e.y >= cfg.holdY) { e.y = cfg.holdY; e.arrived = true; bossEnterPhase(e, phases, cfg, 0, false); }
@@ -2801,10 +2884,12 @@
   }
 
   // -------- bosses --------
-  // Sector-1 anchor: TALOS, the bronze sentinel — 5 phases (teaches the setlist:
-  // single geometries early, layered geometry+accent late). Function + meta names
-  // keep their legacy 'warden' spelling so saved unlocks survive. Tint: molten
-  // bronze, hotter/redder than loot gold. Accent needles a fixed hot gold (ACC).
+  // Sector-1 anchor: TALOS, the bronze sentinel — 5 phases. The setlist tells his
+  // myth: patrol → siege stones → the burning embrace → layered rage → THE NAIL,
+  // the ankle weak-point that is his one mortality (Talos died when his ichor ran
+  // out of a single nail). Function + meta names keep their legacy 'warden'
+  // spelling so saved unlocks survive. Tint: molten bronze, hotter/redder than
+  // loot gold. Accent needles a fixed hot gold (ACC).
   function spawnWarden(rank) {
     var e = newEnemy(5, W / 2, -160, 3000 * rank, GL.SPR.SHIP_MID, 210, 92, [1.0, 0.58, 0.22], 40, 40000, true); if (!e) return;
     e.name = 'TALOS';
@@ -2812,187 +2897,249 @@
     var BRZ = [1.0, 0.5, 0.16], HOT = [1.0, 0.72, 0.28], MAG = P.MAGENTA, ACC = [1.0, 0.86, 0.4];
     var cfg = { holdY: 360, centerX: W / 2, strafe: 250 };
     function pose(col, h) { return { t: 0, fn: function (e) { e.poseT = h || 0.42; muzzle(e, col || BRZ); } }; }
+    // HURLED STONES: XL boulders lobbed on ballistic arcs (angVel curls each toward
+    // straight-down, accel makes them heavy) that burst into pellet shrapnel at a
+    // depth line. Sparse, slow, heavy — the terrain you route boulders around.
+    function hurl(e, n, col) {
+      for (var i = 0; i < n; i++) {
+        var f = n > 1 ? (i / (n - 1) - 0.5) : 0, ang = DOWN + f * 1.15;
+        P.bullet(e.x, e.y, ang, rankSpd(P.SPD.slow) * 0.62, { fam: P.FAM.ORB, tier: 'XL', color: col, angVel: (DOWN - ang) * 0.85, accel: 70, maxSpeed: 340, burstY: 1250, life: 12 });
+      }
+    }
+    // THE BURNING EMBRACE: heated walls close from both screen edges (rows moving
+    // inward), warm-ramped HOT/BRZ, with a single moving vertical lane between.
+    function embrace(e, laneCy, spd) {
+      for (var yy = 150; yy < H - 130; yy += 48) {
+        if (Math.abs(yy - laneCy) < 150) continue;   // the moving lane (>= 3.5x hitbox)
+        var col = ((yy / 48) | 0) % 2 ? HOT : BRZ;
+        P.bullet(46, yy, 0, spd, { fam: P.FAM.PELLET, tier: 'M', color: col });
+        P.bullet(W - 46, yy, Math.PI, spd, { fam: P.FAM.PELLET, tier: 'M', color: col });
+      }
+    }
     var phases = [
-      // I Foundry Breath — pulse rings on stomp beats (single geometry: pulse)
-      { name: 'FOUNDRY BREATH', hp: 0.16, timeout: 32, path: bp_holdCenter, loop: 3.4, script: [
+      // I THE CIRCUIT — patrol: wide sweeping pulse arcs while pendulum-strafing
+      // (single geometry, the Foundry Breath material adapted to a moving patrol).
+      { name: 'THE CIRCUIT', hp: 0.16, timeout: 32, path: bp_pendulum, loop: 2.8, script: [
         pose(BRZ),
         { t: 0.5, fn: function (e) { e.s0 += 0.4; P.pulse(e.x, e.y, { rings: 3, count: 16, speed: rankSpd(P.SPD.slow), speedStep: 58, offset: e.s0, colorA: BRZ, colorB: HOT }); } },
-        { t: 1.7, fn: function (e) { e.poseT = 0.42; muzzle(e, HOT); } },
-        { t: 2.2, fn: function (e) { e.s0 += 0.4; P.pulse(e.x, e.y, { rings: 3, count: 14, speed: rankSpd(P.SPD.slow), speedStep: 64, offset: -e.s0, colorA: HOT, colorB: MAG }); } }
+        { t: 1.6, fn: function (e) { e.poseT = 0.42; muzzle(e, HOT); } },
+        { t: 2.1, fn: function (e) { e.s0 += 0.4; P.pulse(e.x, e.y, { rings: 3, count: 14, speed: rankSpd(P.SPD.slow), speedStep: 64, offset: -e.s0, colorA: HOT, colorB: MAG }); } }
       ] },
-      // II Piston Lances — arcWall columns slamming alternate lanes (geometry: arcWall)
-      { name: 'PISTON LANCES', hp: 0.18, timeout: 32, path: bp_pendulum, loop: 2.6, script: [
-        pose(BRZ),
-        { t: 0.4, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.7, 24, rankSpd(P.SPD.slow), { laneAt: (e.s1 % 2 ? -0.28 : 0.28), laneWidth: 5.2, fam: P.FAM.PELLET, tier: 'M', color: BRZ }); } },
-        { t: 1.2, fn: function (e) { e.poseT = 0.4; muzzle(e, HOT); } },
-        { t: 1.6, fn: function (e) { P.arcWall(e.x, e.y, DOWN, 1.7, 24, rankSpd(P.SPD.mid), { laneAt: (e.s1 % 2 ? 0.28 : -0.28), laneWidth: 5.2, fam: P.FAM.PELLET, tier: 'M', color: HOT }); } }
+      // II HURLED STONES — ballistic boulders bursting into shrapnel + a sparse aimed accent.
+      { name: 'HURLED STONES', hp: 0.18, timeout: 32, path: bp_holdCenter, loop: 2.8, script: [
+        pose(BRZ, 0.5),
+        { t: 0.6, fn: function (e) { hurl(e, 3, BRZ); } },
+        { t: 1.5, fn: function (e) { hurl(e, 4, HOT); } },
+        { t: 2.1, fn: function (e) { e.poseT = 0.3; muzzle(e, ACC); } },
+        { t: 2.4, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 3, { spread: 0.16, speed: rankSpd(P.SPD.whip), color: ACC }); } }
       ] },
-      // III The Bronze Wheel — rotating gap-wheel + aimed accent, pendulum-strafe (LAYER)
-      { name: 'THE BRONZE WHEEL', hp: 0.20, timeout: 34, path: bp_pendulum, loop: 2.4, script: [
-        pose(BRZ),
-        { t: 0.35, fn: function (e) { e.s0 += 0.5; P.wheel(e.x, e.y, e.s0, 24, rankSpd(P.SPD.slow), { gapEvery: 6, fam: P.FAM.ORB, tier: 'M', color: MAG }); } },
-        { t: 1.0, fn: function (e) { e.s0 += 0.5; P.wheel(e.x, e.y, e.s0, 24, rankSpd(P.SPD.mid), { gapEvery: 6, fam: P.FAM.ORB, tier: 'S', color: BRZ }); } },
-        { t: 1.6, fn: function (e) { e.poseT = 0.34; muzzle(e, ACC); } },
-        { t: 1.95, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.2, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+      // III THE BURNING EMBRACE — mirrored heated walls closing from both edges with
+      // a moving lane; he holds center (single geometry, area with a visible lane).
+      { name: 'THE BURNING EMBRACE', hp: 0.20, timeout: 34, path: bp_holdCenter, loop: 2.6, script: [
+        pose(HOT),
+        { t: 0.5, fn: function (e) { e.s2++; embrace(e, cfg.holdY + Math.sin(e.s2 * 0.9) * 360, rankSpd(P.SPD.slow) * 0.72); } },
+        { t: 1.5, fn: function (e) { e.poseT = 0.36; muzzle(e, BRZ); } },
+        { t: 1.9, fn: function (e) { e.s2++; embrace(e, cfg.holdY + Math.sin(e.s2 * 0.9) * 360, rankSpd(P.SPD.slow) * 0.72); } }
       ] },
-      // IV Molten Veins — mirrored snake ribbons + kunai accent (LAYER: snake)
-      { name: 'MOLTEN VEINS', hp: 0.22, timeout: 34, path: bp_holdCenter, loop: 2.6, script: [
-        pose(BRZ),
-        { t: 0.35, fn: function (e) { e.s1++; P.snake(e.x, e.y, DOWN - 0.5, 13, rankSpd(P.SPD.mid), { amp: 48, freq: 0.82, phase: e.s1 * 0.5, fam: P.FAM.SHARD, tier: 'M', color: BRZ }); } },
-        { t: 0.7, fn: function (e) { P.snake(e.x, e.y, DOWN + 0.5, 13, rankSpd(P.SPD.mid), { amp: 48, freq: 0.82, phase: e.s1 * 0.5 + 1.6, fam: P.FAM.SHARD, tier: 'M', color: HOT }); } },
-        { t: 1.3, fn: function (e) { e.s1++; P.snake(e.x, e.y, DOWN, 11, rankSpd(P.SPD.slow), { amp: 60, freq: 0.7, phase: e.s1 * 0.7, fam: P.FAM.SHARD, tier: 'S', color: BRZ }); } },
-        { t: 1.7, fn: function (e) { e.poseT = 0.34; muzzle(e, ACC); } },
-        { t: 2.05, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.22, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+      // IV RAGE OF BRONZE — stones + closing walls layered + an aimed accent (the
+      // mid-fight layering law: two geometries claiming area, one needle threading).
+      { name: 'RAGE OF BRONZE', hp: 0.22, timeout: 36, path: bp_holdCenter, loop: 3.0, script: [
+        pose(BRZ, 0.4),
+        { t: 0.4, fn: function (e) { e.s2++; embrace(e, cfg.holdY + Math.sin(e.s2) * 380, rankSpd(P.SPD.slow) * 0.78); } },
+        { t: 1.2, fn: function (e) { hurl(e, 4, HOT); } },
+        { t: 2.0, fn: function (e) { e.poseT = 0.3; muzzle(e, ACC); } },
+        { t: 2.35, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.24, speed: rankSpd(P.SPD.whip), color: ACC }); } }
       ] },
-      // V Colossus Falls — ringGap terrain (gaps tightening) + arcWall lances + accent,
-      // emitter rushing the rails (signature: two-speed geometry + one aimed).
-      { name: 'COLOSSUS FALLS', hp: 0.24, timeout: 38, path: bp_rails, loop: 3.0, script: [
+      // V THE NAIL — his densest rage (circuit sweeps + boulders) while he lurches
+      // the rails. From here TALOS' body is IMMUNE: only the glowing ankle nail (its
+      // pool = this segment's HP) takes damage. onEnter arms the nail; kill it and
+      // he dies through the normal warden path with an ichor spray (see onDeath).
+      { name: 'THE NAIL', hp: 0.24, timeout: 44, path: bp_rails, loop: 3.0,
+        onEnter: function (e) { e.nailActive = true; e.nailR = 30; e.nailX = e.x; e.nailY = e.y + e.scale * 0.44; },
+        script: [
         pose(BRZ, 0.36),
-        { t: 0.3, fn: function (e) { e.s0 += 0.5; e.s2++; var gw = Math.max(3.8, 5.8 - e.s2 * 0.14); P.ringGap(e.x, e.y, 44, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: gw, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: MAG });
-          P.ringGap(e.x, e.y, 44, rankSpd(P.SPD.slow) + 56, { gaps: 2, gapWidth: gw, offset: e.s0 + 0.09, fam: P.FAM.PELLET, tier: 'S', color: HOT }); } },   // anchor orbs + pellet filler = terrain
-        { t: 1.0, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.8, 30, rankSpd(P.SPD.mid), { laneAt: ((e.s1 % 3) - 1) * 0.24, laneWidth: 6.2, fam: P.FAM.PELLET, tier: 'M', color: HOT }); } },
-        { t: 1.6, fn: function (e) { e.s0 += 0.5; P.ringGap(e.x, e.y, 38, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 4.2, offset: -e.s0 * 1.3, fam: P.FAM.ORB, tier: 'M', color: MAG }); } },   // second terrain volley sustains the slow layer (rotated lane)
-        { t: 2.1, fn: function (e) { e.poseT = 0.32; muzzle(e, ACC); } },
-        { t: 2.4, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 6, { spread: 0.26, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+        { t: 0.3, fn: function (e) { e.s0 += 0.5; P.pulse(e.x, e.y, { rings: 3, count: 18, speed: rankSpd(P.SPD.slow), speedStep: 60, offset: e.s0, colorA: BRZ, colorB: HOT }); } },
+        { t: 1.0, fn: function (e) { hurl(e, 4, HOT); } },
+        { t: 1.7, fn: function (e) { e.s0 += 0.5; P.pulse(e.x, e.y, { rings: 2, count: 16, speed: rankSpd(P.SPD.mid), speedStep: 62, offset: -e.s0, colorA: HOT, colorB: MAG }); } },
+        { t: 2.4, fn: function (e) { e.poseT = 0.3; muzzle(e, ACC); } },
+        { t: 2.7, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.26, speed: rankSpd(P.SPD.whip), color: ACC }); } }
       ] }
     ];
     startBoss(e, phases, cfg);
-    e.onDeath = function () { Run.onWardenKilled(); G.boss = null; bigDeath(e, 60); announce('TALOS FELLED', 'the bronze cools', 2.0); };
+    e.onDeath = function () {
+      Run.onWardenKilled(); G.boss = null;
+      bigDeath(e, 60);
+      // ichor spray — green-gold, the divine blood running out of the pierced nail.
+      var nx = e.nailX || e.x, ny = e.nailY || e.y;
+      for (var i = 0; i < 4; i++) ringShock(nx, ny, [0.55, 1, 0.4], 40 + i * 44, 2200, 0.75);
+      spark(nx, ny, [0.6, 1, 0.42], 70, 560, 44);
+      flash(nx, ny, [0.7, 1, 0.5], 320, 0.5);
+      announce('TALOS FELLED', 'the ichor runs dry', 2.0);
+    };
   }
-  // Sector-2 anchor: AMMIT, devourer of hearts — 6 phases. Tint: bruised magenta,
-  // with a LIME counterpoint on her opening petals (ART.md). She lunges on her
-  // bite phases (The Jaws / Devourer) via the path book.
+  // Sector-2 anchor: AMMIT, devourer of hearts — 6 phases following the Weighing
+  // of the Heart myth: entry rite → the forty-two confessions → the scales (feather
+  // vs heart) → the scales tip → the verdict → the devouring. Tint: bruised
+  // magenta, with a LIME counterpoint on her opening petals (ART.md). She lunges on
+  // her bite phase (The Devouring) via the path book.
   function spawnWarden2(rank) {
     var e = newEnemy(5, W / 2, -160, 5400 * rank, GL.SPR.SHIP_MID, 230, 100, [0.82, 0.28, 0.55], 60, 70000, true); if (!e) return;
     e.name = 'AMMIT';
     announce('AMMIT', 'devourer of hearts', 2.6);
-    var MAG = [0.9, 0.22, 0.5], ROSE = [1.0, 0.3, 0.62], LIME = P.LIME, ACC = [1.0, 0.86, 0.4];
+    var MAG = [0.9, 0.22, 0.5], ROSE = [1.0, 0.3, 0.62], PALE = [1.0, 0.62, 0.78], LIME = P.LIME, ACC = [1.0, 0.86, 0.4];
     var cfg = { holdY: 360, centerX: W / 2, strafe: 260 };
     function pose(col, h) { return { t: 0, fn: function (e) { e.poseT = h || 0.42; muzzle(e, col || MAG); } }; }
     var phases = [
-      // I Scent of Sin — drifting rain curtains + LIME shard petals (rain; the green counterpoint)
-      { name: 'SCENT OF SIN', hp: 0.14, timeout: 30, path: bp_holdCenter, loop: 3.0, script: [
+      // I THE HALL OF TWO TRUTHS — drifting rain curtains + LIME shard petals (rain;
+      // the green counterpoint, held to her opening rite per ART.md).
+      { name: 'THE HALL OF TWO TRUTHS', hp: 0.14, timeout: 30, path: bp_holdCenter, loop: 3.0, script: [
         pose(MAG),
         { t: 0.4, fn: function (e) { e.s0 += 0.6; P.rain(32, { speed: rankSpd(P.SPD.slow), waves: 3, phase: e.s0, gapThresh: 0.05, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } },
         { t: 1.1, fn: function (e) { e.s0 += 0.6; P.rain(32, { speed: rankSpd(P.SPD.slow), waves: 3, phase: e.s0, gapThresh: 0.05, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } },
         { t: 1.9, fn: function (e) { e.poseT = 0.4; muzzle(e, LIME); } },
         { t: 2.3, fn: function (e) { e.s1 += 0.5; P.ring(e.x, e.y, 20, rankSpd(P.SPD.slow), { fam: P.FAM.SHARD, tier: 'M', color: LIME, offset: e.s1, accel: -150, accel2: 130, accelSwitchT: 0.8, minSpeed: 8 }); } }
       ] },
-      // II The Jaws — mirrored crossfire closing like bites; boss lunges (crossfire)
-      { name: 'THE JAWS', hp: 0.15, timeout: 30, path: bp_lunge, loop: 2.4, script: [
+      // II THE FORTY-TWO CONFESSIONS — judgment rings of LITERALLY 42 bullets each,
+      // counter-rotating at stepped speeds so their interleave drifts the safe gaps.
+      { name: 'THE FORTY-TWO CONFESSIONS', hp: 0.15, timeout: 32, path: bp_holdCenter, loop: 2.6, script: [
         pose(MAG),
-        { t: 0.4, fn: function (e) { e.s1++; P.crossfire(220, W - 220, cfg.holdY - 40, 11, rankSpd(P.SPD.mid), { angle: (e.s1 % 2 ? 0.5 : 0.34), spacing: 32, fam: P.FAM.KUNAI, tier: 'M', color: MAG }); } },
-        { t: 1.2, fn: function (e) { e.poseT = 0.36; muzzle(e, ROSE); } },
-        { t: 1.5, fn: function (e) { P.crossfire(220, W - 220, cfg.holdY - 40, 11, rankSpd(P.SPD.mid), { angle: (e.s1 % 2 ? 0.34 : 0.5), spacing: 32, fam: P.FAM.KUNAI, tier: 'M', color: ROSE }); } }
+        { t: 0.5, fn: function (e) { e.s0 += 0.14; P.ring(e.x, e.y, 42, rankSpd(P.SPD.slow), { fam: P.FAM.ORB, tier: 'M', color: MAG, offset: e.s0 }); } },
+        { t: 1.5, fn: function (e) { e.poseT = 0.4; muzzle(e, ROSE); } },
+        { t: 1.9, fn: function (e) { e.s0 += 0.14; P.ring(e.x, e.y, 42, rankSpd(P.SPD.slow) + 52, { fam: P.FAM.RING, tier: 'M', color: ROSE, offset: -e.s0 }); } }
       ] },
-      // III Weighing of the Heart — alternating left/right arcWalls, the scales (arcWall)
-      { name: 'WEIGHING OF THE HEART', hp: 0.16, timeout: 32, path: bp_pendulum, loop: 2.6, script: [
+      // III THE FEATHER AND THE HEART — the scales: a LIGHT/FAST feather wall on one
+      // side vs a HEAVY/SLOW heart wall on the other, alternating sides each rep.
+      { name: 'THE FEATHER AND THE HEART', hp: 0.16, timeout: 32, path: bp_pendulum, loop: 2.6, script: [
         pose(MAG),
-        { t: 0.4, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.6, 24, rankSpd(P.SPD.slow), { laneAt: -0.3, laneWidth: 5.0, fam: P.FAM.PELLET, tier: 'M', color: MAG }); } },
-        { t: 1.2, fn: function (e) { e.poseT = 0.4; muzzle(e, ROSE); } },
-        { t: 1.6, fn: function (e) { P.arcWall(e.x, e.y, DOWN, 1.6, 24, rankSpd(P.SPD.mid), { laneAt: 0.3, laneWidth: 5.0, fam: P.FAM.PELLET, tier: 'M', color: ROSE }); } }
+        { t: 0.4, fn: function (e) { e.s1++; var lft = e.s1 % 2; P.arcWall(e.x, e.y, DOWN, 1.5, 16, rankSpd(P.SPD.fast), { laneAt: lft ? -0.3 : 0.3, laneWidth: 4.6, fam: P.FAM.KUNAI, tier: 'S', color: PALE }); } },   // the feather
+        { t: 1.1, fn: function (e) { e.poseT = 0.4; muzzle(e, ROSE); } },
+        { t: 1.5, fn: function (e) { var lft = e.s1 % 2; P.arcWall(e.x, e.y, DOWN, 1.7, 26, rankSpd(P.SPD.slow), { laneAt: lft ? 0.3 : -0.3, laneWidth: 5.4, fam: P.FAM.ORB, tier: 'L', color: MAG }); } }   // the heart
       ] },
-      // IV Heart-Seekers — pulse orb terrain threaded by aimed seeker bursts (LAYER)
-      { name: 'HEART-SEEKERS', hp: 0.17, timeout: 34, path: bp_holdCenter, loop: 2.6, script: [
+      // IV THE SCALES TIP — the balance breaks: the heart side crushes DOWN heavier
+      // each rep (escalating count), the feather stays light; an aimed accent threads.
+      { name: 'THE SCALES TIP', hp: 0.17, timeout: 34, path: bp_pendulum, loop: 2.8, script: [
+        pose(MAG, 0.4),
+        { t: 0.4, fn: function (e) { e.s2++; var heavy = Math.min(36, 22 + e.s2 * 2); P.arcWall(e.x, e.y, DOWN, 1.8, heavy, rankSpd(P.SPD.slow), { laneAt: 0.32, laneWidth: 5.2, fam: P.FAM.ORB, tier: 'L', color: MAG }); } },
+        { t: 1.0, fn: function (e) { P.arcWall(e.x, e.y, DOWN, 1.3, 12, rankSpd(P.SPD.fast), { laneAt: -0.3, laneWidth: 4.4, fam: P.FAM.KUNAI, tier: 'S', color: PALE }); } },
+        { t: 1.7, fn: function (e) { e.poseT = 0.32; muzzle(e, ACC); } },
+        { t: 2.0, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.22, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+      ] },
+      // V THE VERDICT — heart-seeker aimed accents threading a pulse orb terrain (LAYER).
+      { name: 'THE VERDICT', hp: 0.18, timeout: 34, path: bp_holdCenter, loop: 2.6, script: [
         pose(MAG),
         { t: 0.3, fn: function (e) { e.s0 += 0.35; P.pulse(e.x, e.y, { rings: 3, count: 22, speed: rankSpd(P.SPD.slow), speedStep: 55, offset: e.s0, colorA: MAG, colorB: ROSE }); } },
         { t: 1.0, fn: function (e) { e.s0 += 0.35; P.pulse(e.x, e.y, { rings: 2, count: 18, speed: rankSpd(P.SPD.slow), speedStep: 60, offset: -e.s0, colorA: ROSE, colorB: MAG }); } },
         { t: 1.6, fn: function (e) { e.poseT = 0.34; muzzle(e, ACC); } },
         { t: 1.95, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 6, { spread: 0.2, speed: rankSpd(P.SPD.whip), color: ACC }); } }
       ] },
-      // V Devourer — rotating ringGap terrain + seekers, lunging between bites (LAYER)
-      { name: 'DEVOURER', hp: 0.18, timeout: 36, path: bp_lunge, loop: 2.8, script: [
-        pose(MAG),
-        { t: 0.3, fn: function (e) { e.s0 += 0.55; P.ringGap(e.x, e.y, 32, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 4.0, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: MAG });
-          P.ringGap(e.x, e.y, 32, rankSpd(P.SPD.slow) + 60, { gaps: 2, gapWidth: 4.0, offset: e.s0 + 0.1, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } },   // pellet filler
-        { t: 1.0, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 28, rankSpd(P.SPD.mid), { gaps: 2, gapWidth: 3.6, offset: -e.s0, fam: P.FAM.ORB, tier: 'M', color: ROSE }); } },
-        { t: 1.6, fn: function (e) { e.poseT = 0.34; muzzle(e, ACC); } },
-        { t: 1.95, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 6, { spread: 0.24, speed: rankSpd(P.SPD.whip), color: ACC }); } }
-      ] },
-      // VI The Second Death — everything at once, one drifting lane (snake + ringGap + accent)
-      { name: 'THE SECOND DEATH', hp: 0.20, timeout: 40, path: bp_rails, loop: 3.0, script: [
+      // VI THE DEVOURING — the jaws crossfire close like bites, one drifting lane
+      // through them, boss lunging between (final; everything at once).
+      { name: 'THE DEVOURING', hp: 0.20, timeout: 40, path: bp_lunge, loop: 2.8, script: [
         pose(MAG, 0.36),
-        { t: 0.3, fn: function (e) { e.s2++; P.snake(e.x, e.y, DOWN - 0.4, 16, rankSpd(P.SPD.mid), { amp: 46, freq: 0.85, phase: e.s2 * 0.5, fam: P.FAM.SHARD, tier: 'M', color: MAG }); } },
-        { t: 0.6, fn: function (e) { P.snake(e.x, e.y, DOWN + 0.4, 16, rankSpd(P.SPD.mid), { amp: 46, freq: 0.85, phase: e.s2 * 0.5 + 1.6, fam: P.FAM.SHARD, tier: 'M', color: ROSE }); } },
-        { t: 1.1, fn: function (e) { e.s0 += 0.5; P.ringGap(e.x, e.y, 46, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 5.4, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: MAG });
-          P.ringGap(e.x, e.y, 46, rankSpd(P.SPD.slow) + 54, { gaps: 2, gapWidth: 5.4, offset: e.s0 + 0.1, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } },   // anchor orbs + pellet filler
-        { t: 1.7, fn: function (e) { e.s0 += 0.5; P.ringGap(e.x, e.y, 38, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 4.6, offset: -e.s0 * 1.3, fam: P.FAM.ORB, tier: 'M', color: MAG }); } },   // second terrain volley (the drifting lane)
-        { t: 2.2, fn: function (e) { e.poseT = 0.32; muzzle(e, ACC); } },
-        { t: 2.5, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 7, { spread: 0.26, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+        { t: 0.35, fn: function (e) { e.s1++; P.crossfire(200, W - 200, cfg.holdY - 40, 12, rankSpd(P.SPD.mid), { angle: (e.s1 % 2 ? 0.5 : 0.34), spacing: 32, fam: P.FAM.KUNAI, tier: 'M', color: MAG }); } },
+        { t: 1.0, fn: function (e) { e.s0 += 0.5; P.ringGap(e.x, e.y, 40, rankSpd(P.SPD.slow), { gaps: 1, gapWidth: 6.0, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: ROSE }); } },   // the one drifting lane
+        { t: 1.5, fn: function (e) { P.crossfire(200, W - 200, cfg.holdY - 40, 12, rankSpd(P.SPD.mid), { angle: (e.s1 % 2 ? 0.34 : 0.5), spacing: 32, fam: P.FAM.KUNAI, tier: 'M', color: ROSE }); } },
+        { t: 2.1, fn: function (e) { e.poseT = 0.32; muzzle(e, ACC); } },
+        { t: 2.4, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 6, { spread: 0.26, speed: rankSpd(P.SPD.whip), color: ACC }); } }
       ] }
     ];
     startBoss(e, phases, cfg);
     e.onDeath = function () { Run.onWardenKilled(); G.boss = null; bigDeath(e, 90); announce('AMMIT DEVOURED', 'the scales balance', 2.2); };
   }
-  // Sector-3 anchor: GILDED SOVEREIGN — the run's finale, 6 phases of gold-lattice
-  // identity (interleaved ringGap lanes, gold rain, wheel spokes, an edict-wall
-  // and pulse regalia, then a full-screen finale with one readable path). Enemy
-  // fire stays in the warm band — a hot amber/rose, NOT loot-gold (a threat must
-  // never read as pickup gold, ART.md); the regalia read comes from the body tint.
+  // Sector-3 anchor: MIDAS, the gilded king — the run's finale, 6 phases telling
+  // his fall (the golden touch → tribute → the gilded court → the feast that turns
+  // to ash → drowned in his own gold → the beggar king's last stand). The internal
+  // function + Game.bosses key stay legacy-named ('sovereign' / spawnBoss) so old
+  // wiring survives; everything player-facing says MIDAS. Enemy fire stays warm —
+  // hot amber/rose, NOT loot-gold (a threat must never read as pickup gold, ART.md).
+  // Two fight-long mechanics ride on e.isMidas: GOLD THEFT (updateGold vacuums loot
+  // into his hoard, spilled as a jackpot on death) and CURSED GOLD (converting his
+  // fire — apotheosis + phase cancels — spawns gilding coins).
   function spawnBoss(rank) {
     var e = newEnemy(6, W / 2, -260, 23000 * rank, GL.SPR.SHIP_BOSS, 300, 130, [1, 0.5, 0.28], 90, 200000, true); if (!e) return;
-    e.name = 'GILDED SOVEREIGN';
-    announce('GILDED SOVEREIGN', 'final guardian', 3.0);
+    e.name = 'MIDAS';
+    e.isMidas = true; e.hoard = 0; e.hoardBank = 0; e.hoardCount = 0;
+    announce('MIDAS', 'the gilded king', 3.0);
     var AMB = [1.0, 0.58, 0.2], ROSE = [1.0, 0.32, 0.55], MAG = P.MAGENTA, ACC = [1.0, 0.86, 0.4];
     var cfg = { holdY: 420, centerX: W / 2, strafe: 260 };
     function pose(col, h) { return { t: 0, fn: function (e) { e.poseT = h || 0.44; muzzle(e, col || AMB); } }; }
     var phases = [
-      // I Coronation — interleaved ringGap lattice whose gaps spell a drifting lane (ringGap)
-      { name: 'CORONATION', hp: 0.14, timeout: 32, path: bp_holdCenter, loop: 2.8, script: [
+      // I THE GOLDEN TOUCH — the lattice forms; his bullets leave brief gilded trails
+      // (gild:true — updateBullets streaks a fading gold mote behind each).
+      { name: 'THE GOLDEN TOUCH', hp: 0.14, timeout: 32, path: bp_holdCenter, loop: 2.8, script: [
         pose(AMB),
-        { t: 0.4, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 34, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 4.2, offset: e.s0, fam: P.FAM.ORB, tier: 'M', color: AMB }); } },
-        { t: 1.0, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 34, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 4.2, offset: e.s0 + 0.2, fam: P.FAM.RING, tier: 'M', color: ROSE }); } },
-        { t: 1.7, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 34, rankSpd(P.SPD.mid), { gaps: 2, gapWidth: 4.2, offset: e.s0 + 0.4, fam: P.FAM.ORB, tier: 'S', color: AMB }); } }
+        { t: 0.4, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 34, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 4.2, offset: e.s0, fam: P.FAM.ORB, tier: 'M', color: AMB, gild: true }); } },
+        { t: 1.0, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 34, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 4.2, offset: e.s0 + 0.2, fam: P.FAM.RING, tier: 'M', color: ROSE, gild: true }); } },
+        { t: 1.7, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 34, rankSpd(P.SPD.mid), { gaps: 2, gapWidth: 4.2, offset: e.s0 + 0.4, fam: P.FAM.ORB, tier: 'S', color: AMB, gild: true }); } }
       ] },
-      // II Tribute of Gold — drifting rain curtains, two speeds (rain)
-      { name: 'TRIBUTE OF GOLD', hp: 0.15, timeout: 32, path: bp_pendulum, loop: 2.6, script: [
+      // II THE TRIBUTE — rising walls (edict arcWalls) + gold rain, two speeds.
+      { name: 'THE TRIBUTE', hp: 0.15, timeout: 32, path: bp_pendulum, loop: 2.6, script: [
         pose(AMB),
-        { t: 0.4, fn: function (e) { e.s0 += 0.7; P.rain(36, { speed: rankSpd(P.SPD.slow), waves: 4, phase: e.s0, gapThresh: 0.02, fam: P.FAM.PELLET, tier: 'S', color: AMB }); } },
+        { t: 0.4, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.8, 26, rankSpd(P.SPD.slow), { laneAt: (e.s1 % 2 ? -0.26 : 0.26), laneWidth: 5.2, fam: P.FAM.PELLET, tier: 'M', color: AMB }); } },
         { t: 1.0, fn: function (e) { e.s0 += 0.7; P.rain(36, { speed: rankSpd(P.SPD.mid), waves: 4, phase: -e.s0, gapThresh: 0.02, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } }
       ] },
-      // III Wheel of Thrones — rotating spoke wheel + aimed accent, orbiting core (LAYER)
-      { name: 'WHEEL OF THRONES', hp: 0.16, timeout: 34, path: bp_orbit, loop: 2.4, script: [
+      // III THE GILDED COURT — the full lattice with a rotating wheel + aimed accent (LAYER).
+      { name: 'THE GILDED COURT', hp: 0.16, timeout: 34, path: bp_orbit, loop: 2.4, script: [
         pose(AMB),
         { t: 0.35, fn: function (e) { e.s0 += 0.5; P.wheel(e.x, e.y, e.s0, 26, rankSpd(P.SPD.slow), { gapEvery: 6, fam: P.FAM.ORB, tier: 'M', color: AMB }); } },
-        { t: 1.0, fn: function (e) { e.s0 += 0.5; P.wheel(e.x, e.y, e.s0, 26, rankSpd(P.SPD.mid), { gapEvery: 6, fam: P.FAM.ORB, tier: 'S', color: ROSE }); } },
+        { t: 0.9, fn: function (e) { e.s0 += 0.3; P.ringGap(e.x, e.y, 34, rankSpd(P.SPD.slow) + 46, { gaps: 2, gapWidth: 4.4, offset: e.s0, fam: P.FAM.RING, tier: 'M', color: ROSE }); } },
         { t: 1.6, fn: function (e) { e.poseT = 0.34; muzzle(e, ACC); } },
         { t: 1.95, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 6, { spread: 0.2, speed: rankSpd(P.SPD.whip), color: ACC }); } }
       ] },
-      // IV Edict Walls — alternating arcWall edicts + aimed accent (LAYER)
-      { name: 'EDICT WALLS', hp: 0.16, timeout: 34, path: bp_pendulum, loop: 2.6, script: [
-        pose(AMB),
-        { t: 0.35, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.8, 26, rankSpd(P.SPD.slow), { laneAt: (e.s1 % 2 ? -0.26 : 0.26), laneWidth: 5.2, fam: P.FAM.PELLET, tier: 'M', color: AMB }); } },
-        { t: 1.0, fn: function (e) { P.arcWall(e.x, e.y, DOWN, 1.5, 18, rankSpd(P.SPD.mid), { laneAt: (e.s1 % 2 ? 0.26 : -0.26), laneWidth: 5.1, fam: P.FAM.ORB, tier: 'S', color: ROSE }); } },
-        { t: 1.7, fn: function (e) { e.poseT = 0.32; muzzle(e, ACC); } },
-        { t: 2.05, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 6, { spread: 0.22, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+      // IV THE FEAST OF ASH — hungry desperation: faster, snatching aimed patterns,
+      // lunging between casts (bp_lunge; two aimed-adjacent accents at speed).
+      { name: 'THE FEAST OF ASH', hp: 0.17, timeout: 34, path: bp_lunge, loop: 2.6, script: [
+        pose(ROSE, 0.36),
+        { t: 0.35, fn: function (e) { e.s0 += 0.5; P.ringGap(e.x, e.y, 30, rankSpd(P.SPD.mid), { gaps: 2, gapWidth: 3.8, offset: e.s0, fam: P.FAM.ORB, tier: 'M', color: AMB }); } },
+        { t: 1.0, fn: function (e) { e.poseT = 0.28; muzzle(e, ACC); } },
+        { t: 1.25, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.24, speed: rankSpd(P.SPD.whip), color: ACC }); } },
+        { t: 1.9, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 5, { spread: 0.5, speed: rankSpd(P.SPD.fast), color: ROSE }); } }
       ] },
-      // V Regalia — concentric pulse terrain + aimed seekers, rushing the rails (LAYER)
-      { name: 'REGALIA', hp: 0.17, timeout: 36, path: bp_rails, loop: 2.7, script: [
-        pose(AMB),
-        { t: 0.35, fn: function (e) { e.s0 += 0.32; P.pulse(e.x, e.y, { rings: 3, count: 24, speed: rankSpd(P.SPD.slow), speedStep: 56, offset: e.s0, colorA: AMB, colorB: ROSE }); } },
-        { t: 1.1, fn: function (e) { e.s0 += 0.32; P.pulse(e.x, e.y, { rings: 2, count: 22, speed: rankSpd(P.SPD.slow), speedStep: 62, offset: -e.s0, colorA: ROSE, colorB: MAG }); } },
-        { t: 1.7, fn: function (e) { e.poseT = 0.32; muzzle(e, ACC); } },
-        { t: 2.05, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 7, { spread: 0.24, speed: rankSpd(P.SPD.whip), color: ACC }); } }
-      ] },
-      // VI The Gilded Verdict — full-screen finale lattice with one readable path
-      // (snake + ringGap two-speed geometry + one aimed accent; max articulation).
-      { name: 'THE GILDED VERDICT', hp: 0.22, timeout: 42, path: bp_rails, loop: 3.0, script: [
-        pose(AMB, 0.36),
+      // V DROWNED IN GOLD — the density crescendo: two-speed snake + full lattice +
+      // rain, the wealth itself the threat (the densest screen in the game).
+      { name: 'DROWNED IN GOLD', hp: 0.18, timeout: 38, path: bp_rails, loop: 3.0, script: [
+        pose(AMB, 0.34),
         { t: 0.3, fn: function (e) { e.s2++; P.snake(e.x, e.y, DOWN - 0.35, 18, rankSpd(P.SPD.mid), { amp: 44, freq: 0.8, phase: e.s2 * 0.5, fam: P.FAM.SHARD, tier: 'M', color: AMB }); } },
         { t: 0.6, fn: function (e) { P.snake(e.x, e.y, DOWN + 0.35, 18, rankSpd(P.SPD.mid), { amp: 44, freq: 0.8, phase: e.s2 * 0.5 + 1.6, fam: P.FAM.SHARD, tier: 'M', color: ROSE }); } },
-        { t: 1.0, fn: function (e) { e.s0 += 0.45; P.ringGap(e.x, e.y, 52, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 6.6, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: MAG });
+        { t: 1.1, fn: function (e) { e.s0 += 0.45; P.ringGap(e.x, e.y, 52, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 6.6, offset: e.s0, fam: P.FAM.ORB, tier: 'L', color: MAG });
           P.ringGap(e.x, e.y, 52, rankSpd(P.SPD.slow) + 58, { gaps: 2, gapWidth: 6.6, offset: e.s0 + 0.09, fam: P.FAM.PELLET, tier: 'S', color: AMB }); } },   // anchor orbs + full-lattice pellet filler
-        { t: 1.6, fn: function (e) { e.s0 += 0.45; P.ringGap(e.x, e.y, 44, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 5.4, offset: -e.s0 * 1.2, fam: P.FAM.RING, tier: 'M', color: ROSE }); } },   // second terrain layer — the densest screen in the game
+        { t: 1.7, fn: function (e) { e.s0 += 0.4; P.rain(30, { speed: rankSpd(P.SPD.slow), waves: 4, phase: e.s0, gapThresh: 0.04, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } },
         { t: 2.2, fn: function (e) { e.poseT = 0.3; muzzle(e, ACC); } },
         { t: 2.5, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 8, { spread: 0.3, speed: rankSpd(P.SPD.whip), color: ACC }); } }
+      ] },
+      // VI THE BEGGAR KING — stripped raw: fastest, sparsest-but-meanest, his final
+      // stand (few bullets, whip speed, precise aimed threading — no walls to hide behind).
+      { name: 'THE BEGGAR KING', hp: 0.20, timeout: 42, path: bp_rails, loop: 2.4, script: [
+        pose(MAG, 0.3),
+        { t: 0.3, fn: function (e) { e.s0 += 0.6; P.ringGap(e.x, e.y, 20, rankSpd(P.SPD.fast), { gaps: 1, gapWidth: 3.0, offset: e.s0, fam: P.FAM.ORB, tier: 'M', color: MAG }); } },
+        { t: 0.9, fn: function (e) { e.poseT = 0.26; muzzle(e, ACC); } },
+        { t: 1.15, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 3, { spread: 0.12, speed: rankSpd(P.SPD.whip) + 60, color: ACC }); } },
+        { t: 1.7, fn: function (e) { P.burstAimed(e.x, e.y, AIMX(e), AIMY(e), 3, { spread: 0.12, speed: rankSpd(P.SPD.whip) + 60, color: ROSE }); } }
       ] }
     ];
     startBoss(e, phases, cfg);
     e.onDeath = function () {
+      var hv = e.hoard, hb = e.hoardBank || 0; G._lastHoard = hv;   // capture before we drop the ref (test surface)
       G.boss = null;
-      for (var i = 0; i < 90; i++) spawnGold(e.x, e.y, 1, 1.4);
+      // GOLD THEFT payoff: the hoard ERUPTS back onto the field — a jackpot vacuum
+      // reversal, the FULL stolen value spread wide for a satisfying re-collect.
+      // The old flat +90 celebration coins (~1.4 each) fold into this same budget.
+      // Distribute the TOTAL across a coin count capped under the pool's headroom
+      // (never above freeTop) with per-coin = total/N and the remainder on the last
+      // coin — so spawnGold can never return null mid-spill and silently short the
+      // payout. Banked premium (wallet units) rides its own per-coin share.
+      var total = hv + 126;                                   // 126 ≈ the old 90 × 1.4 bonus
+      var N = Math.min(150, Engine.gold.freeTop, Math.max(24, Math.round(total * 4)));
+      if (N > 0) {
+        var perV = total / N, perB = Math.floor(hb / N);
+        for (var j = 0; j < N; j++) {
+          var last = (j === N - 1);
+          spawnGold(e.x, e.y, 1, last ? (total - perV * (N - 1)) : perV, last ? (hb - perB * (N - 1)) : perB, 5.5);
+        }
+        if (hv > 0) addPopup(W / 2, H * 0.34, 'THE HOARD SPILLS', UI_GOLD, 40);
+      }
       bigDeath(e, 160);
-      announce('SOVEREIGN FELLED', 'run complete', 3.4);
+      announce('MIDAS UNMADE', 'the gold runs out', 3.4);
       var _clearGain = addScore(500000 * G.mult);
       addPopup(W / 2, H * 0.4, 'CLEAR BONUS  +' + commas(_clearGain), UI_GOLD, 48);   // post-HUBRIS (fix #3)
     };
@@ -3144,12 +3291,24 @@
     Engine.bullets.forEach(function (b) {
       Engine.updateBullet(b, dt);
       if (b.x < -90 || b.x > W + 90 || b.y < -90 || b.y > H + 120 || b.life <= 0) { Engine.bullets.release(b); return; }
-      // Loki flipped (friendly) bullets: hit enemies, ignore the player
+      // TALOS HURLED STONES: an XL boulder bursts into pellet shrapnel at its depth
+      // line (the shrapnel inherits the boulder's warm tint). Released after bursting.
+      if (b.burstY && b.y >= b.burstY) {
+        Patterns.ring(b.x, b.y, 10, 210, { fam: Patterns.FAM.PELLET, tier: 'S', color: [b.r, b.g, b.b] });
+        flash(b.x, b.y, [1, 0.7, 0.3], 46, 0.2); spark(b.x, b.y, [b.r, b.g, b.b], 8, 260, 22);
+        Engine.bullets.release(b); return;
+      }
+      // MIDAS THE GOLDEN TOUCH: gilded trail — a sparse fading gold mote behind the
+      // bullet (staggered by slot + time so the particle pool never floods).
+      if (b.gild && ((((G.time * 60) | 0) + b._i) & 3) === 0) flash(b.x, b.y, [1, 0.8, 0.34], 15, 0.14);
+      // Loki flipped (friendly) bullets: hit enemies, ignore the player. During a
+      // TALOS nail phase they may only damage the nail (the body is immune).
       if (b.friendly) {
         var hitF = false;
         Engine.enemies.forEach(function (e) {
           if (hitF || e.dying || e.charmed || e._i === b.srcId) return;
-          if (Engine.hit(b.x, b.y, b.radius, e.x, e.y, e.radius)) { damageEnemy(e, flipDmg, false); if (G.mods.lokiVaunt) addGauge(0.6); spark(b.x, b.y, [0.5, 1, 0.35], 3, 180, 16); hitF = true; }
+          var tx = e.nailActive ? e.nailX : e.x, ty = e.nailActive ? e.nailY : e.y, tr = e.nailActive ? e.nailR : e.radius;
+          if (Engine.hit(b.x, b.y, b.radius, tx, ty, tr)) { damageEnemy(e, flipDmg, false); if (G.mods.lokiVaunt) addGauge(0.6); spark(b.x, b.y, [0.5, 1, 0.35], 3, 180, 16); hitF = true; }
         });
         if (hitF) Engine.bullets.release(b);
         return;
@@ -3231,6 +3390,22 @@
       var maxHits = s.pierce + 1, hits = 0, done = false;
       Engine.enemies.forEach(function (e) {
         if (done || e.dying || e.charmed) return;
+        // TALOS THE NAIL: the body is immune — only the small nail hitbox (his ankle
+        // weak point) drains the segment. A body hit still counts against the shot's
+        // pierce budget (no free pass-through) but deals 0 damage with dim feedback.
+        // This is the ONLY spatial special-case; every non-shot damage source (riders,
+        // hazards, chain, burn) routes to the nail pool through damageEnemy = e.hp.
+        if (e.nailActive) {
+          if (Engine.hit(s.x, s.y, s.radius, e.nailX, e.nailY, e.nailR)) {
+            hitEnemy(s, e);
+            flash(s.x, s.y, [0.6, 1, 0.55], 26, 0.1);
+            hits++; if (hits >= maxHits) done = true;
+          } else if (Engine.hit(s.x, s.y, s.radius, e.x, e.y, e.radius)) {
+            spark(s.x, s.y, [1, 0.82, 0.4], 1, 120, 10);   // dim clank: it did nothing
+            hits++; if (hits >= maxHits) done = true;
+          }
+          return;
+        }
         if (Engine.hit(s.x, s.y, s.radius, e.x, e.y, e.radius)) {
           hitEnemy(s, e);
           flash(s.x, s.y, s.faction === 2 ? [1, 0.5, 0.85] : [0.7, 1, 1], 26, 0.1);
@@ -3330,7 +3505,57 @@
     setPost: function (bloom, chroma) { if (bloom != null) { G.bloom = G.bloomTarget = bloom; } if (chroma != null) { G.chroma = G.chromaTarget = chroma; } },  // headless: preview at combat bloom
     setMode: function (m) { G.mode = m; },   // headless: force render mode
     simTime: function () { return G.time; },
-    shakeMag: function () { return G.shakeMag; }
+    shakeMag: function () { return G.shakeMag; },
+    // ---- boss-concept rework verify surface (zero cost unless called) ----
+    bossName: function () { return G.boss ? G.boss.name : ''; },
+    bossPhase: function () { return G.boss ? G.boss.phase : -1; },
+    bossHp: function () { return G.boss ? G.boss.hp : 0; },
+    bossMaxHp: function () { return G.boss ? G.boss.maxhp : 0; },
+    bossArrived: function () { return !!(G.boss && G.boss.arrived); },
+    bossBreath: function () { return G.boss ? G.boss.breathT : 0; },
+    nailActive: function () { return !!(G.boss && G.boss.nailActive); },
+    nailPos: function () { return G.boss ? { x: G.boss.nailX, y: G.boss.nailY, r: G.boss.nailR } : null; },
+    hoard: function () { return G.boss ? G.boss.hoard : (G._lastHoard || 0); },
+    hoardCount: function () { return G.boss ? G.boss.hoardCount : 0; },
+    freezeT: function () { return G.freeze.t; },
+    graceT: function () { return G.freeze.graceT; },
+    fieldGoldValue: function () { var s = 0; Engine.gold.forEach(function (g) { s += g.value * (g.cursed ? 2 : 1); }); return s; },
+    fieldGoldCount: function () { return Engine.gold.count(); },
+    cursedCount: function () { var n = 0; Engine.gold.forEach(function (g) { if (g.cursed) n++; }); return n; },
+    spawnFieldGold: function (x, y, val, cursed, bank) { spawnGold(x, y, 1, val == null ? 1 : val, bank || 0, 30, cursed); },
+    bulletCount: function () { return Engine.bullets.count(); },
+    // drop one player-faction shot at (x,y) heading up — lets the harness fire at
+    // the nail vs the body and confirm the routing (body=0, nail drains) via collideShots.
+    testShot: function (x, y, dmg) {
+      var s = Engine.shots.alloc(); if (!s) return;
+      s.x = x; s.y = y; s.vx = 0; s.vy = -1200; s.radius = 12; s.damage = dmg || 1000; s.faction = 0;
+      s.pierce = 0; s.kind = 0; s.crescent = false; s.cloneShot = false; s.markHit = false; s.forceCrit = 0; s.homing = false; s.big = false; s.age = 0; s.life = 2.5;
+    },
+    // hurry the boss to its next phase (sets hp to the segment floor = a damage-beat).
+    advancePhase: function () { var b = G.boss; if (b && b.arrived && b.breathT <= 0) { b.hp = b.segFloorHp; b.phaseT = 9999; } },
+    // ---- boss-FIX verify surface (freeze / theft / nail / jackpot / HUD) -----
+    // Drive fixed combat steps DIRECTLY (bypasses the RAF wrapper's pause/hitstop
+    // gating) then flush input edges like a real frame. Deterministic for headless.
+    step: function (n) { n = n || 1; for (var i = 0; i < n; i++) { Engine.time += Engine.DT; updateCombat(Engine.DT); } Engine.flushEdges(); },
+    spawnMidas: function () { Game.beginBoss(Game.bosses.sovereign, 1); return G.boss ? G.boss._i : -1; },
+    spawnTalos: function () { Game.beginBoss(Game.bosses.warden, 1); return G.boss ? G.boss._i : -1; },
+    arriveBoss: function (y) { var b = G.boss; if (b) { b.arrived = true; b.breathT = 0; if (y != null) b.y = y; } },
+    armNail: function () { var b = G.boss; if (b) { b.nailActive = true; b.nailR = 30; b.nailX = b.x; b.nailY = b.y + b.scale * 0.44; } },
+    fireEdict: function () { fireEdict(); },
+    setPlayer: function (x, y) { G.player.x = x; G.player.y = y; },
+    playerPos: function () { return { x: G.player.x, y: G.player.y }; },
+    invuln: function () { return G.player.invuln; },
+    setCharge: function (n) { G.sp.charge = n; },
+    spCharge: function () { return G.sp.charge; },
+    fillGauge: function () { G.vaunt.gauge = GAUGE_MAX; G.vaunt.ready = true; },
+    vauntActive: function () { return !!G.vaunt.active; },
+    setHoard: function (v, b) { if (G.boss) { G.boss.hoard = v; G.boss.hoardBank = b || 0; } },
+    hoardBank: function () { return G.boss ? G.boss.hoardBank : (G._lastHoardBank || 0); },
+    triggerBossDeath: function () { var b = G.boss; if (b && b.onDeath) { b.dying = true; G._lastHoardBank = b.hoardBank || 0; b.onDeath(b); } },
+    freeTop: function () { return Engine.gold.freeTop; },
+    fieldGoldBank: function () { var s = 0; Engine.gold.forEach(function (g) { s += (g.bank || 0); }); return s; },
+    setHi: function (v) { Run.meta.hi = v; },                      // headless: fake a wide HI for the HUD collision check
+    dashActive: function () { return G.dash.active; }
   };
 
   function detectClear() {
@@ -3359,8 +3584,14 @@
   // ---------------------------------------------------------------------
   function updateCombat(dt) {
     G.time += dt;
-    if (Engine.pressed('KeyX')) doSpecial();
-    if (Engine.pressed('KeyC')) tryVaunt();
+    // CURSED-GOLD gild suppresses action inputs: a golden statue can't SPECIAL
+    // (its recoil would even shove the frozen body) or APOTHEOSIS. Read the edge
+    // first so it's consumed-and-discarded — a press mid-freeze can't buffer onto
+    // the unfreeze frame. (updateCombat runs every step; only updatePlayer early-
+    // returns on freeze, so without this the inputs fire straight through.)
+    var _gilded = G.freeze.t > 0;
+    if (Engine.pressed('KeyX') && !_gilded) doSpecial();
+    if (Engine.pressed('KeyC') && !_gilded) tryVaunt();
     updateBackground(dt);
     updateTimers(dt);
     updateSpecial(dt);
@@ -3853,6 +4084,16 @@
   function drawGold() {
     Engine.gold.forEach(function (g) {
       var fade = g.age > g.life - 1.5 ? Math.max(0, (g.life - g.age) / 1.5) : 1;
+      if (g.cursed) {
+        // CURSED GOLD — must read at a glance vs normal loot: a brighter gilded
+        // shimmer + a pulsing warm DANGER rim (the greed trap made visible).
+        var cp = 0.55 + 0.45 * Math.sin(G.time * 9 + g.rot);
+        GL.draw(GL.SPR.GLOW, g.x, g.y, g.scale * 2.8, g.scale * 2.8, 0, 1, 0.72, 0.2, 0.55 * fade);
+        GL.draw(GL.SPR.RING, g.x, g.y, g.scale * 2.2, g.scale * 2.2, G.time * 3, 1, 0.42, 0.2, (0.45 + 0.4 * cp) * fade);   // warm danger rim
+        GL.draw(GL.SPR.GOLD, g.x, g.y, g.scale * 1.15, g.scale * 1.4, g.rot, 1, 0.86, 0.34, fade);
+        GL.draw(GL.SPR.CORE, g.x, g.y, g.scale * 0.55, g.scale * 0.55, 0, 1, 1, 0.85, (0.6 + 0.4 * cp) * fade);
+        return;
+      }
       GL.draw(GL.SPR.GLOW, g.x, g.y, g.scale * 2.2, g.scale * 2.2, 0, 1, 0.7, 0.2, 0.5 * fade);
       GL.draw(GL.SPR.GOLD, g.x, g.y, g.scale, g.scale * 1.2, g.rot, 1, 0.85, 0.35, fade);
       GL.draw(GL.SPR.GOLD, g.x, g.y, g.scale * 0.5, g.scale * 0.6, g.rot, 1, 1, 0.9, fade);
@@ -3867,6 +4108,15 @@
       GL.draw(GL.SPR.GLOW, e.x, e.y, e.scale * 1.5, e.scale * 1.5, 0, er, eg, eb, e.boss ? 0.5 : 0.35);
       GL.draw(e.spr, e.x, e.y, e.scale, e.scale, e.rot, r, g, bl, 1);
       if (e.boss) GL.draw(e.spr, e.x, e.y, e.scale * 0.6, e.scale * 0.6, e.rot, 1, 1, 1, 0.4 + 0.2 * Math.sin(G.time * 4));
+      // TALOS THE NAIL — the glowing ankle weak point (the only thing that can be
+      // hurt in the final phase): a green-gold ichor node, pulsing so it reads.
+      if (e.nailActive) {
+        var np = 0.6 + 0.4 * Math.sin(G.time * 8);
+        GL.draw(GL.SPR.GLOW, e.nailX, e.nailY, 78, 78, 0, 0.7, 1, 0.45, 0.5 * np);
+        GL.draw(GL.SPR.NEEDLE, e.nailX, e.nailY, 22, 50, 0, 1, 0.95, 0.6, 0.95);
+        GL.draw(GL.SPR.CORE, e.nailX, e.nailY, 24, 24, 0, 0.7, 1, 0.5, 0.7 + 0.3 * np);
+        GL.draw(GL.SPR.RING, e.nailX, e.nailY, 58, 58, G.time * 3, 0.6, 1, 0.5, 0.75);
+      }
       // elite aura rings
       if (e.aura === 'gilded') GL.draw(GL.SPR.RING, e.x, e.y, e.scale * 1.7, e.scale * 1.7, G.time * 1.5, 1, 0.82, 0.3, 0.8);
       else if (e.aura === 'bulwark') GL.draw(GL.SPR.RING, e.x, e.y, e.scale * 1.7, e.scale * 1.7, 0, 0.4, 0.8, 1, 0.7);
@@ -3975,6 +4225,16 @@
     var p = G.player;
     var dim = (p.invuln > 0 && Math.floor(p.blink * 20) % 2 === 0) ? 0.35 : 1;
     var kick = p.recoil > 0 ? p.recoil * 60 : 0;
+    // CURSED-GOLD gild: a gold statue. Render the ship in solid gold with a
+    // shimmer ring so the freeze reads at a glance (no blink; it's frozen, not hit).
+    if (G.freeze.t > 0) {
+      GL.draw(GL.SPR.GLOW, p.x, p.y, 120, 120, 0, 1, 0.78, 0.28, 0.55);
+      GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, 104, 104, 0, 1, 0.82, 0.32, 1);
+      GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, 62, 62, 0, 1, 0.92, 0.55, 0.9);
+      GL.draw(GL.SPR.RING, p.x, p.y, 96, 96, G.time * 1.5, 1, 0.85, 0.4, 0.6 + 0.3 * Math.sin(G.time * 12));
+      GL.draw(GL.SPR.CORE, p.x, p.y, 13, 13, 0, 1, 0.95, 0.7, 1);
+      return;
+    }
     // Ship visual ~100px (a presence). Hitbox is UNCHANGED and tiny (PLAYER_R=4)
     // — the bright core gem below is drawn separately so the player learns what
     // actually collides.
@@ -4128,8 +4388,18 @@
         var tx = x + w * (1 - bounds[i]);
         hud.beginPath(); hud.moveTo(tx, by - 2); hud.lineTo(tx, by + h + 2); hud.stroke();
       }
-      hud.textAlign = 'right'; hud.font = '700 20px Consolas, monospace'; hud.fillStyle = UI_CYAN;
-      hud.fillText('PHASE ' + (e.phase + 1) + '/' + bounds.length, x + w, by - 8);
+      // PHASE counter sits at the bar's LEFT edge, BELOW it — clear of the top-right
+      // HI/score block, which it used to overlap once HI grew to 7+ digits.
+      hud.textAlign = 'left'; hud.font = '700 20px Consolas, monospace'; hud.fillStyle = UI_CYAN;
+      hud.fillText('PHASE ' + (e.phase + 1) + '/' + bounds.length, x, by + h + 26);
+    }
+    // MIDAS GOLD-THEFT hoard readout — a small gold-tinted counter; the eaten loot
+    // erupts back as a jackpot when he dies. Sits to the RIGHT of the PHASE counter
+    // on the same below-bar row (offset clears the widest 'PHASE n/N').
+    if (e.isMidas) {
+      hud.textAlign = 'left'; hud.font = '700 22px Consolas, monospace';
+      hud.fillStyle = e.hoardCount > 0 ? UI_GOLD : 'rgba(255,215,102,0.5)';
+      hud.fillText('◆ HOARD ' + e.hoardCount, x + 220, by + h + 26);
     }
   }
   function tierStars(R) {

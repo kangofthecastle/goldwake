@@ -69,8 +69,9 @@ hooks, coils, shields, slabs. Never "same hull, different tint" as the primary
 tell. The roster reads by shape first: AEGIS shield-plate, WEAVER tether,
 GILDED MIMIC (masquerades as gold — deliberately), CARRIER hulk, BLINK moth.
 Bosses get **one iconic silhouette + one secondary motif**: TALOS — bronze
-sentinel ring + molten core; AMMIT — tri-beast coil + tipped judgment scales;
-GILDED SOVEREIGN — throne-crown + three-phase regalia.
+sentinel ring + molten core, with a single glowing ankle-nail weak point in his
+finale; AMMIT — tri-beast coil + tipped judgment scales; MIDAS (the gilded king)
+— gaunt crowned silhouette + a heaped, hungry hoard dragging at his feet.
 
 **God portraits, emblems, cards (STORYBOOK).** Slightly warped, hand-drawn
 geometry; straight lines are rare and purposeful. Each god must be knowable as a

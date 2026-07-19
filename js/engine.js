@@ -82,6 +82,8 @@
       dir: 0, speed: 0, accel: 0,
       accel2: 0, accelSwitchT: 1e9,   // after age>switchT, accel becomes accel2
       angVel: 0,
+      burstY: 0,                      // TALOS boulders: burst into shrapnel at this depth (0 = none)
+      gild: false,                    // MIDAS phase I: bullet leaves a brief gilded trail
       minSpeed: -1e9, maxSpeed: 1e9,
       radius: 8, scale: 16,
       r: 1, g: 1, b: 1, a: 1,
@@ -146,6 +148,11 @@
       retreatAt: 0, didRetreat: false, seq: 0,
       // boss setlist engine (pass B): phase timer, transition breath, segment HP
       arrived: false, phaseT: 0, breathT: 0, segFloorHp: 0, segBounds: null,
+      // boss-concept rework: MIDAS gold theft (hoard) + TALOS nail weak-point.
+      // nailActive routes ALL direct-shot damage to the nail hitbox (body immune);
+      // the nail pool is e.hp itself (the final phase's segment).
+      isMidas: false, hoard: 0, hoardCount: 0,
+      nailActive: false, nailR: 0, nailX: 0, nailY: 0,
       onDeath: null, onUpdate: null
     };
   }
@@ -168,7 +175,8 @@
       age: 0, life: 12,
       value: 1, rot: 0, angVel: 0, scale: 22,
       homing: false, r: 1, g: 0.8, b: 0.25,
-      magnet: 0, bank: 0
+      magnet: 0, bank: 0,
+      cursed: false   // MIDAS cursed gold: gilds (freezes) the player on pickup, worth 2x, magnet-immune
     };
   }
 
@@ -262,6 +270,7 @@
   Engine.time = 0;
 
   Engine.start = function (update, render) {
+    Engine._update = update;   // headless verify: drive fixed steps deterministically
     var last = performance.now() / 1000;
     var acc = 0;
 
@@ -288,6 +297,11 @@
     }
     requestAnimationFrame(frame);
   };
+
+  // Headless verify only: flush edge presses exactly as a real frame with steps>0
+  // would (the game drives fixed steps itself via Game.test.step). Zero cost unless
+  // called.
+  Engine.flushEdges = function () { for (var k in pressedSet) pressedSet[k] = false; };
 
   // ---- generic pooled physics update (used by game for bullets/particles) ---
   // Kept here so pools + integration live together.

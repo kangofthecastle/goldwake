@@ -55,11 +55,15 @@ A **run** is 3 sectors generated from one seed (shown on the end screen). Each
 sector is 4–6 semi-random waves drawn from the wave pool, ending in a fixed
 anchor boss:
 
-- **Sector 1 → TALOS** (the bronze sentinel, 2 patterns)
-- **Sector 2 → AMMIT** (devourer of hearts — 3 patterns, much tougher)
-- **Sector 3 → GILDED SOVEREIGN** (the 3-phase boss)
+- **Sector 1 → TALOS** (the bronze sentinel — 5 phases; the finale is **THE NAIL**,
+  where his body turns immune and only the glowing ankle weak-point can be hurt)
+- **Sector 2 → AMMIT** (devourer of hearts — 6 phases of the Weighing of the Heart)
+- **Sector 3 → MIDAS** (the gilded king — 6 phases; **steals** gold you haven't yet
+  pulled into your magnet, banking it in a visible hoard that erupts as a full jackpot
+  on his death, and converting his fire spawns **cursed gold** that gilds you into a
+  helpless golden statue if you touch it — invulnerable through the freeze, then bare)
 
-Beat the Sovereign for **RUN COMPLETE**, then **DESCEND DEEPER** into an endless
+Beat MIDAS for **RUN COMPLETE**, then **DESCEND DEEPER** into an endless
 loop (steeper rank, more elites). Difficulty (rank) scales across and within sectors.
 
 Each sector rolls **one affix**, announced on its title card:
@@ -88,7 +92,7 @@ geometry itself.
 environment** matched to its pantheon — a deep field (stars + nebula tint), a
 structure layer of large drifting silhouettes (Sector 1 bronze colonnades for
 TALOS, Sector 2 KEMET tomb architecture and colossal statuary for AMMIT, Sector 3
-a gilded palace lattice for the SOVEREIGN), and fast sparse near-debris weather.
+a gilded palace lattice for MIDAS), and fast sparse near-debris weather.
 The grounds stay in the near-black **dim band** (low-saturation, never additive-bright,
 never in the enemy bullet band) and the whole backdrop **dims further as the bullet
 count climbs** — readability always beats scenery. The background is choreographed

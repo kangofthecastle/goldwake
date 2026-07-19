@@ -146,22 +146,34 @@ the boss's signature at maximum articulation. Movement escalates with it — bos
 run the path book too (holds, pendulums, screen-edge rushes between volleys), not a
 fixed hover.
 
-Illustrative setlists (implementer tunes; names announced on HUD):
+The shipped setlists (names announced on HUD):
 
-- **TALOS** (bronze sentinel): I *Foundry Breath* — pulse rings on stomp beats;
-  II *Piston Lances* — arcWall columns slamming alternate lanes; III *The Bronze
-  Wheel* — rotating gap-wheel while pendulum-strafing; IV *Molten Veins* — snake
-  ribbons + kunai accents; V *Colossus Falls* — wheel + lances layered, gaps
-  tightening, emitter rushing the rails.
-- **AMMIT** (devourer of hearts): I *Scent of Sin* — drifting rain + shard petals;
-  II *The Jaws* — mirrored crossfire closing like bites; III *Weighing of the
-  Heart* — alternating left/right arcWalls (the scales); IV *Heart-Seekers* —
-  burstAimed accents through orb terrain; V *Devourer* — jaw arcs + seekers,
-  boss lunging between bites; VI (final) *The Second Death* — everything at once,
-  one drifting lane.
-- **GILDED SOVEREIGN**: gold-lattice identity — interleaved ringGap sequences whose
-  gaps spell a drifting lane, gold rain, wheel spokes; 6 phases as the run's finale,
-  final phase a full-screen lattice with a single readable path.
+- **TALOS** (bronze sentinel, 5 phases): I *The Circuit* — wide sweeping pulse arcs
+  while pendulum-strafing; II *Hurled Stones* — XL boulders lobbed on ballistic arcs
+  (accel + curling angVel) that burst into pellet shrapnel at a depth line, sparse
+  aimed accent; III *The Burning Embrace* — heated walls closing from both screen
+  edges with one moving lane, he holds center; IV *Rage of Bronze* — stones + closing
+  walls layered + an aimed accent; V *The Nail* (finale) — his densest rage (circuit
+  sweeps + boulders) while his body turns **immune**: only the glowing ankle *nail*
+  (its pool = this segment's HP) can be hurt, and killing it runs the ichor-spray death.
+- **AMMIT** (devourer of hearts, 6 phases): I *The Hall of Two Truths* — drifting rain
+  + LIME shard petals (her one green counterpoint); II *The Forty-Two Confessions* —
+  judgment rings of literally 42 bullets, counter-rotating so the gaps drift; III *The
+  Feather and the Heart* — the scales: a light/fast wall vs a heavy/slow wall, sides
+  alternating; IV *The Scales Tip* — the balance breaks, the heart side crushes down
+  heavier each rep; V *The Verdict* — heart-seeker aimed accents through pulse terrain;
+  VI *The Devouring* — jaws crossfire closing, one drifting lane, boss lunging between.
+- **MIDAS** (the gilded king, 6 phases, the run's finale): I *The Golden Touch* — the
+  lattice forms, his bullets leave brief gilded trails; II *The Tribute* — rising walls
+  + gold rain; III *The Gilded Court* — full lattice + wheel; IV *The Feast of Ash* —
+  hungry desperation, faster snatching aimed patterns, lunging; V *Drowned in Gold* —
+  the density crescendo, the wealth itself the threat; VI *The Beggar King* — stripped
+  raw: fastest, sparsest-but-meanest final stand. Two fight-long mechanics ride under
+  it: **gold theft** (loot you are NOT already magnetizing drifts into a visible
+  hoard — value and banked premium both — erupting as a full jackpot on his death;
+  point-blank gold you've pulled in stays yours) and **cursed gold** (converting his
+  fire gilds coins that freeze the player into a golden statue; the freeze itself is
+  the i-frame, leaving only a ~0.1s sliver after — never a bankable shield).
 
 ## Bullet art & VFX (procedural, in-engine)
 
