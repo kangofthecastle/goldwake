@@ -160,7 +160,10 @@ armory, Odin NINE NIGHTS, Heimdall THE BIFRÖST.
   reachable/held (Ra's boss signature). raRamp charm scales thresholds ×0.556, caps ×2.875. APOTHEOSIS forces CORONA.
   *Primary VARIANT A tightening-lance (render A/B/C §11): 3 STREAK rays muzzle→knot, spread tightens ±10px KINDLE →
   ±2px CORONA (one hard line); knot CORE 30→8px; stage-up RING 26→70px + 6 SPARKs (hard CLICK/rung); 1–4 gold RING
-  notch-glyphs ride the beam (occlusion-proof count); bronze→amber→white-gold, CORONA + rotating corona flare.*
+  notch-glyphs ride the beam (occlusion-proof count). **COLOR (owner 2026-07-19: "laser should be way more red"):**
+  the ramp runs RED — deep solar red KINDLE → red-orange FLARE → hot red-white SOLAR → white-hot core inside a red
+  corona at CORONA, + rotating corona flare. Sun-as-furnace, never honey-gold; the old bronze→amber→white-gold ramp
+  is dead. Ra joins Ares as a sanctioned god-hue exception to the cool player-fire law (the notch-glyphs stay gold).*
 - **SP SOLAR FLARE** (unchanged): ignites all with **Burn**. Voice white-noise flash swell ~0.5s.
 - **VOICE BEAM**: live 3-osc (one/stream) converging detune ±(18−16*frac)c to unison as tier climbs (you *hear* it
   focus); lowpass 600→2500Hz; stage-up ramps root +4 semitones + bell ping; stage-drop warn blip. One oscillator, no per-shot.
