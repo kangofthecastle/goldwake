@@ -301,18 +301,11 @@ I don't want the fan out"; owner picked SPECTRUM LANCE)
 - **BOSS** crescents pierce + stack-brighten on the lone body; sweep hurls + heavy single-target hit.
 
 **JADE EMPEROR** — IMPERIAL EDICTS (fan) · IMPERIAL JUDGEMENT (REWORKED, owner design 2026-07-18)
-- **ATK IMPERIAL EDICTS**: the attack IS the edicts now — a volley of imperial writs, each **Stun**-family. **THREE
-  GAMEPLAY-DISTINCT VARIANTS (owner 2026-07-19: "I want these to all have meaningful gameplay differences")** — all
-  three built + rendered; Warren picks the shipping default by feel (`GL.setEdictStyle A/B/C` selects mechanics AND
-  visual together):
-  | Style | Visual | Mechanics — the verb |
-  |---|---|---|
-  | **A — THE WRIT** (scroll-talisman) | violet tablet, gold border, red seal-dot, script ticks | 5/volley fan (~0.5 rad / 0.28 focus), **homing**, Stuns non-bosses — the seeking bureaucracy; reliable crowd control (the 2026-07-18 baseline) |
-  | **B — THE PROCLAMATION** (hanging banner) | long ribbon-banner, gold end-rods, trailing silk | 4/volley, **no homing, flies straight, pierce 2**; the ribbon lingers ~0.5s as a trail that Stuns foes crossing it — lane control, aim-skill, best vs columns |
-  | **C — THE SEAL** (seal-stamp chop) | square bronze-backed chop, gold seal-face | 3/volley, hard homing (turn 7), each hit **stamps a SEAL brand**: Stun + the branded foe takes **+15% from Jade's own hits** for 4s (stacks ×2) — single-target paperwork ramp |
-  Burst = paper-flash (A/B) or seal-mark flash (C). Distinct silhouette family (the game's only rectangular
-  projectiles); authored sprites per art/PROMPTS.md 33.7 (gen only the picked style). Voice BELL (inharmonic partial
-  stack, 1ms strike, ~250ms ring; C adds a stone 'chop' knock on stamp).
+- **ATK IMPERIAL EDICTS**: the attack IS the edicts now — **5 edicts per volley in a fan** (spread ~0.5 rad; focus ~0.28),
+  homing (existing Jade block), each **Stuns** non-bosses. **Clarity fix**: edicts redrawn as *scroll-talismans* — small
+  violet `c99aff` rectangular tablet w/ gold border + red seal-dot, oriented to travel, thin trailing script ticks; burst =
+  paper-flash. Distinct silhouette (only rectangular projectile in the game); needs one atlas painter (edict tablet).
+  Voice BELL (inharmonic partial stack, 1ms strike, ~250ms ring).
 - **SP IMPERIAL JUDGEMENT** (replaces Heaven's Verdict; Leigong, the Thunder Court): **two dark storm-clouds** fade in
   flanking the field (upper-left + upper-right, ~90px wide, roiling GLOW + dark CORE puffs, gold under-flicker), duration
   ~6s. Every **0.8s**, alternating clouds hurl a **lightning bolt** at a **RANDOM** live foe — bolt = Zeus-style strike:
