@@ -945,6 +945,31 @@ Substitutions:
 | 30.14 | IMPERIAL SEAL of the Jade Emperor — a violet-jade seal-stamp with gold base | Ming dynasty court scroll painting, gold on jade | `#c99aff` |
 | 30.15 | PLUMED CREST of Quetzalcoatl — a fan of quetzal plumes set in turquoise | Mesoamerican codex illustration, obsidian and turquoise | `#5affc0` |
 
+### 30b. Generic-upgrade icon batch (relic template × 6, game-native — no pantheon)
+
+Same template as #30; `{TRADITION}` = "gilded game-native reliquary — crown, coin,
+laurel and light, belonging to no real-world mythology"; icons for the non-god
+cards so they stop being bare text beside portrait cards.
+
+| # | `{SUBJECT}` | `{ACCENT}` |
+| --- | --- | --- |
+| 30b.1 | ATTACK POWER — a clenched gauntlet of light gripping a burning laurel sprig | `#5fe6ff` |
+| 30b.2 | APEX — a rising crown haloed by one climbing star-step stair | `#ffd766` |
+| 30b.3 | SPECIAL CHARGE — an amphora over-brimming with violet light | `#c99aff` |
+| 30b.4 | EXTRA LIFE — a small votive ship figurine on a gold stand | `#5fe6ff` |
+| 30b.5 | FOCUS (hitbox) — a single jewel-eye narrowed within concentric rings | `#e8f4f7` |
+| 30b.6 | GREED (gold gain) — an open coffer exhaling coin-motes | `#ffd766` |
+
+### 30c. Sector-affix icon batch (relic template × 5, game-native)
+
+| # | `{SUBJECT}` | `{ACCENT}` |
+| --- | --- | --- |
+| 30c.1 | NIGHT MARKET — a hanging paper lantern pooling warm light | `#ffd766` |
+| 30c.2 | GILDED — a coin haloed in rays | `#ffd766` |
+| 30c.3 | SWARM — three tiny darts flying as one wedge | `#ff5a6e` |
+| 30c.4 | DENSE VEIL — a drawn curtain parted a sliver on darkness | `#6fa9b8` |
+| 30c.5 | VOLATILE — a cracked ember shedding sparks | `#ff8a5a` |
+
 ---
 
 ## Section 8 — Combat sprites (AUTHORED COMBAT SPRITES, third clause)
@@ -1126,6 +1151,21 @@ Substitutions:
 | 34.5b | SKY SERPENT body segment — one repeatable coil segment continuing the head (34.5): same girth at its joints, feather ridge along the top edge, plume tufts at the trailing joint; MUST tile seamlessly nose-to-tail with copies of itself (gen with 34.5 as reference for continuity) | turquoise #5affc0 over obsidian planes, feather ridge highlights |
 | 34.5c | SKY SERPENT tail tip — the tapering final segment ending in a long quetzal plume fan (continuity with 34.5/34.5b) | turquoise #5affc0, plume fan brightest at the tips |
 | 34.7 | GREEN DRAGON head — the head of Guan Yu's ascended blade-dragon (GREEN DRAGON ASCENDS ultimate): a Chinese dragon head in flat profile, jaws open, antler prongs swept back, mane flowing into where the crescent blade-segments (33.10) trail behind | jade #3be089 over dark planes, gold #ffd766 antler + eye glints |
+
+### 34d. Field objects — boss set pieces & pickups (in-game basics batch, owner 2026-07-19)
+
+Same third-clause sprite rules (rim-glow, transparent ground, bold and simple,
+reads in one glance). Sheet-gen the pickups together (34d.4–6); the boss
+pieces individually.
+
+| # | Subject | Notes |
+| --- | --- | --- |
+| 34d.1 | THE NAIL of TALOS — one great bronze nail driven at an angle, molten ichor-light seeping around it | his finale's named weak point (~40px); danger-red #ff5a6e glow rim per boss-weak-point law |
+| 34d.2 | HURLED STONE of TALOS — a rough bronze-veined boulder | tumbling projectile ~70px; warm hostile rim |
+| 34d.3 | THE HOARD of MIDAS — a heaped mound of fused gold: coins, cups and crowns melted into one hungry pile | sits at the boss's feet, grows with stolen gold (~160px wide); loot-gold #ffd766 — it IS treasure, the one enemy-adjacent gold per the mimic law |
+| 34d.4 | GOLD COIN — one small thick crowned coin, slightly worn | THE currency (~18px); gold #ffd766, reads at a glance among bullets; the mimic (32.5) impersonates exactly this |
+| 34d.5 | PEACH OF IMMORTALITY — one small blushing peach with a single leaf | PEACH BANQUET duo drop (~22px); warm rose + gold leaf glint |
+| 34d.6 | APOTHEOSIS SHARD — a small broken sliver of divine gold light | Anubis phase-drop pickup (~20px); white-gold |
 | 34.6 | SOLAR BARQUE of Ra — the sun-god's night-boat crossing the top of the field (NOON OF THE DUAT ultimate; HOLD CLEARED — roster ratified + built) | a long low reed-boat in flat Egyptian profile, upswept prow and stern, a blazing sun-disc amidships, gold-leaf hull bands over dark planes, solar #ffe89a rim blending white at the disc; wide horizontal silhouette, reads while sweeping laterally |
 
 Substitutions:
