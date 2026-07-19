@@ -12,7 +12,7 @@ exception (owner call 2026-07-18, BOONS.md §12) — the procedural draw stays t
 live fallback until each sprite is wired in.
 
 Sections: 1 title keyart · 2 pantheon emblems (5) · 3 god card portraits (15) ·
-4 boss portraits (4) · 5 sector journeys (3 routes × 3 legs = 9) · 6 shop dressing (1) ·
+4 boss portraits (4) · 5 sector parallax sets (3 sectors × 3 layers = 9) · 6 shop dressing (1) ·
 7 charm-relic icon batch (1 template × 15 subjects) ·
 8 combat sprites (1 player ship + 1 enemy template × 18 subjects) ·
 9 signature player-side sprites (2 templates × 14 subjects).
@@ -39,7 +39,7 @@ subagent per batch, on high reasoning effort, all batches in parallel**:
 | A | §1 title + §2 emblems | 6 |
 | B | §3 god portraits | 15 |
 | C | §4 boss portraits | 4 |
-| D | §5 sector journeys (3 legs each, SEQUENTIAL with reference-image continuity — see §5 intro) + §6 shop | 10 |
+| D | §5 runtime parallax layers (3 sectors × deep/structure/debris) + §6 shop | 10 |
 | E | §7 relic icon template ×15 rows | 15 |
 | F | §8 player ship + enemy template ×18 rows | 19 |
 | G | §9 projectile template ×9 rows | 9 |
@@ -63,21 +63,38 @@ below. Suggested groupings:
   the Ruyi staff (33.9) alone (needs the full frame height).
 - H: all 5 owned entities as one sheet.
 
-Full-composition pieces — title, emblems, every §3/§4 portrait, backdrops,
-shop — stay **one request each**: each is a distinct painting and sheet cells
-would cost too much resolution. Judgment call throughout: group only while
+Full-composition pieces — title, emblems, every §3/§4 portrait, each backdrop
+layer, shop — stay **one request each**: each needs full-frame resolution and
+its own ground/alpha contract. Judgment call throughout: group only while
 per-subject resolution stays comfortably above its read size.
 
-The coordinator then: verifies all **82 delivered files** (35 direct + 47
+For Batch B, **composition is universal across all pantheons** and rendering
+style is consistent within each pantheon. First generate one non-deliverable
+global composition anchor shared by all 15 cards, enforcing: the same apparent
+56–64 px ornamental border thickness on all four sides; the same inner aperture
+and margins; the same waist-up crop and head/torso scale; crown/top of head at
+roughly 15–20% of canvas height, chin at 42–47%, shoulders spanning 65–75% of
+canvas width; and every god's head angle and gaze turned toward **screen-left**
+(the viewer's left). Props may sit beside or behind the bust but must not shrink,
+duplicate, obscure or displace the subject. Then generate one non-deliverable
+style anchor for each pantheon (Olympus, Asgard, Kemet, Celestial Court, Fifth
+Sun). Use the global anchor for border/crop/pose and the pantheon anchor for
+brushwork, facial simplification, value structure, outline system, materials and
+tradition-specific ornament. The final 15 portraits remain separate full 2:3
+requests. Reject any card whose frame band, bust scale or facing direction
+visibly differs in an equal-size contact sheet.
+
+The coordinator then: verifies all **84 delivered files** (36 direct + 48
 template rows), enforces the filename and destination convention below,
 spot-checks grounds and slice quality (a bad ground or a subject clipped by
 slicing goes back to its subagent for a re-gen), and runs the embed step once
 at the end.
 
 **HOLD-flagged rows must be SKIPPED until their flag clears**: 33.7 (edict —
-counts as one of the 82; gen only the style the owner picks, A, B, or C) and
-34.6 (solar barque — additive, 83rd file, gen once the ultimate roster is
-ratified). A batch run before the flags clear delivers 81 files.
+counts as one of the 84; gen only the style the owner picks, A, B, or C) and
+34.6 (solar barque — additive, 84th file, gen once the ultimate roster is
+ratified). A batch run before either flag clears delivers 82 files; clearing
+only the edict flag brings the run to 83.
 
 **COMBAT-SPRITE SIMPLICITY (Sections 8–9).** The first boss/elite field-sprite
 gens came back too detailed for in-game size — over bloom, fine ornament reads
@@ -93,9 +110,10 @@ Output convention:
 - **Destination**: Section 8–9 combat sprites → `art/sprites/` — and the
   player ship additionally saved as the live slot name `ship.png` (other live
   slots: `enemy-pop`, `enemy-gun`, `enemy-mid`, `enemy-boss` — fill these from
-  the matching #32 rows: popcorn, gunship, carrier-or-mid pick, boss). All
-  STORYBOOK assets (Sections 1–7) → `art/gen/` (staging; engine wiring is a
-  separate pass).
+  the matching #32 rows: popcorn, gunship, carrier-or-mid pick, boss). Section
+  5 runtime layers → `art/backdrops/` under the exact live slot names given in
+  §5. All other STORYBOOK assets (Sections 1–4 and 6–7) → `art/gen/` (staging;
+  engine wiring is a separate pass).
 - After combat sprites land, run `bash art/embed-sprites.sh` so `file://`
   Chrome picks them up.
 - Honor each block's own delivery line (aspect, transparent vs near-black
@@ -214,6 +232,14 @@ or lettering, no busy particle noise, no watermark.
 
 ## Section 3 — God card portraits (2:3, must read at 306×470)
 
+**Universal composition invariant for all 15 prompts:** use the same 56–64 px
+outer ornamental frame band on every edge and the same waist-up bust scale:
+head top at 15–20% of canvas height, chin at 42–47%, shoulders at 65–75% of
+canvas width. Every god turns both head and gaze toward **screen-left / the
+viewer's left**. Tradition changes the ornament and interior rendering, never
+the border thickness, crop, occupied area or facing direction. Treat this
+invariant as part of every fenced prompt below.
+
 ### 7. ZEUS — the Stormbreaker
 
 ```
@@ -239,7 +265,9 @@ particle noise, no watermark.
 ```
 Painted card portrait, storybook style: Poseidon, waist-up, rising from a curling
 tidal wall that sweeps upward carrying flecks of gold; his trident (the one iconic
-prop) planted forward; sea-foam beard, humble rope-and-leather harness with one
+prop) planted forward; saturated deep sea-teal/turquoise scalp hair and beard
+matching #4fe0e0, with only restrained pale sea-foam tips and highlights — never
+predominantly white, ivory, gray or blond; humble rope-and-leather harness with one
 barnacled bronze cuff, imperfect asymmetry — a cracked trident tine. Drawn in the
 manner of Greek black-figure pottery and marble frieze; broad painted planes; face
 in 2-3 marks. Impossible scale: a tiny ship silhouette dwarfed low in the wave.
@@ -292,20 +320,25 @@ particle noise, no watermark.
 ### 11. ARES — God of War
 
 ```
-Painted card portrait, storybook style: Ares, waist-up, helm-shadowed, flanked by
-Phobos and Deimos — two thin dread-wraiths of smoke rising at his shoulders (his
-iconic motif); battered bronze breastplate over humble patched cloth, imperfect
-asymmetry — one missing cheek-guard, a notched spear haft. Drawn in the manner of
-Greek black-figure pottery and marble frieze; broad painted planes; face in 2-3
-marks, eyes lit from below. Must read by silhouette + twin wraiths + accent color
-at thumbnail size. Palette: near-black ground #05080b, blood-red accent #ff5a6e,
+Painted card portrait, storybook style: Ares, waist-up, alone, holding one notched
+spear (his one iconic prop); battered bronze breastplate over humble patched
+cloth, imperfect asymmetry — one missing cheek-guard. His Corinthian helmet
+frames a clearly human face: keep both eyes deliberately recessed in natural
+helmet shadow, matching the shadowed-eye treatment of the other Olympus cards;
+the brow, nose and stern mouth remain readable at card size. Do not add glowing
+eyes or expose the eyes more brightly than the face. Drawn in the
+manner of Greek black-figure pottery and marble frieze; broad painted planes.
+Must read by silhouette + spear + accent color at thumbnail size. Keep the
+background almost entirely empty near-black #05080b, matching the other Olympus
+cards, with no secondary silhouettes or figures. Palette: blood-red accent #ff5a6e,
 gold #ffd766 on the helm crest, warm near-black outline #231A20 with the outer
 contour 3x the weight of interior lines, restrained gold-leaf grain. Sacred and
 terrible, never gory. Deliver: PNG, 2:3 portrait, on a transparent or near-black
 #05080b ground — never white or light gray. Negative: no photorealism, no
 airbrushed or plastic gradients, no glossy 3D render, no mixed mythological
 traditions (Greek only), no pure black #000000, no gore, no text or lettering, no
-busy particle noise, no watermark.
+busy particle noise, no wraiths, no silhouettes behind him, no extra figures, no
+shield, no watermark.
 ```
 
 ### 12. HEIMDALL — the Watchman
@@ -376,7 +409,9 @@ second identical shadow-twin of himself peels away from his outline like smoke
 (his iconic motif — the decoy); drawn in the manner of Norse runestone knotwork
 and carved weathered wood — interlace borders, cold iron, frost. Humble stitched
 leathers and a patched wool hood with one gilded serpent clasp, imperfect
-asymmetry — the twin's outline is subtly wrong. Face in 2-3 marks, sly. Must read
+asymmetry — the twin's outline is subtly wrong. Both faces use clearly open,
+readable human eyes with visible lids, irises and pupils — never black slits or
+blank bars — while staying simplified to the carved-wood style. Must read
 by silhouette + doubled figure + accent color at thumbnail size. Palette:
 near-black ground #05080b, venom-green accent #8cff5a, gold #ffd766 on the clasp,
 warm near-black outline #231A20 with the outer contour 3x the weight of interior
@@ -415,7 +450,9 @@ returning hammer (his one iconic prop) flies back to his gauntleted hand, motion
 carved as a knotwork arc; drawn in the manner of Norse runestone carving and
 weathered wood — pure force, deliberately NO lightning. Humble quilted wool and
 leather under the belt Megingjörð, imperfect asymmetry — one split gauntlet seam.
-Face in 2-3 marks, braced grin. Impossible scale: the hammerhead reads far too
+His focused face has two clearly open, readable eyes with visible lids, irises
+and pupils — never black slits or blank bars — plus a braced grin. Impossible
+scale: the hammerhead reads far too
 massive for any hand. Must read by silhouette + hammer + accent color at
 thumbnail size. Palette: near-black ground #05080b, storm-iron accent #8fb4d8,
 gold #ffd766 on the belt, warm near-black outline #231A20 with the outer contour
@@ -432,12 +469,14 @@ watermark.
 ```
 Painted card portrait, storybook style: Sun Wukong, waist-up, shouldering the
 Ruyi Jingu Bang — a colossal gold-banded staff (his one iconic prop) whose upper
-end vanishes past the card edge at impossible scale — while two tiny hair-clone
-duplicates of himself perch on the shaft; drawn in the manner of Ming dynasty
+end vanishes past the card edge at impossible scale; show the main Wukong alone,
+with no tiny hair-clone figures; drawn in the manner of Ming dynasty
 court scroll painting — gold on jade, drifting cloud bands, a small imperial
 seal-stamp in one corner. Humble pilgrim's cloth and rope belt under one gilded
 shoulder plate, phoenix-feather cap, imperfect asymmetry — a torn cap feather.
-Face in 2-3 marks, irreverent. Must read by silhouette + staff + accent color at
+Face irreverent, with two clearly open readable monkey eyes: visible lids,
+irises and pupils, never black slits, bars or closed marks. Must read by
+silhouette + staff + accent color at
 thumbnail size. Palette: near-black ground #05080b, ember-orange accent #ff6a3d,
 gold #ffd766 staff bands, jade undertones, warm near-black outline #231A20 with
 the outer contour 3x the weight of interior lines, restrained gold-leaf grain.
@@ -526,12 +565,17 @@ giant's guarding circuit) plus one secondary motif (a single molten core-eye,
 the ichor-vein plug at its center); burnished molten-bronze plates over dark
 iron, drawn in the manner of Greek black-figure pottery and cast bronze votive
 figures, ceremonial engraving, no face — the core-eye is the face, read in 2-3
-marks. Human scale against impossible scale: a tiny glowing ship silhouette
-dwarfed beneath it. Imperfect asymmetry — one cracked plate weeping a thread of
+marks. Impossible scale conveyed by the sentinel nearly filling the frame.
+CARD-FAMILY INVARIANT: render this in the exact Olympus portrait language used
+by Zeus through Ares — the same rectangular Greek meander border, black-figure
+line economy, marble-and-bronze planar shading, dark value hierarchy and
+restrained grain. Talos is a boss subject inside that established card system,
+not a separate polished concept-art style.
+Imperfect asymmetry — one cracked plate weeping a thread of
 ichor-light. Broad painted planes, sacred and ceremonial, a reliquary that
 fights. Must read as a flat silhouette at thumbnail size. Palette: near-black
 ground #05080b, molten bronze-gold (hotter and redder than loot gold #ffd766)
-dominant, cyan glints #5fe6ff on the ship, danger red #ff5a6e in the core-eye
+dominant, danger red #ff5a6e in the core-eye
 only, warm near-black outline #231A20 with the outer contour 3x the weight of
 interior lines, restrained gold-leaf grain. Deliver: PNG, 2:3 portrait, on a
 transparent or near-black #05080b ground — never white or light gray. Negative:
@@ -549,12 +593,17 @@ hindquarters — coiled around a set of golden judgment scales (iconic silhouett
 the tri-beast coil; secondary motif: the scales with one pan tipped); drawn in
 strict flat profile in the manner of Egyptian tomb-wall painting and papyrus,
 flat blocked color, hieroglyphic banding at the frame edge. Sacred and
-ceremonial menace, never gory — she is a verdict, not a monster. Human scale
-against impossible scale: a tiny glowing ship silhouette small before her jaws.
+ceremonial menace, never gory — she is a verdict, not a monster. Impossible
+scale conveyed by the tri-beast coil nearly filling the frame.
+CARD-FAMILY INVARIANT: render this in the exact Kemet portrait language used by
+Ra and Anubis — the same rectangular tomb-wall border construction, strict flat
+profile geometry, lapis-and-gold value hierarchy, papyrus grain and 2-3-mark eye
+treatment. Ammit is a boss subject inside that established card system, not a
+separate decorative poster style.
 Imperfect asymmetry — one chipped gilded scale-pan. Broad painted planes. Must
 read as a flat silhouette at thumbnail size. Palette: near-black ground #05080b,
 bruised magenta dominant with sickly green undertones on the beast, gold #ffd766
-on the scales only, cyan glints #5fe6ff on the ship, warm near-black outline
+on the scales only, warm near-black outline
 #231A20 with the outer contour 3x the weight of interior lines, restrained
 gold-leaf grain. Deliver: PNG, 2:3 portrait, on a transparent or near-black
 #05080b ground — never white or light gray. Negative: no photorealism, no
@@ -574,14 +623,18 @@ treasure dragging at his feet and rising around him, some of it flowing UP towar
 his grasping hand as if he is drinking it in). Read in 2-3 marks: sunken eye,
 grasping hand, the crown. Drawn in the Greek votive tradition — a temple-offering
 plaque / archaic Hellenic king, laurel and chiton turned to metal — belonging to
-that tradition and no other. Human scale against impossible scale: a minute
-glowing ship rising toward him from the bottom edge, small beside the mountain of
-gold. Imperfect asymmetry — one shoulder fully petrified and cracking, coins
+that tradition and no other. CARD-FAMILY INVARIANT: render this in the exact
+Olympus portrait language used by Zeus through Ares — the same rectangular Greek
+meander border, black-figure line economy, marble-and-bronze planar shading,
+dark value hierarchy and restrained grain. Midas is a boss subject inside that
+established card system, not a separate gilded poster style. Impossible scale
+conveyed by the figure and hoard
+nearly filling the frame. Imperfect asymmetry — one shoulder fully petrified and cracking, coins
 spilling loose. Broad painted planes; avaricious, starving, tragic — a king
 drowned in his own wealth, never grimy. Must read as a flat silhouette at
 thumbnail size. Palette: near-black ground #05080b, gold #ffd766 utterly
-dominant, a warm rose #ff5a6e accent in the shadows and grasping-hand glow, faint
-cyan #5fe6ff on the ship, warm near-black outline #231A20 with the outer contour
+dominant, a warm rose #ff5a6e accent in the shadows and grasping-hand glow, warm
+near-black outline #231A20 with the outer contour
 3x the weight of interior lines, restrained gold-leaf grain. Deliver: PNG, 2:3
 portrait, on a transparent or near-black #05080b ground — never white or light
 gray. Negative: no photorealism, no airbrushed or plastic gradients, no glossy
@@ -614,92 +667,166 @@ black #000000, no text or lettering, no busy particle noise, no watermark.
 
 ---
 
-## Section 5 — Sector journeys (9:16 ×3 legs each; scrolls behind dense bullet fields)
+## Section 5 — Runtime sector parallax layers (3 sectors × deep/structure/debris)
 
-**A sector is a JOURNEY, not a wallpaper** (owner ruling 2026-07-19, ART.md §8).
-Each sector's backdrop is a continuous painted route in three vertically-seamed
-**legs** — approach → passage → threshold — that the engine scrolls slowly
-downscreen across the sector, arriving at the boss's doorstep. Per sector,
-generate **three 9:16 images sequentially in one subagent**: gen leg 1, then
-feed each finished leg back as a reference image when genning the next so
-style, palette and bank-lines stay continuous; the TOP ~10% of leg N must
-compositionally continue into the BOTTOM ~10% of leg N+1 (the seam), since the
-scroll runs bottom-to-top through legs 1→2→3. Every leg individually obeys the
-shared contract below.
+Each sector is one staged living environment built from three simultaneous,
+independently choreographed textures. The renderer scrolls every texture with
+`fract(v_uv)`, so **every image must tile seamlessly top-to-bottom**. These are
+not sequential scenes and must contain no baked approach/passage/threshold
+landmarks. The level creates its journey by changing layer opacity, speed and
+darkness across the wave arc.
 
-**Shared contract (applies to all nine leg images — treat as part of every
-prompt):** Painted backdrop for a vertical bullet-hell playfield, storybook
-style. CRITICAL: sits BEHIND a dense field of glowing bullets and must never
-steal reads — extreme dark value range (nothing above a dim mid-tone), ALL
-detail pressed against the left and right screen edges, the entire center
-column (middle 50% of the width) kept nearly empty near-black darkness. One
-landmark per leg. Large flat painted masses first, minimal localized texture,
-low contrast, no stripes or lanes implying a safe path. Near-black base
-#05080b, warm near-black outline #231A20 soft and heavy, no grain in the
-central play area. Deliver: PNG, 9:16 portrait (1080x1920), on a near-black
-#05080b ground — never white or light gray. Negative: no photorealism, no
-airbrushed or plastic gradients, no glossy 3D render, no mixed mythological
-traditions, no pure black #000000, no bright detail in the center column, no
-text or lettering, no busy particle noise, no watermark.
+**Shared contract (treat as part of every prompt):** Painted backdrop layer for
+a vertical bullet-hell playfield, storybook style. Deliver exactly one PNG,
+9:16 portrait, 1080×1920. Extreme dark value range; nothing above a dim
+mid-tone. Preserve the middle 50% of the width as quiet negative space for the
+player and dense glowing bullets. Put structural weight at the side edges. Use
+large flat painted masses, minimal localized texture and no false lanes. The
+top edge must continue perfectly into the bottom edge when vertically repeated.
+No text or watermark. No photorealism, airbrushed/plastic gradients, glossy 3D,
+mixed mythological traditions, bright central detail, busy particle noise or
+white/light ground.
 
-### 26. SECTOR 1 journey — THE BRONZE COAST (arrival: TALOS)
+For **deep** layers: opaque near-black atmospheric ground, no alpha, no
+structures or landmarks. For **structure** and **debris** layers: isolate the
+painted subjects over perfectly flat solid `#00ff00` chroma green — no gradient,
+shadow, texture or spill in the green and no green in the subjects — then remove
+the green to deliver a transparent RGBA PNG. Transparent corners and center are
+mandatory. Do not leave green pixels in the delivered file.
+
+### 26. SECTOR 1 — THE BRONZE COAST / TALOS
 
 Greek only: carved marble frieze and black-figure pottery manner. Dim
-desaturated marble-ivory, sea-green and moss midtones; faintest gold #ffd766
-threads on wreck-gold and relief.
+desaturated bronze, marble-ivory, sea-green and moss; faint restrained gold
+`#ffd766`; warm near-black painted outlines `#231A20`.
+
+#### 26.1 DEEP — `art/backdrops/s1-deep.png`
 
 ```
-LEG 1 (approach): open night sea — long dark swells, drifting wreck-gold and
-splintered hulls of offering-ships along the left and right edges, a faint
-star-band high up. Landmark: one half-sunken bronze colossus hand breaking the
-water at an edge.
-LEG 2 (passage): bronze-littered shallows — reefs of broken colossus fragments
-(a face, a greave, a shield) pressed against both edges, shallow water glinting
-dimly between them. Landmark: a toppled bronze head lying on a reef.
-LEG 3 (threshold): the marble cliffs of the guarded island — broken columns
-and laurel relief climbing both edges toward a colossal ruined temple gate
-spanning the top edge (TALOS's circuit). Landmark: the gate.
+Paint an opaque deep-atmosphere layer for THE BRONZE COAST: moonless sea haze,
+subtle horizon-free swells and faint cold sea glow suspended in near-black
+#05080b. It should feel like open water at night without depicting a shoreline,
+ship, island, architecture, statue or landmark. Keep the center quiet and dark.
+Make the top and bottom edges match perfectly for seamless vertical repetition.
+Apply the Section 5 shared contract. Deliver opaque RGB/RGBA PNG with no
+transparent pixels at art/backdrops/s1-deep.png.
 ```
 
-### 27. SECTOR 2 journey — THE RIVER OF NIGHT (arrival: AMMIT)
-
-Egyptian only: tomb-wall painting and papyrus manner — flat profile forms,
-hieroglyph bands, gold leaf on lapis. Dim lapis-blue and tomb-gold #e8c46a
-midtones. The river IS the playfield: the dark water is the empty center
-column, the banks carry all detail at the edges.
+#### 26.2 STRUCTURE — `art/backdrops/s1-structure.png`
 
 ```
-LEG 1 (approach): down the Nile at dusk — reed and papyrus banks on both
-edges, small dark fishing skiffs beached, a pylon gate silhouette at one edge.
-Landmark: the first pylon gate.
-LEG 2 (passage): the river enters the Duat — banks become tomb walls with flat
-fresco profiles and hieroglyph bands, gates of the hours of night passing at
-the edges, colossal seated guardian statues flanking. Landmark: the paired
-guardians.
-LEG 3 (threshold): the narrowing approach to the Hall of Judgment — the banks
-close in, columns and scales iconography on both edges, gold-leaf judgment
-scenes, the hall's doorway darkness spanning the top edge where the river ends.
-Landmark: the hall doorway.
+Paint a transparent structure layer for THE BRONZE COAST: fragmented bronze
+colonnades, cropped colossus limbs and pieces of guarded-island marble
+architecture forming two sparse irregular edge banks. Keep every form confined
+to the outer left and right quarters; nothing spans the playfield and the center
+50% stays completely empty. No intact character, ship, gate or single dominant
+landmark. Shapes must continue seamlessly from top to bottom. Generate over a
+perfectly flat solid #00ff00 chroma ground for removal, with no green in the
+painted subjects. Apply the Section 5 shared contract. Remove chroma and deliver
+transparent RGBA PNG at art/backdrops/s1-structure.png.
 ```
 
-### 28. SECTOR 3 journey — ASCENT OF THE GILDED COURT (arrival: MIDAS)
-
-Chinese imperial only: Ming dynasty court scroll manner — cloud bands,
-gold-on-jade, hanging curtains, edict banners. Dim jade and imperial-violet
-#c99aff midtones, restrained gold #ffd766 threads; each leg is more gold-choked
-than the last (the scroll ascends, so this journey reads as CLIMBING).
+#### 26.3 DEBRIS — `art/backdrops/s1-debris.png`
 
 ```
-LEG 1 (approach): the cloud-borne outer terraces — balustrade tiers emerging
-from drifting cloud bands at both edges, distant lantern glints. Landmark: the
-first great terrace stair at an edge.
-LEG 2 (passage): the middle court — hanging judgment curtains and long
-vertical edict banners at both edges, gold-on-jade balustrades stacking
-higher, coins and treasure beginning to heap in the edge shadows. Landmark: a
-colossal gilded censer.
-LEG 3 (threshold): the throne approach — the richest and darkest tier, curtain
-layers parting at the edges, treasure heaped and hardening to gold, the empty
-throne dais silhouette spanning the very top edge. Landmark: the dais.
+Paint a transparent sparse debris layer for THE BRONZE COAST: a few tiny pieces
+of wreck-gold, salt-spray curls and dim ember flecks drifting mainly along the
+outer edges. Keep density very low, vary spacing broadly and leave the center
+50% completely empty; no ships, hulls, silhouettes, large objects or particle
+wall. The distribution must continue seamlessly top-to-bottom. Generate over a
+perfectly flat solid #00ff00 chroma ground for removal, with no green in the
+subjects. Apply the Section 5 shared contract. Remove chroma and deliver
+transparent RGBA PNG at art/backdrops/s1-debris.png.
+```
+
+### 27. SECTOR 2 — THE RIVER OF NIGHT / AMMIT
+
+Egyptian only: tomb-wall painting and papyrus manner, flat profile forms and
+gold leaf on lapis. Dim lapis, oxidized turquoise and tomb-gold `#e8c46a`;
+warm near-black painted outlines `#231A20`.
+
+#### 27.1 DEEP — `art/backdrops/s2-deep.png`
+
+```
+Paint an opaque deep-atmosphere layer for THE RIVER OF NIGHT: lapis-black Duat
+darkness with a broad nearly black central river channel, faint flat ripples and
+subtle blue depth at the far side edges. No banks, reeds, architecture,
+guardians, boats, symbols or landmark. Keep the center exceptionally quiet and
+dark. Make the top and bottom edges match perfectly for seamless vertical
+repetition. Apply the Section 5 shared contract. Deliver opaque RGB/RGBA PNG
+with no transparent pixels at art/backdrops/s2-deep.png.
+```
+
+#### 27.2 STRUCTURE — `art/backdrops/s2-structure.png`
+
+```
+Paint a transparent structure layer for THE RIVER OF NIGHT: broken tomb-wall
+riverbanks, cropped pylon fragments and occasional partial seated guardians in
+flat Egyptian profile, arranged as sparse edge banks. Confine everything to the
+outer left and right quarters so the center 50% remains a completely empty dark
+river channel. No spanning gate, Hall of Judgment doorway, scales centerpiece
+or single dominant landmark. Shapes must continue seamlessly top-to-bottom.
+Generate over a perfectly flat solid #00ff00 chroma ground for removal, with no
+green in the subjects. Apply the Section 5 shared contract. Remove chroma and
+deliver transparent RGBA PNG at art/backdrops/s2-structure.png.
+```
+
+#### 27.3 DEBRIS — `art/backdrops/s2-debris.png`
+
+```
+Paint a transparent sparse debris layer for THE RIVER OF NIGHT: a few small
+papyrus scraps, tomb-dust wisps and dim gold-leaf flecks drifting near the side
+edges. Keep density very low and the center 50% completely empty; no boats,
+human figures, hieroglyph text, symbols, large objects or particle wall. The
+distribution must continue seamlessly top-to-bottom. Generate over a perfectly
+flat solid #00ff00 chroma ground for removal, with no green in the subjects.
+Apply the Section 5 shared contract. Remove chroma and deliver transparent RGBA
+PNG at art/backdrops/s2-debris.png.
+```
+
+### 28. SECTOR 3 — THE GILDED COURT / MIDAS
+
+Chinese imperial only: Ming court-scroll manner, cloud bands, gold-on-jade,
+curtains and palace lattice. Dim jade and imperial violet `#c99aff`, restrained
+gold `#ffd766`; warm near-black painted outlines `#231A20`.
+
+#### 28.1 DEEP — `art/backdrops/s3-deep.png`
+
+```
+Paint an opaque deep-atmosphere layer for THE GILDED COURT: a violet-black cloud
+void with broad dim cloud currents and barely visible vertical depth in
+near-black #05080b. It should suggest impossible altitude without a horizon,
+palace, terrace, stairs, lanterns, throne or landmark. Keep the center quiet and
+dark. Make the top and bottom edges match perfectly for seamless vertical
+repetition. Apply the Section 5 shared contract. Deliver opaque RGB/RGBA PNG
+with no transparent pixels at art/backdrops/s3-deep.png.
+```
+
+#### 28.2 STRUCTURE — `art/backdrops/s3-structure.png`
+
+```
+Paint a transparent structure layer for THE GILDED COURT: stacked cropped jade
+balustrades, hanging curtain edges and fragments of imperial palace lattice,
+arranged as sparse asymmetric side architecture. Confine every form to the
+outer left and right quarters; the center 50% stays completely empty. No stairs,
+censer, dais, throne, readable edict, spanning arch or single dominant landmark.
+Shapes must continue seamlessly top-to-bottom. Generate over a perfectly flat
+solid #00ff00 chroma ground for removal, with no green in the subjects. Apply
+the Section 5 shared contract. Remove chroma and deliver transparent RGBA PNG at
+art/backdrops/s3-structure.png.
+```
+
+#### 28.3 DEBRIS — `art/backdrops/s3-debris.png`
+
+```
+Paint a transparent sparse debris layer for THE GILDED COURT: a few tiny coin
+glints, torn unreadable edict-paper scraps and faint gilded dust drifting near
+the outer edges. Keep density very low and the center 50% completely empty; no
+readable writing, treasure heaps, figures, large objects or particle wall. The
+distribution must continue seamlessly top-to-bottom. Generate over a perfectly
+flat solid #00ff00 chroma ground for removal, with no green in the subjects.
+Apply the Section 5 shared contract. Remove chroma and deliver transparent RGBA
+PNG at art/backdrops/s3-debris.png.
 ```
 
 ---
@@ -824,11 +951,14 @@ spires, wings, hooks, horns, slabs and coils; it must be recognizable as a flat
 shape alone, never "same hull, different tint". THE EDGE IS LIGHT: the entire
 silhouette is carried by a self-luminous hostile rim-glow in a warm
 red-magenta family tinted with the accent color {ACCENT}; there is NO drawn
-outline; the interior is quiet dark mid-tone planes only, gilded-myth armor
-suggested in broad dark shapes. Keep it bold and simple — a clean flat game
-sprite built from a few large shapes, minimal interior detail, smooth quiet
-surfaces rather than fine ornament; it should read in one glance like a mark,
-not a miniature. Sacred and ceremonial menace, never gory. Silhouette must
+outline; the interior is quiet dark mid-tone planes, with gilded-myth armor
+resolved into a restrained hierarchy of broad beveled plates and inset shapes.
+Keep the outer silhouette bold and instantly legible, then add a moderate
+authored detail tier: a handful of large armor panels, one clear central motif,
+at most a few bounded seams or trim lines and restrained material highlights.
+Use smooth flat color regions with no etched surface texture. It should feel like a
+polished action-game sprite, not a bare geometric icon and not a miniature
+painting. Sacred and ceremonial menace, never gory. Silhouette must
 read instantly at small sprite size over a black field under additive bloom. Deliver: PNG, 1:1 square, sprite centered, on a fully
 TRANSPARENT ground — never white, never light gray, no backdrop of any kind.
 Negative: no photorealism, no airbrushed or plastic gradients, no glossy 3D
@@ -837,6 +967,16 @@ photoreal panel detail, no cool cyan or blue-white rim (that is the player's
 family), no gore, no text or lettering, no busy particle noise, no background,
 no watermark.
 ```
+
+**Section 32 detail tiers:** rows 32.1–32.10 use roughly 3–6 major interior
+shapes after the silhouette. Boss/elite rows 32.11–32.18 use roughly 5–9 broad
+major plates/forms, at most two depth tiers, one strong central emblem or face
+read, and only 2–4 internal seam/trim lines. Match the clean detail density of
+a polished arcade action-game sprite sheet: smooth large color blocks, readable
+construction, no etched textures. Near in-game size they must collapse into one
+clean silhouette plus 2–4 readable internal masses. Never reduce a boss to an
+empty symbol, and never add hairline filigree, individual coin/scale/feather
+detail, texture noise or uncontrolled bloom.
 
 ---
 
@@ -952,7 +1092,7 @@ Substitutions:
 | 32.11 | TALOS — field sprite of the bronze sentinel boss | a great open bronze ring with a single molten core-eye hub at its center | `#ff8a5a` |
 | 32.12 | MIDAS — field sprite of the gilded king (final boss) | a gaunt crowned figure half-turned to gold, one grasping hand, a heaped hoard dragging at his feet | `#ffd766` (white-hot core reserved for its unavoidable attacks) |
 | 32.13 | THE APOSTATE — field sprite of the renegade elite | a lean asymmetric duelist dart carrying two mismatched relic pods, one glowing warm and one cool (its stolen boons — the sole enemy permitted a cool glint) | `#ff5ae0` |
-| 32.14 | AMMIT — field sprite of the devourer of hearts (boss) | a flat-profile tri-beast coil — crocodile jaws, lion forequarters, hippo bulk — wrapped around a set of tipped golden judgment scales (gold on the scales only, never on the beast) | `#ff5ae0` (bruised magenta with a sickly green undertone) |
+| 32.14 | AMMIT — field sprite of the devourer of hearts (boss) | a flat-profile tri-beast coil — crocodile jaws, lion forequarters, hippo bulk — closing around one dark empty central void; NO judgment scales, balance, pans, weights or other prop | `#ff5ae0` (bruised magenta with a sickly green undertone) |
 | 32.15 | ASSESSOR — a jackal judgment-emitter orbiting AMMIT (retinue, spawns as a pair) | a jackal-masked censer node ringed by a thin counter-rotating judgment wheel of tally-notches | `#ff5ae0` |
 | 32.16 | TRIBUTE BEARER — a porter of MIDAS's stolen gold (retinue) | a stooped hooded bearer hauling an open urn that visibly drinks coin-motes inward | `#ff8a5a` (warm amber — NEVER loot-gold #ffd766; only the urn's swallowed motes may glint gold) |
 | 32.17 | GILDED COURTIER — an orbiting noble of MIDAS's Gilded Court (retinue) | a slim masked courtier slab, half-petrified in hardening gold, court-robe fanned into a stiff ceremonial silhouette | `#ff8a5a` |

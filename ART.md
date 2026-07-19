@@ -212,32 +212,46 @@ distinct impact/end state.**
 
 ## 8. Environments & backdrops
 
-**(STORYBOOK layer, composited behind COMBAT.)** **A sector is a JOURNEY, not a
-wallpaper** (owner ruling 2026-07-19: "level should take me somewhere"). The
-backdrop scrolls slowly downscreen across the sector's whole duration — a
-continuous painted route in three **legs** (approach → passage → threshold),
-each leg synced to a wave-arrangement act, arriving at the boss's doorstep as
-the boss spawns. The fight IS the destination. The three routes:
+**(STORYBOOK layer, composited behind COMBAT.)** A sector is a **staged living
+environment**, not a wallpaper and not three stitched postcards. The shipped
+renderer already defines the correct production contract: every sector has
+three simultaneous, vertically tileable parallax textures — **deep**,
+**structure**, and **debris** — loaded as `sN-deep`, `sN-structure`, and
+`sN-debris`. The level creates forward motion by choreographing those layers
+through the authored wave arc:
 
-- **SECTOR 1 — THE BRONZE COAST** (arrival: TALOS): open night sea with
-  drifting wreck-gold → bronze-littered shallows, fragments of fallen
-  colossi → the marble gate cliffs of the guarded island, TALOS's circuit.
-- **SECTOR 2 — THE RIVER OF NIGHT** (arrival: AMMIT): down the Nile at dusk —
-  reed banks, papyrus, pylon gates → the river enters the Duat, tomb-wall
-  banks and the gates of the hours of night → the narrowing approach to the
-  Hall of Judgment, scales iconography on the banks. The river is the
-  playfield: banks carry all the detail at the screen edges.
-- **SECTOR 3 — ASCENT OF THE GILDED COURT** (arrival: MIDAS): rising through
-  cloud-borne outer terraces → the middle court, hanging curtains and edict
-  banners, each tier more gold-choked → the throne approach and dais.
+- **opener:** deep atmosphere establishes the place; structure barely present;
+- **build:** structure fades in and scrolls faster;
+- **feature:** one large procedural set-piece crosses beneath combat;
+- **breather:** the clearest, calmest environmental read;
+- **crescendo:** structure/debris accelerate while the whole field darkens;
+- **boss threshold:** a huge shadow arrives from the environment, then every
+  layer dims toward near-black for the fight.
 
-Build each leg as large, readable painted **masses** first, then localized
-texture: atmospheric ground → large dark shapes → one landmark per leg → small
-story props. Legs must **seam vertically** — the top of leg N continues into
-the bottom of leg N+1 — so the scroll never visibly cuts. Engine: the sector
-backdrop becomes a tall scrolling texture (three stacked 9:16 leg paintings);
-crossfade is the fallback where a seam fails. Every leg individually obeys the
-center-column and darkness laws below.
+This is the journey: one coherent place revealing its depth and danger over
+time. Do not bake literal approach/passage/threshold landmarks into separate
+paintings; they fight the parallax system, create brittle seams, and cannot map
+to the runtime slots.
+
+The three sector environments:
+
+- **SECTOR 1 — THE BRONZE COAST / TALOS:** moonless sea haze in the deep layer;
+  broken bronze colonnades, colossus fragments and guarded-island architecture
+  in structure; sparse wreck-gold, salt spray and ember flecks in debris.
+- **SECTOR 2 — THE RIVER OF NIGHT / AMMIT:** lapis Duat darkness in deep;
+  tomb-wall riverbanks, pylon fragments and colossal seated guardians in
+  structure; sparse papyrus scraps, tomb dust and dim gold-leaf flecks in
+  debris. The center remains a dark river channel.
+- **SECTOR 3 — THE GILDED COURT / MIDAS:** violet-black cloud void in deep;
+  stacked jade balustrades, hanging curtains and palace lattice in structure;
+  sparse coin glints, torn edict scraps and gilded dust in debris. Richer than
+  the first two sectors, but still safely below combat brightness.
+
+Every texture must tile cleanly top-to-bottom because the shader scrolls with
+`fract(v_uv)`. Deep is an opaque near-black atmospheric field. Structure and
+debris use transparent ground so layers remain independently choreographable.
+Build large readable masses first, keep all structural weight against the side
+edges, and keep the middle 50% nearly empty.
 
 - Backdrops must stay **near-black and low-contrast** so additive neon sings over
   them; they are scenery, not spectacle.
