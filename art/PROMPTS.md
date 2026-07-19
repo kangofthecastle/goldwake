@@ -30,31 +30,6 @@ doctrine loaded. (This step was missing from the first run; the boss/elite
 sprites came back over-detailed because no one was holding ART.md while
 judging them.)
 
-## RE-GEN DELTA RUN (current queue as of 2026-07-19 — do THIS, not the full batch)
-
-The first delivery (commit c34157c) covered most of the original manifest.
-The next Codex session gens ONLY this delta (same rules: STEP ZERO, sheets
-for related subjects, sliced files, existing filename/destination
-conventions):
-
-- **NEW rows never genned:** 1b GAME OVER + 1c VICTORY keyart · 30b generic-
-  upgrade icons ×6 · 30c affix icons ×5 · 33.10 Guan Yu crescent · 33.11
-  hunt arrow · 33.12 ankh bolt · 33.13 rune-bolt · 33.14 Heartseeker ·
-  34.5b serpent body segment + 34.5c tail (gen WITH 34.5 head as reference —
-  must tile) · 34.6 solar barque (HOLD cleared) · 34.7 Green Dragon head ·
-  §10 sheets (35 runes, 36 status-marks, 36b verdict jackal, 37 flame
-  flipbook) · 34d field objects ×6 (nail, boulder, hoard, coin, peach,
-  shard).
-- **REDO (delivered but rejected):** the boss/elite field sprites the owner
-  called over-detailed — regen 32.11–32.18 (and any of 32.2–32.10 flagged on
-  review) with the current softened template language.
-- **REDO (design changed):** Section 5 journey legs — the first run delivered
-  parallax layers instead; the three 3-leg journey sets are still owed
-  (owner ruling: sectors are journeys).
-- **HOLD until owner picks:** 33.7 edict — gen only the winning style A/B/C.
-- **Do NOT regen:** portraits, emblems, relics 30.1–15, title, shop,
-  backdrops' parallax layers, player ship, generic slots — all accepted.
-
 To generate the whole manifest in one session: the top-level session acts as
 **coordinator only** — it does not generate images itself. Spin up **one `sol`
 subagent per batch, on high reasoning effort, all batches in parallel**:
