@@ -182,10 +182,13 @@ armory, Odin NINE NIGHTS, Heimdall THE BIFRÖST.
   scales reset and re-arm (repeatable on bosses). *Amber bolt; gold scales glyph; verdict = snap silhouette
   + scales-tip ring.* Voice BELL darker; verdict = sub gong + tip-ring. Overlap note: per-enemy accumulator
   like Odin's runes, but Odin studies ONE target forever — Anubis serially sentences everything he touches.
-- **SP GATE OF DUAT**: a sand-vortex gate tears open at the bottom of the field (~2.5s). Every WOUNDED foe
-  (hp < max) is **dragged** toward it (displacement pull — the mirror of Poseidon's push; bosses immovable)
-  and takes a share of missing HP over the duration (absorbs old Judgment of Duat's identity); non-bosses
-  that die at the gate pay bonus gold. *Sand vortex + soul-wisps streaming down.* Voice BELL + low sand-roar.
+- **SP GATE OF DUAT** (placement owner-ruled 2026-07-19, option 2): a sand-vortex gate tears open **at the
+  player's position at cast** (~2.5s; the player is free to move away — the gate stays where opened).
+  Placement is the skill: bait foes over a spot, then open the floor under them. Every WOUNDED foe
+  (hp < max) is **dragged** toward it (real pull — the mirror of Poseidon's push; bosses immovable)
+  and takes a share of missing HP over the duration (absorbs old Judgment of Duat's identity; per-cast
+  boss cap `min(0.05*specialR,0.15)*maxhp` stands); non-bosses that die at the gate pay bonus gold.
+  *Sand vortex + soul-wisps spiraling in.* Voice BELL + low sand-roar.
 - **MODS (the demoted legacy effects)**: **HEAVY HEART** — foes below half HP tip 2× faster (the old +25%
   below-half, reborn); **FEAST OF THE FAITHFUL** — verdict/gate kill gold +50%.
 - **★** atk→verdict burst dmg & tip-rate · sp→gate missing-HP share & pull strength.
