@@ -371,7 +371,7 @@ steer, wear, ride, or time.**
 | ANUBIS | **THE FINAL WEIGHING** · the timed verdict | instant but conditional: wounded non-bosses devoured (execute+gold), bosses bitten `missing*0.25` cap `0.2*maxhp`, full-health foes untouched — its whole gameplay is WHEN you press it |
 | LOKI | **DOPPELGÄNGER** · the mirror | one perfect owned copy, 6s: fires your attack continuously, casts your special once at mid-life; §5 law (green body, cyan heart) |
 | ODIN | **ALLFATHER'S EYE** · the study window | 6s: EVERY Odin hit carves a rune (not every 4th), on any foe — you choose what to learn; zero direct damage, everything after |
-| THOR | **GIANT'S END** · orbiting wrecking ball | Mjölnir grows colossal and ORBITS the player 4s (r~180): foes it touches are hurled to the nearest wall (`LANCE_DMG*2` slam), bullets in its arc destroyed — a melee storm you steer by positioning |
+| THOR | **GIANT'S END** · the giant boomerang (owner 2026-07-19: orbit "too confusing" — REPLACED) | Mjölnir grows colossal and is THROWN up the player's lane: out-pass to the top edge, brief hang, return-pass back to the hand (~2.2s round trip, ~140px-wide head); foes it touches are hurled aside to the walls (`LANCE_DMG*2` slam), bullets in its path destroyed — one object, two straight readable passes, aimed by where you stand at cast |
 | HEIMDALL | **DAWNBREAK** · mode transform | 4s: the whole field is the bridge — every shot a spectrum lance from anywhere, all foes continuously Marked |
 | WUKONG | **THE WORLD-PILLAR** · planted cover | the staff PLANTS where you cast it: a stun shockwave rings outward (non-boss Stun 2.5s, boss stagger 0.8), then the pillar STANDS 4s as the game's only bullet-blocking obstacle — cover you position |
 | GUAN YU | **GREEN DRAGON ASCENDS** · trailing blade | 3s: a blade-dragon trails your position (~0.3s lag) carving `BEAM_DPS`-class contact ticks through everything — you drag the blade through the crowd |
@@ -379,9 +379,10 @@ steer, wear, ride, or time.**
 | QUETZ | **THE FIFTH SUN RISES** · orbiting devourer | the serpent coils AROUND the player 4s eating every bullet its body touches → burst-gauge + gold trickle, zero damage — you steer the orbit through the densest fire for maximum harvest |
 
 - **Shape ledger** (no two alike): nuke · placed zone · time+input · worn aura · kill contract · steered
-  artillery · timed verdict · mirror summon · study window · orbiting ball · mode transform · planted
-  cover · trailing blade · bullet conversion · orbiting eater. Thor orbits to THROW FOES, Quetz orbits to
-  EAT BULLETS; Ra steers a ranged column, Guan Yu drags a contact body — flagged as pairs, split by verb.
+  artillery · timed verdict · mirror summon · study window · giant boomerang · mode transform · planted
+  cover · trailing blade · bullet conversion · orbiting eater. Quetz is the only orbiter (eats bullets);
+  Thor throws one aimed round-trip; Ra steers a ranged column, Guan Yu drags a contact body — pairs split
+  by verb.
 - Only MANDATE touches bullets→gold; only DELUGE/GIANT'S END destroy bullets uncompensated; only FIFTH SUN
   feeds the gauge; only GREAT HUNT touches time.
 - Voice: one shared ULT-CAST swell + the god's §6 material accent at ×1.5; stubs until Pass 3.
