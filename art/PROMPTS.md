@@ -17,6 +17,29 @@ Sections: 1 title keyart · 2 pantheon emblems (5) · 3 god card portraits (15) 
 8 combat sprites (1 player ship + 1 enemy template × 18 subjects) ·
 9 signature player-side sprites (2 templates × 14 subjects).
 
+## Batch run (one agentic Codex session)
+
+To generate the whole manifest in one session, work through every fenced block
+top to bottom — **one image request per block**, and for the four templated
+batches (#30, #32, #33, #34) one image request **per table row**, with that
+row's values substituted into the `{PLACEHOLDERS}` before generating. Do not
+combine blocks or rows into a single request. Total: 29 direct blocks + 47
+template rows = 76 images.
+
+Output convention:
+- **Filename**: `<prompt#>[-<row#>]-<slug>.png`, e.g. `16-odin.png`,
+  `33-1-mjolnir.png`, `30-10-huginn-muninn.png`.
+- **Destination**: Section 8–9 combat sprites → `art/sprites/` — and the
+  player ship additionally saved as the live slot name `ship.png` (other live
+  slots: `enemy-pop`, `enemy-gun`, `enemy-mid`, `enemy-boss` — fill these from
+  the matching #32 rows: popcorn, gunship, carrier-or-mid pick, boss). All
+  STORYBOOK assets (Sections 1–7) → `art/gen/` (staging; engine wiring is a
+  separate pass).
+- After combat sprites land, run `bash art/embed-sprites.sh` so `file://`
+  Chrome picks them up.
+- Honor each block's own delivery line (aspect, transparent vs near-black
+  ground); reject any output with a white or light ground and re-generate.
+
 ---
 
 ## Section 1 — Title keyart
