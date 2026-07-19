@@ -126,6 +126,7 @@
     goldCombo = 0; goldComboT = 0;
     resetForms(); curFormId = 0;
     for (var h = 0; h < hazards.length; h++) hazards[h].active = false;
+    if (verdictStamps) verdictStamps.length = 0;   // §36b clear transient verdict stamps on (re)start
     return {
       mode: 'title',
       score: 0, wallet: 0,
@@ -1452,12 +1453,30 @@
       }
       else if (hz.type === 'serpent' && hz.trail) {
         var segR2 = 72 * (G.mods.quetzBig ? 1.35 : 1);
-        for (var ti = 0; ti < hz.trail.length; ti += 2) {
-          var f = ti / Math.max(2, hz.trail.length);
+        var bodC = authCell('34-5b-sky-serpent-body'), tailC = authCell('34-5c-sky-serpent-tail');
+        var tlen = hz.trail.length, ti;
+        if (bodC >= 0 || tailC >= 0) {
+          // §9 authored coil: discrete segments along the trail — the tail-tip sprite
+          // at the OLDEST sample (index 0, farthest behind), body sprites toward the
+          // head; each rotated tangent to the coil so it points forward (toward higher
+          // index = nearer the head). Procedural head is drawn below as before.
+          for (ti = 0; ti < tlen; ti += 6) {
+            var fb = ti / Math.max(2, tlen);
+            var szb = segR2 * (1.4 + 0.5 * fb);
+            var nxb = (ti + 6 < tlen) ? hz.trail[ti + 6] : hz.x, nyb = (ti + 6 < tlen) ? hz.trail[ti + 7] : hz.y;
+            var sang = Math.atan2(nyb - hz.trail[ti + 1], nxb - hz.trail[ti]) + Math.PI / 2;
+            GL.draw(GL.SPR.GLOW, hz.trail[ti], hz.trail[ti + 1], szb * 0.9, szb * 0.9, 0, 0.35, 1, 0.75, 0.4);
+            var seg = (ti === 0 && tailC >= 0) ? tailC : (bodC >= 0 ? bodC : tailC);
+            GL.draw(seg, hz.trail[ti], hz.trail[ti + 1], szb, szb, sang, 1, 1, 1, 1);
+          }
+        } else {
+        for (ti = 0; ti < tlen; ti += 2) {
+          var f = ti / Math.max(2, tlen);
           var col = Patterns.hue(hz.hue + f * 0.6);
           var sz = segR2 * (0.6 + 0.4 * f);
           GL.draw(GL.SPR.GLOW, hz.trail[ti], hz.trail[ti + 1], sz * 1.6, sz * 1.6, 0, col[0], col[1], col[2], 0.5);
           GL.draw(GL.SPR.CORE, hz.trail[ti], hz.trail[ti + 1], sz * 0.7, sz * 0.7, 0, col[0], col[1], col[2], 0.8);
+        }
         }
         // head — authored Sky Serpent head (§9, nose-up → rotate to travel); the
         // trailing coil above stays procedural. Procedural core on miss.
@@ -1479,6 +1498,13 @@
       else if (hz.type === 'sweep') {
         // colossal jade-green crescent: a full-width blade whose edges trail
         // behind the center (drawn as an arc of cells), giant kin of the attack crescent
+        var swc = authCell('33-10-green-dragon-crescent');   // §9 colossal Crescent Moon Sweep
+        if (swc >= 0) {
+          // one giant authored crescent spanning the field, horns leading upward
+          GL.draw(GL.SPR.GLOW, W / 2, hz.y, W * 1.05, hz.r * 3.0, 0, 0.3, 0.95, 0.55, 0.4);
+          GL.draw(swc, W / 2, hz.y, W * 1.15, W * 1.15, 0, 1, 1, 1, 0.98);
+          continue;
+        }
         for (var sx2 = 40; sx2 < W; sx2 += 54) {
           var fx2 = (sx2 - W / 2) / (W / 2);
           var yo = hz.y + fx2 * fx2 * 110;             // edges lag = crescent pointing up
@@ -1831,6 +1857,7 @@
   function anubisVerdict(e) {
     if (e.dying) return;
     if (SFX.verdictGong) SFX.verdictGong();               // Pass4: the scales tip — WEIGHING verdict gong
+    pushVerdictStamp(e.x, e.y, e.scale);                  // §36b THE VERDICT jackal stamp (open→shut)
     e.scaleW = 0;                                         // reset + re-arm
     if (!e.boss && !e.elite) {                            // THE VERDICT: devour the weak
       flash(e.x, e.y, [0.14, 0.05, 0.11], 130, 0.32);    // jackal-shadow snap
@@ -2529,9 +2556,14 @@
     if (u.god === 'ra') {   // solar barque + beam column beneath it
       var life = Math.min(1, u.t);
       for (var by = 40; by < H; by += 44) { var col = [1, 0.86, 0.4]; GL.draw(GL.SPR.GLOW, u.x, by, 80, 60, 0, col[0], col[1], col[2], 0.35 * life); GL.draw(GL.SPR.CORE, u.x, by, 22, 34, 0, 1, 0.95, 0.6, 0.55 * life); }
+      var bqc = authCell('34-6-solar-barque');   // §9 NOON barque — wide sprite in a square frame; square draw keeps its look
       GL.draw(GL.SPR.GLOW, u.x, u.y, 220, 120, 0, 1, 0.85, 0.35, 0.7 * life);
-      GL.draw(GL.SPR.GOLD, u.x, u.y, 120, 70, 0, 1, 0.9, 0.4, 0.95 * life);
-      GL.draw(GL.SPR.CORE, u.x, u.y, 44, 30, 0, 1, 1, 0.85, life);
+      if (bqc >= 0) {
+        GL.draw(bqc, u.x, u.y, 190, 190, 0, 1, 1, 1, life);
+      } else {
+        GL.draw(GL.SPR.GOLD, u.x, u.y, 120, 70, 0, 1, 0.9, 0.4, 0.95 * life);
+        GL.draw(GL.SPR.CORE, u.x, u.y, 44, 30, 0, 1, 1, 0.85, life);
+      }
     } else if (u.god === 'loki') {   // green owned copy (§5: green body, cyan heart, nose-up)
       var la = Math.min(1, u.t) * 0.8, pulse = 0.6 + 0.4 * Math.sin(t * 10);
       GL.draw(GL.SPR.GLOW, u.x, u.y, 72, 72, 0, 0.4, 1, 0.5, 0.5 * pulse * la);
@@ -2545,19 +2577,39 @@
       if (mc >= 0) GL.draw(mc, u.x, u.y, 200, 200, u.ang, 1, 1, 1, 1);   // authored Mjölnir, square aspect, spin rotation
       else { GL.draw(GL.SPR.SHIP_MID, u.x, u.y, 150, 150, u.ang, 0.6, 0.66, 0.8, 1); GL.draw(GL.SPR.CORE, u.x, u.y, 54, 54, 0, 0.95, 0.35, 0.3, 0.7); }   // procedural fallback
     } else if (u.god === 'guanyu' && u.trail) {   // jade blade-dragon along the lagged trail
-      for (var gi = 0; gi < u.trail.length; gi += 2) {
-        var f = gi / Math.max(2, u.trail.length), sz = 44 + f * 40;
-        GL.draw(GL.SPR.GLOW, u.trail[gi], u.trail[gi + 1], sz * 1.5, sz * 1.5, 0, 0.3, 0.95, 0.55, 0.4);
-        GL.draw(GL.SPR.CORE, u.trail[gi], u.trail[gi + 1], sz * 0.6, sz * 0.6, 0, 0.4, 1, 0.65, 0.7);
+      // §9: crescent blade-SEGMENTS (33-10) trail behind the head, tangent to the trail;
+      // the GREEN DRAGON head (34-7) rides the lead (u.x,u.y = oldest lagged sample).
+      var gsegC = authCell('33-10-green-dragon-crescent'), ghdC = authCell('34-7-green-dragon-head');
+      var gtl = u.trail.length, gi;
+      for (gi = 0; gi < gtl; gi += 2) {
+        var f = gi / Math.max(2, gtl), sz = 44 + f * 40;
+        if (gsegC >= 0) {
+          // tangent toward the head-end sample (higher index = nearer the player = the tail
+          // here, since head = oldest); point each crescent along the local blade direction.
+          var pnx = (gi + 2 < gtl) ? u.trail[gi + 2] : u.trail[gi], pny = (gi + 2 < gtl) ? u.trail[gi + 3] : u.trail[gi + 1];
+          var gang = Math.atan2(pny - u.trail[gi + 1], pnx - u.trail[gi]) + Math.PI / 2;
+          GL.draw(GL.SPR.GLOW, u.trail[gi], u.trail[gi + 1], sz * 1.3, sz * 1.3, 0, 0.3, 0.95, 0.55, 0.35);
+          GL.draw(gsegC, u.trail[gi], u.trail[gi + 1], sz * 2.0, sz * 2.0, gang, 1, 1, 1, 0.95);
+        } else {
+          GL.draw(GL.SPR.GLOW, u.trail[gi], u.trail[gi + 1], sz * 1.5, sz * 1.5, 0, 0.3, 0.95, 0.55, 0.4);
+          GL.draw(GL.SPR.CORE, u.trail[gi], u.trail[gi + 1], sz * 0.6, sz * 0.6, 0, 0.4, 1, 0.65, 0.7);
+        }
       }
-      GL.draw(GL.SPR.STREAK, u.x, u.y, 60, 120, 0, 0.3, 1, 0.6, 0.9);   // dragon head
+      // head heading: from the 2nd-oldest toward the oldest (the lead)
+      var ghang = gtl >= 4 ? Math.atan2(u.y - u.trail[3], u.x - u.trail[2]) + Math.PI / 2 : 0;
+      GL.draw(GL.SPR.GLOW, u.x, u.y, 150, 150, 0, 0.3, 1, 0.6, 0.5);
+      if (ghdC >= 0) GL.draw(ghdC, u.x, u.y, 150, 150, ghang, 1, 1, 1, 1);
+      else GL.draw(GL.SPR.STREAK, u.x, u.y, 60, 120, 0, 0.3, 1, 0.6, 0.9);   // dragon head fallback
     } else if (u.god === 'quetz') {   // Sky Serpent coiled around the player
       var uhc = authCell('34-5-sky-serpent-head');   // §9 head rides the lead coil segment
+      var qbodC = authCell('34-5b-sky-serpent-body'), qtailC = authCell('34-5c-sky-serpent-tail');
       for (var qk = 0; qk < 5; qk++) {
         var qa = u.ang + qk * (TAU / 5), qx = p.x + Math.cos(qa) * 150, qy = p.y + Math.sin(qa) * 150;
         var qcol = Patterns.hue(t * 0.4 + qk * 0.2);
         GL.draw(GL.SPR.GLOW, qx, qy, 120, 120, 0, qcol[0], qcol[1], qcol[2], 0.5);
         if (qk === 0 && uhc >= 0) GL.draw(uhc, qx, qy, 130, 130, qa + Math.PI / 2, 1, 1, 1, 1);   // head leads the coil, tangent to the circle
+        else if (qk === 4 && qtailC >= 0) GL.draw(qtailC, qx, qy, 120, 120, qa + Math.PI / 2, 1, 1, 1, 1);   // tail closes the ring
+        else if (qbodC >= 0) GL.draw(qbodC, qx, qy, 120, 120, qa + Math.PI / 2, 1, 1, 1, 1);                 // body segments
         else GL.draw(GL.SPR.CORE, qx, qy, 44, 44, 0, qcol[0], qcol[1], qcol[2], 0.8);
       }
     } else if (u.god === 'adoration') {   // worn heart-aura
@@ -5266,7 +5318,11 @@
       return s._i;
     },
     // park a Mjölnir at (x,y) so drawHammers renders the §9 hammer sprite.
-    spawnHammer: function (x, y) { G.hammers.push({ x: x, y: y, state: 'out', vy: -600, t: 0, dmg: 1, kb: 0, big: true, spin: 0.7, hoverT: 0, hit: [], target: null, targetSeq: 0 }); return G.hammers.length; }
+    spawnHammer: function (x, y) { G.hammers.push({ x: x, y: y, state: 'out', vy: -600, t: 0, dmg: 1, kb: 0, big: true, spin: 0.7, hoverT: 0, hit: [], target: null, targetSeq: 0 }); return G.hammers.length; },
+    // §37 verify: light an enemy on fire so the authored flame flipbook renders.
+    setBurn: function (i, dps, dur) { var e = Engine.enemies.items[i]; if (e && e.active) applyBurn(e, dps == null ? 20 : dps, dur == null ? 6 : dur); },
+    // §34d verify: park a TALOS boulder (burstY>0 tag) so drawHurledStones renders it.
+    spawnStone: function (x, y) { var b = Patterns.bullet(x, y, Math.PI / 2, 40, { fam: Patterns.FAM.ORB, tier: 'XL', color: [1, 0.6, 0.35], burstY: 999999, life: 30 }); return b ? b._i : -1; }
   };
 
   function detectClear() {
@@ -5803,7 +5859,7 @@
       drawBifrost();          // HEIMDALL rainbow bridge / dawn-seam telegraph (drawn hazard)
       drawDuat();             // ANUBIS GATE OF DUAT sand-vortex (drawn hazard)
       drawSkyfall();          // ZEUS SKYFALL transient column
-      drawGold(); drawEnemies(); drawShots(); drawParticles(); drawBolts(); drawBulletHalos();
+      drawGold(); drawEnemies(); drawShots(); drawParticles(); drawBolts(); drawBulletHalos(); drawHurledStones();
       // PASS B — enemy-bullet opaque bodies (premultiplied-over). The bullet
       // shader recolours each cell so the baked white cores survive the family
       // tint; restore the default sprite shader immediately after.
@@ -5814,7 +5870,7 @@
       // PASS C — additive over the bullets: allies + the player (and its core
       // gem) always read on top of the danmaku.
       GL.blendAdditive();
-      drawDecoy(); drawClones(); drawRavens(); drawGungnir(); drawRaBeam(); drawWraiths(); drawJudgement(); drawHammers(); drawUlt(); drawDebris();
+      drawDecoy(); drawClones(); drawRavens(); drawGungnir(); drawRaBeam(); drawWraiths(); drawJudgement(); drawHammers(); drawUlt(); drawDebris(); drawVerdictStamps();
       drawDashGhosts();
       if (G.player.alive) drawPlayer();
       if (G.flashAll > 0) GL.draw(GL.SPR.GLOW, W / 2, H / 2, W * 2, H * 2, 0, 0.5, 0.7, 1.0, G.flashAll * 0.5);
@@ -5878,6 +5934,9 @@
   }
   function drawStructUnit(u, col, alpha) { drawStructUnitAt(u.x, u.y, u.parts, col, alpha); }
   function drawGold() {
+    // §34d authored coin — PERF: one instanced quad per coin either way (same as the
+    // procedural GOLD shard), resolved ONCE per frame not per coin. size ≈ procedural.
+    var coinC = authCell('34d-4-gold-coin');
     Engine.gold.forEach(function (g) {
       var fade = g.age > g.life - 1.5 ? Math.max(0, (g.life - g.age) / 1.5) : 1;
       if (g.cursed) {
@@ -5886,13 +5945,18 @@
         var cp = 0.55 + 0.45 * Math.sin(G.time * 9 + g.rot);
         GL.draw(GL.SPR.GLOW, g.x, g.y, g.scale * 2.8, g.scale * 2.8, 0, 1, 0.72, 0.2, 0.55 * fade);
         GL.draw(GL.SPR.RING, g.x, g.y, g.scale * 2.2, g.scale * 2.2, G.time * 3, 1, 0.42, 0.2, (0.45 + 0.4 * cp) * fade);   // warm danger rim
-        GL.draw(GL.SPR.GOLD, g.x, g.y, g.scale * 1.15, g.scale * 1.4, g.rot, 1, 0.86, 0.34, fade);
+        if (coinC >= 0) GL.draw(coinC, g.x, g.y, g.scale * 1.7, g.scale * 1.7, g.rot, 1, 0.9, 0.55, fade);   // authored coin, warm-tinted for the curse
+        else GL.draw(GL.SPR.GOLD, g.x, g.y, g.scale * 1.15, g.scale * 1.4, g.rot, 1, 0.86, 0.34, fade);
         GL.draw(GL.SPR.CORE, g.x, g.y, g.scale * 0.55, g.scale * 0.55, 0, 1, 1, 0.85, (0.6 + 0.4 * cp) * fade);
         return;
       }
       GL.draw(GL.SPR.GLOW, g.x, g.y, g.scale * 2.2, g.scale * 2.2, 0, 1, 0.7, 0.2, 0.5 * fade);
-      GL.draw(GL.SPR.GOLD, g.x, g.y, g.scale, g.scale * 1.2, g.rot, 1, 0.85, 0.35, fade);
-      GL.draw(GL.SPR.GOLD, g.x, g.y, g.scale * 0.5, g.scale * 0.6, g.rot, 1, 1, 0.9, fade);
+      if (coinC >= 0) {
+        GL.draw(coinC, g.x, g.y, g.scale * 1.5, g.scale * 1.5, g.rot, 1, 1, 1, fade);   // authored coin (≈ procedural on-screen size)
+      } else {
+        GL.draw(GL.SPR.GOLD, g.x, g.y, g.scale, g.scale * 1.2, g.rot, 1, 0.85, 0.35, fade);
+        GL.draw(GL.SPR.GOLD, g.x, g.y, g.scale * 0.5, g.scale * 0.6, g.rot, 1, 1, 0.9, fade);
+      }
     });
   }
   // ---- authored-sprite wiring (art/PROMPTS.md §8-9) -------------------------
@@ -5952,13 +6016,34 @@
       GL.draw(e.spr, e.x, e.y, e.scale, e.scale, e.rot, r, g, bl, 1);
       if (e.boss) GL.draw(e.spr, e.x, e.y, e.scale * 0.6, e.scale * 0.6, e.rot, 1, 1, 1, 0.4 + 0.2 * Math.sin(G.time * 4));
       }
+      // MIDAS THE HOARD — the heaped mound of stolen gold at the king's feet, growing
+      // with e.hoard (the gold-theft loop). §34d the ONE enemy-adjacent loot-gold. Drawn
+      // in loot-gold; procedural mound (GOLD shards) on miss so it never vanishes.
+      if (e.isMidas && !e.dying) {
+        var hv = e.hoard || 0, hw = Math.min(170, 74 + hv * 1.2);
+        var hx = e.x, hy = e.y + e.scale * 0.52, hp2 = 0.85 + 0.15 * Math.sin(G.time * 2.5);
+        var hoardC = authCell('34d-3-the-hoard');
+        GL.draw(GL.SPR.GLOW, hx, hy, hw * 1.25, hw * 0.7, 0, 1, 0.82, 0.3, 0.4 * hp2);
+        if (hoardC >= 0) {
+          GL.draw(hoardC, hx, hy, hw, hw, 0, 1, 1, 1, 0.98);
+        } else {
+          GL.draw(GL.SPR.GOLD, hx - hw * 0.22, hy, hw * 0.4, hw * 0.34, 0.3, 1, 0.85, 0.35, 0.9);
+          GL.draw(GL.SPR.GOLD, hx + hw * 0.2, hy + hw * 0.05, hw * 0.42, hw * 0.36, -0.2, 1, 0.85, 0.35, 0.9);
+          GL.draw(GL.SPR.GOLD, hx, hy - hw * 0.1, hw * 0.34, hw * 0.3, 0, 1, 0.92, 0.5, 0.9);
+        }
+      }
       // TALOS THE NAIL — the glowing ankle weak point (the only thing that can be
       // hurt in the final phase): a green-gold ichor node, pulsing so it reads.
       if (e.nailActive) {
         var np = 0.6 + 0.4 * Math.sin(G.time * 8);
+        var nailC = authCell('34d-1-the-nail');   // §34d THE NAIL — the finale weak point
         GL.draw(GL.SPR.GLOW, e.nailX, e.nailY, 78, 78, 0, 0.7, 1, 0.45, 0.5 * np);
-        GL.draw(GL.SPR.NEEDLE, e.nailX, e.nailY, 22, 50, 0, 1, 0.95, 0.6, 0.95);
-        GL.draw(GL.SPR.CORE, e.nailX, e.nailY, 24, 24, 0, 0.7, 1, 0.5, 0.7 + 0.3 * np);
+        if (nailC >= 0) {
+          GL.draw(nailC, e.nailX, e.nailY, 60, 60, 0, 1, 1, 1, 0.95);
+        } else {
+          GL.draw(GL.SPR.NEEDLE, e.nailX, e.nailY, 22, 50, 0, 1, 0.95, 0.6, 0.95);
+          GL.draw(GL.SPR.CORE, e.nailX, e.nailY, 24, 24, 0, 0.7, 1, 0.5, 0.7 + 0.3 * np);
+        }
         GL.draw(GL.SPR.RING, e.nailX, e.nailY, 58, 58, G.time * 3, 0.6, 1, 0.5, 0.75);
       }
       // elite aura rings
@@ -6011,7 +6096,11 @@
       for (var ri = 0; ri < e.runes; ri++) {
         var rf = e.runes > 1 ? (ri / (e.runes - 1) - 0.5) : 0;
         var rx = e.x + rf * span, ry = gy - Math.abs(rf) * s * 0.14;   // arced band
-        GL.draw(GL.SPR.SHARD, rx, ry, s * 0.11, s * 0.16, rf, 1, 0.85, 0.4, 0.95);
+        // §35 authored carved runes — order = carve order (ri-th rune = 35-(ri+1));
+        // the 9th is THE NINTH RUNE (doom). Small marks on the hull; SHARD on miss.
+        var runeC = authCell('35-' + (ri + 1) + '-rune');
+        if (runeC >= 0) GL.draw(runeC, rx, ry, s * 0.19, s * 0.19, 0, 1, 1, 1, 0.95);
+        else GL.draw(GL.SPR.SHARD, rx, ry, s * 0.11, s * 0.16, rf, 1, 0.85, 0.4, 0.95);
       }
       if (ignite) { var ip = 0.6 + 0.4 * Math.sin(t * 12); GL.draw(GL.SPR.GLOW, e.x, gy, span * 1.3, s * 0.4, 0, 1, 0.85, 0.4, 0.4 * ip); }
     }
@@ -6026,11 +6115,19 @@
     if (e.scaleW > 0 && G.attackGod === 'anubis' && !e.dying) {
       var frac = Math.min(1, e.scaleW / (e.maxhp * ANUBIS_K));
       var tilt = frac * 0.5, gy = e.y - s * 0.7;                 // beam tips as the scales load
-      var bx = Math.cos(tilt) * s * 0.34, by = Math.sin(tilt) * s * 0.34;
-      GL.draw(GL.SPR.STREAK, e.x, gy, s * 0.06, s * 0.14, 0, 1, 0.82, 0.35, 0.9);        // fulcrum post
-      GL.draw(GL.SPR.STREAK, e.x, gy, s * 0.72, s * 0.05, Math.PI / 2 + tilt, 1, 0.82, 0.35, 0.95);   // tipping beam
-      GL.draw(GL.SPR.GOLD, e.x - bx, gy - by, s * 0.16, s * 0.16, 0, 1, 0.85, 0.4, 0.9);  // pan (rises)
-      GL.draw(GL.SPR.GOLD, e.x + bx, gy + by, s * 0.16, s * 0.16, 0, 1, 0.85, 0.4, 0.9);  // pan (sinks with weight)
+      // §36 authored scales glyph — three tip-states by progress vs threshold:
+      // LEVEL (36-2-scales-b) → TIPPING (36-1-scales-a) → TIPPED harder (36-3-scales-c).
+      var scName = frac < 0.34 ? '36-2-scales-b' : frac < 0.67 ? '36-1-scales-a' : '36-3-scales-c';
+      var scC = authCell(scName);
+      if (scC >= 0) {
+        GL.draw(scC, e.x, gy, s * 0.5, s * 0.5, 0, 1, 1, 1, 0.95);
+      } else {
+        var bx = Math.cos(tilt) * s * 0.34, by = Math.sin(tilt) * s * 0.34;
+        GL.draw(GL.SPR.STREAK, e.x, gy, s * 0.06, s * 0.14, 0, 1, 0.82, 0.35, 0.9);        // fulcrum post
+        GL.draw(GL.SPR.STREAK, e.x, gy, s * 0.72, s * 0.05, Math.PI / 2 + tilt, 1, 0.82, 0.35, 0.95);   // tipping beam
+        GL.draw(GL.SPR.GOLD, e.x - bx, gy - by, s * 0.16, s * 0.16, 0, 1, 0.85, 0.4, 0.9);  // pan (rises)
+        GL.draw(GL.SPR.GOLD, e.x + bx, gy + by, s * 0.16, s * 0.16, 0, 1, 0.85, 0.4, 0.9);  // pan (sinks with weight)
+      }
     }
     // §3 PRECISION — the weak-point node: a pulsing diamond-shard (telegraph flash → open).
     if (e.nodeState > 0) {
@@ -6042,14 +6139,48 @@
     }
     // JADE edict style-C — the seal-mark ring, stamped on hit (e.sealT), drawn here at render.
     if (e.sealT > 0 && !e.dying) {
-      GL.draw(GL.SPR.RING, e.x, e.y, s * 0.9, s * 0.9, 0, 1, 0.3, 0.3, 0.9 * Math.min(1, e.sealT / 0.3));
+      // §36 authored Jade seal-brand (stamped on style-C edict hit); RING on miss.
+      var sealC = authCell('36-6-seal'), sealA = 0.95 * Math.min(1, e.sealT / 0.3);
+      if (sealC >= 0) GL.draw(sealC, e.x, e.y, s * 0.6, s * 0.6, 0, 1, 1, 1, sealA);
+      else GL.draw(GL.SPR.RING, e.x, e.y, s * 0.9, s * 0.9, 0, 1, 0.3, 0.3, sealA);
     }
-    // LOKI — MISCHIEF triskele: 1/2/3 green kunai over the hull (stack = shape).
+    // LOKI — MISCHIEF triskele: the §36 authored 3-blade mark over the crown, growing
+    // with the stack (1/2/3); procedural per-stack kunai on miss (stack = shape).
     if (e.mischief > 0 && !e.dying && G.attackGod === 'loki') {
-      for (var mi = 0; mi < e.mischief; mi++) {
-        var ma = t * 2 + mi * (TAU / 3), mx = e.x + Math.cos(ma) * s * 0.3, my = e.y - s * 0.55 + Math.sin(ma) * s * 0.12;
-        GL.draw(GL.SPR.KUNAI, mx, my, s * 0.16, s * 0.28, ma, 0.55, 1.0, 0.35, 0.9);
+      var triC = authCell('36-4-triskele');
+      if (triC >= 0) {
+        var trs = s * (0.34 + 0.09 * e.mischief);
+        GL.draw(triC, e.x, e.y - s * 0.55, trs, trs, t * 1.6, 1, 1, 1, 0.95);
+      } else {
+        for (var mi = 0; mi < e.mischief; mi++) {
+          var ma = t * 2 + mi * (TAU / 3), mx = e.x + Math.cos(ma) * s * 0.3, my = e.y - s * 0.55 + Math.sin(ma) * s * 0.12;
+          GL.draw(GL.SPR.KUNAI, mx, my, s * 0.16, s * 0.28, ma, 0.55, 1.0, 0.35, 0.9);
+        }
       }
+    }
+  }
+  // §36b THE VERDICT jackal stamp — a screen-space transient (NOT enemy-bound, so it
+  // shows over a DEVOURED foe that vanishes the same frame). Jaws OPEN (36-7) for the
+  // first ~60% of its 0.24s life, then SNAP SHUT (36-8) on the devour beat, scaling up
+  // and fading. Stored as {x,y,sc,t0}; drawVerdictStamps culls expired ones each render.
+  var verdictStamps = [];
+  function pushVerdictStamp(x, y, sc) { verdictStamps.push({ x: x, y: y, sc: sc || 40, t0: G.time }); if (verdictStamps.length > 24) verdictStamps.shift(); }
+  function drawVerdictStamps() {
+    if (!verdictStamps.length) return;
+    var openC = authCell('36-7-verdict-jackal'), shutC = authCell('36-8-verdict-jackal-shut');
+    var DUR = 0.24, i = 0;
+    while (i < verdictStamps.length) {
+      var v = verdictStamps[i], age = G.time - v.t0;
+      if (age >= DUR || age < 0) { verdictStamps.splice(i, 1); continue; }
+      var f = age / DUR, grow = 1.6 + f * 1.0, a = 1 - f * f;
+      var sz = Math.max(80, v.sc * 1.8) * grow;
+      var shut = f > 0.55;
+      var cell = shut ? (shutC >= 0 ? shutC : openC) : (openC >= 0 ? openC : shutC);
+      if (cell >= 0) {
+        GL.draw(GL.SPR.GLOW, v.x, v.y, sz * 0.9, sz * 0.9, 0, 0.5, 0.45, 0.7, 0.4 * a);
+        GL.draw(cell, v.x, v.y, sz, sz, 0, 1, 1, 1, a);
+      }
+      i++;
     }
   }
   // §4 STATUS SHAPE-LANGUAGE. Read WHERE (zone) before WHAT (shape). Four disjoint
@@ -6080,11 +6211,19 @@
     // ---- FRAME (4 corners): marked L-brackets; weak sagging lower brackets ----
     if (mark) {
       var mc = [0.95, 0.75, 0.2], off = s * 0.62, arm = s * 0.26, th = s * 0.05;
+      // §36 authored MARKED bracket — one sprite placed in 4 rotated copies (per manifest),
+      // corner facing outward; the paired procedural L-arms are the fallback.
+      var brC = authCell('36-5-bracket');
       for (var ci = 0; ci < 4; ci++) {
         var sx = (ci & 1) ? 1 : -1, sy = (ci & 2) ? 1 : -1;
         var cx = e.x + sx * off, cy = e.y + sy * off;
-        GL.draw(GL.SPR.STREAK, cx, cy + sy * arm * 0.5, th, arm, 0, mc[0], mc[1], mc[2], 0.9);          // vertical arm
-        GL.draw(GL.SPR.STREAK, cx + sx * arm * 0.5, cy, th, arm, Math.PI / 2, mc[0], mc[1], mc[2], 0.9); // horizontal arm
+        if (brC >= 0) {
+          var brot = (sx < 0 && sy < 0) ? 0 : (sx > 0 && sy < 0) ? Math.PI / 2 : (sx > 0 && sy > 0) ? Math.PI : -Math.PI / 2;
+          GL.draw(brC, cx, cy, s * 0.42, s * 0.42, brot, 1, 1, 1, 0.9);
+        } else {
+          GL.draw(GL.SPR.STREAK, cx, cy + sy * arm * 0.5, th, arm, 0, mc[0], mc[1], mc[2], 0.9);          // vertical arm
+          GL.draw(GL.SPR.STREAK, cx + sx * arm * 0.5, cy, th, arm, Math.PI / 2, mc[0], mc[1], mc[2], 0.9); // horizontal arm
+        }
       }
     }
     if (weak) {
@@ -6104,12 +6243,26 @@
     // ---- UNDERFOOT: burn flame ticks ----
     if (e.burnT > 0) {
       var flick = 0.55 + 0.45 * Math.sin(t * 88);                 // ~14Hz
-      for (var bi = 0; bi < 3; bi++) {
-        var rise = ((t * 1.6 + bi * 0.33) % 1);
-        var bx = e.x + (bi - 1) * s * 0.24, by = e.y + s * (0.7 + rise * 0.35);
-        var cr = 1, cg = 0.85 - rise * 0.55, cb = 0.3 - rise * 0.25;   // yellow core -> red tip
-        darkBack(bx, by, s * 0.24);
-        GL.draw(GL.SPR.SHARD, bx, by, s * 0.16, s * 0.28, 0, cr, cg, Math.max(0.05, cb), (0.55 + 0.4 * flick) * (1 - rise * 0.5));
+      // §37 authored flame flipbook — 6 frames cycled ~12Hz at the UNDERFOOT zone,
+      // stacked as a few offset tongues (heavier/boss foes get more). SHARD on miss.
+      var fr = (Math.floor(t * 12) % 6) + 1, flC = authCell('37-' + fr + '-flame');
+      if (flC >= 0) {
+        var nT = e.boss ? 3 : 2;
+        for (var fi = 0; fi < nT; fi++) {
+          var offx = (fi - (nT - 1) * 0.5) * s * 0.26, fby = e.y + s * 0.78;
+          // each tongue reads its own frame (offset) so they don't pulse in lock-step
+          var ffr = ((Math.floor(t * 12) + fi * 2) % 6) + 1, tC = authCell('37-' + ffr + '-flame');
+          darkBack(e.x + offx, fby, s * 0.24);
+          GL.draw(tC >= 0 ? tC : flC, e.x + offx, fby, s * 0.4, s * 0.5, 0, 1, 1, 1, 0.85 + 0.15 * flick);
+        }
+      } else {
+        for (var bi = 0; bi < 3; bi++) {
+          var rise = ((t * 1.6 + bi * 0.33) % 1);
+          var bx = e.x + (bi - 1) * s * 0.24, by = e.y + s * (0.7 + rise * 0.35);
+          var cr = 1, cg = 0.85 - rise * 0.55, cb = 0.3 - rise * 0.25;   // yellow core -> red tip
+          darkBack(bx, by, s * 0.24);
+          GL.draw(GL.SPR.SHARD, bx, by, s * 0.16, s * 0.28, 0, cr, cg, Math.max(0.05, cb), (0.55 + 0.4 * flick) * (1 - rise * 0.5));
+        }
       }
     }
     // ---- CROWN: stun sparks (priority) or charm hearts ----
@@ -6138,6 +6291,12 @@
       var ang = Math.atan2(s.vy, s.vx) + Math.PI / 2;
       // ARTEMIS arrow-needle (kind 9): silver-white body + moon-blue rim, oriented.
       if (s.kind === 9) {
+        var hac9 = authCell('33-11-hunt-arrow');   // §9 volley arrow — nose-up → rotate to travel
+        if (hac9 >= 0) {
+          GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 0.55, s.scale * 1.9, ang, 0.55, 0.75, 1.0, 0.4);
+          GL.draw(hac9, s.x, s.y, s.scale * 1.7, s.scale * 1.7, ang, 1, 1, 1, 1);
+          return;
+        }
         GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 0.55, s.scale * 1.9, ang, 0.55, 0.75, 1.0, 0.45);
         GL.draw(GL.SPR.NEEDLE, s.x, s.y, s.scale * 0.5, s.scale * 1.7, ang, 0.9, 0.95, 1.0, 0.95);
         GL.draw(GL.SPR.CORE, s.x, s.y, s.scale * 0.24, s.scale * 0.24, 0, 1, 1, 1, 0.9);
@@ -6151,6 +6310,12 @@
       if (s.kind >= 11 && s.kind <= 14) { drawArmoryShot(s, ang); return; }
       // ODIN rune-bolt (15): steel-blue STREAK + NEEDLE spine, gold core once at doom.
       if (s.kind === 15) {
+        var rbc = authCell('33-13-rune-bolt');   // §9 heavy NINE NIGHTS bolt — nose-up → rotate to travel
+        if (rbc >= 0) {
+          GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 0.7, s.scale * 2.0, ang, 0.6, 0.72, 0.95, 0.5);
+          GL.draw(rbc, s.x, s.y, s.scale * 1.8, s.scale * 1.8, ang, 1, 1, 1, 1);
+          return;
+        }
         GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 0.7, s.scale * 2.0, ang, 0.6, 0.72, 0.95, 0.5);
         GL.draw(GL.SPR.STREAK, s.x, s.y, s.scale * 0.5, s.scale * 1.9, ang, 0.8, 0.85, 0.95, 0.95);
         GL.draw(GL.SPR.NEEDLE, s.x, s.y, s.scale * 0.28, s.scale * 1.4, ang, 0.95, 0.98, 1, 0.9);
@@ -6161,11 +6326,29 @@
       if (s.kind === 7) { drawEdict(s, ang); return; }
       // ANUBIS THE WEIGHING amber ankh-bolt (kind 17).
       if (s.kind === 17) {
+        var akc = authCell('33-12-ankh-bolt');   // §9 thrown ankh — loop-up, nose-up → rotate to travel
+        if (akc >= 0) {
+          GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 0.6, s.scale * 1.7, ang, 1, 0.72, 0.28, 0.45);
+          GL.draw(akc, s.x, s.y, s.scale * 1.5, s.scale * 1.5, ang, 1, 1, 1, 1);
+          return;
+        }
         GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 0.6, s.scale * 1.7, ang, 1, 0.72, 0.28, 0.5);
         GL.draw(GL.SPR.STREAK, s.x, s.y, s.scale * 0.34, s.scale * 1.3, ang, 1, 0.72, 0.28, 0.95);
         GL.draw(GL.SPR.RING, s.x, s.y - s.scale * 0.2, s.scale * 0.34, s.scale * 0.34, 0, 1, 0.82, 0.4, 0.9);   // ankh loop
         GL.draw(GL.SPR.CORE, s.x, s.y, s.scale * 0.24, s.scale * 0.24, 0, 1, 0.95, 0.7, 0.9);
         return;
+      }
+      // APHRODITE heartseeker (kind 5) — a slow votive seeking heart (§9). Authored
+      // point-DOWN and ornamental; it weaves, so present it near-upright with a gentle
+      // sway rather than spinning to velocity (the read is the heart, not a needle).
+      if (s.kind === 5) {
+        var hkc = authCell('33-14-heartseeker');
+        if (hkc >= 0) {
+          var sway = Math.sin(G.time * 5 + s.y * 0.02) * 0.18;
+          GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 1.4, s.scale * 1.4, 0, 1, 0.4, 0.72, 0.5);
+          GL.draw(hkc, s.x, s.y, s.scale * 1.8, s.scale * 1.8, sway, 1, 1, 1, 1);
+          return;
+        }
       }
       // HEIMDALL SPECTRUM LANCE (kind 18) — prismatic rainbow bolt, cycling hue.
       if (s.kind === 18) {
@@ -6188,6 +6371,12 @@
         // broad crescent blade — wide across its travel; brightens as it cleaves
         var cw = s.scale, perp = ang + Math.PI / 2;
         var pow = Math.min(1, (s.damage - 1) * 0.12);
+        var crc = authCell('33-10-green-dragon-crescent');   // §9 Green Dragon Crescent — cleaving profile, nose-up → rotate to travel
+        if (crc >= 0) {
+          GL.draw(GL.SPR.GLOW, s.x, s.y, cw * 1.6, cw * 2.2, perp, s.r, s.g, s.b, 0.45 + 0.3 * pow);
+          GL.draw(crc, s.x, s.y, cw * 2.6, cw * 2.6, ang, 1, 1, 1, 1);
+          return;
+        }
         GL.draw(GL.SPR.GLOW, s.x, s.y, cw * 1.1, cw * 2.4, perp, s.r, s.g, s.b, 0.5 + 0.35 * pow);
         GL.draw(GL.SPR.STREAK, s.x, s.y, cw * 0.7, cw * 2.0, perp, s.r, s.g, s.b, 0.95);
         GL.draw(GL.SPR.STREAK, s.x, s.y, cw * 0.4, cw * 1.3, perp, 1, 1, 1, 0.85);
@@ -6311,10 +6500,27 @@
       if (b.slowT > 0) GL.draw(GL.SPR.RING, b.x, b.y, R * 3.2, R * 3.2, 0, 0.6, 0.9, 1.0, 0.25);
     });
   }
+  // §34d TALOS HURLED STONES — the authored boulder is a normal RGBA sprite, so it
+  // CANNOT go through the bullet-body pass (that shader channel-decodes cells). Drawn
+  // here in an ADDITIVE pass with the default shader, exactly like the enemy sprites.
+  // b.burstY>0 uniquely tags boulders and is pool-reset every alloc (patterns.js), so
+  // a recycled slot can never wrongly render as a stone. Skipped in drawBulletBodies.
+  function drawHurledStones() {
+    var stoneC = authCell('34d-2-hurled-stone');
+    if (stoneC < 0) return;   // not loaded: boulders keep their procedural ORB body in the bullet pass
+    Engine.bullets.forEach(function (b) {
+      if (b.burstY <= 0) return;
+      var R = b.scale, fl = b.flash > 0 ? b.flash / 0.1 : 0, sc = 1 + 0.32 * fl;
+      GL.draw(GL.SPR.GLOW, b.x, b.y, R * 2.6, R * 2.6, 0, b.r, b.g, b.b, 0.35);
+      GL.draw(stoneC, b.x, b.y, R * 2.1 * sc, R * 2.1 * sc, b.age * b.spin, 1, 1, 1, 1);
+    });
+  }
   function drawBulletBodies() {
+    var stoneReady = GL.authoredSpr('34d-2-hurled-stone') >= 0;
     Engine.bullets.forEach(function (b) {
       var R = b.scale, fl = b.flash > 0 ? b.flash / 0.1 : 0, sc = 1 + 0.32 * fl;
       var r = b.r, g = b.g, bl = b.b;
+      if (b.burstY > 0 && stoneReady) return;   // drawn as an authored sprite in drawHurledStones (additive pass)
       switch (b.fam) {
         case 1: GL.draw(GL.SPR.GRING, b.x, b.y, R * 2 * sc, R * 2 * sc, b.age * b.spin, r, g, bl, 1); break;   // ring
         case 2: GL.draw(GL.SPR.KUNAI, b.x, b.y, R * 1.28, R * 2.25, b.dir + Math.PI / 2, r, g, bl, 1); break;  // kunai

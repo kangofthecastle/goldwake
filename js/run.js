@@ -41,6 +41,24 @@
     OLYMPUS: '2-olympus', KEMET: '3-kemet', ASGARD: '4-asgard',
     'CELESTIAL COURT': '5-celestial-court', 'FIFTH SUN': '6-fifth-sun'
   };
+  // 30b generic upgrade card art (SCALING/GENERIC cards carry no god portrait) —
+  // keyed by the card id (SCALING/GENERIC row[0]). 30c sector-affix keyart, keyed
+  // by AFFIX key, dresses the sector-intro screen.
+  var GENERIC_ART = {
+    atkdmg: '30b-1-attack-power', vcap: '30b-2-apex', spcharge: '30b-3-special-charge',
+    life: '30b-4-extra-life', hitbox: '30b-5-focus', goldworth: '30b-6-greed'
+  };
+  var AFFIX_ART = {
+    NIGHT_MARKET: '30c-1-night-market', GILDED: '30c-2-gilded', SWARM: '30c-3-swarm',
+    DENSE_VEIL: '30c-4-dense-veil', VOLATILE: '30c-5-volatile'
+  };
+  // map a live affix object back to its AFFIX key (for AFFIX_ART); null for a
+  // composite/labor affix whose name isn't a base key (falls back to the dim wash).
+  function affixKeyOf(affix) {
+    if (!affix) return null;
+    for (var k in AFFIX) if (AFFIX[k] === affix || AFFIX[k].name === affix.name) return k;
+    return null;
+  }
   var artCache = {};   // slug -> { img, ok } ; entry present but ok=false while loading/failed
   function getArt(slug) {
     if (!slug) return null;
@@ -1050,8 +1068,11 @@
   // S2 River of Night/AMMIT = Kemet, S3 Gilded Court/MIDAS = Celestial Court).
   var SECTOR_PANTHEON = ['OLYMPUS', 'KEMET', 'CELESTIAL COURT'];
   function drawSectorCard(ctx) {
-    dim(ctx, 0.5);
     var sec = Run.sectors[Run.sectorIdx];
+    // 30c sector-affix keyart as the intro backdrop (scrim keeps the title/text
+    // readable, same treatment as the title backdrop); plain dim wash when absent.
+    var affixSlug = sec && sec.affix ? AFFIX_ART[affixKeyOf(sec.affix)] : null;
+    drawScreenArt(ctx, affixSlug, 0.55, 0.5);
     // pantheon emblem stamp, large and dim, centered above the sector title
     var emb = getArt(PANTHEON_EMBLEM[SECTOR_PANTHEON[Run.sectorIdx] || 'OLYMPUS']);
     if (emb) { ctx.save(); ctx.globalAlpha = 0.5; var es = 240; ctx.drawImage(emb, W / 2 - es / 2, H * 0.20, es, es); ctx.restore(); }
@@ -1124,6 +1145,18 @@
       var seam = ctx.createLinearGradient(x + w / 2 - 12, 0, x + w / 2 + 12, 0);
       seam.addColorStop(0, 'rgba(5,8,11,0)'); seam.addColorStop(0.5, 'rgba(255,210,120,0.35)'); seam.addColorStop(1, 'rgba(5,8,11,0)');
       ctx.fillStyle = seam; ctx.fillRect(x + w / 2 - 12, y, 24, h);
+      cardArtScrims(ctx, x, y, w, h);
+      ctx.restore();
+      return true;
+    }
+    // 30b: generic upgrade card art — SCALING/GENERIC cards have no god portrait,
+    // so key by the card id. coverPortrait treatment matches the god cards.
+    if (!b.god && GENERIC_ART[b.id]) {
+      var gimg = getArt(GENERIC_ART[b.id]);
+      if (!gimg) return false;
+      ctx.save();
+      roundRect(ctx, x + 4, y + 4, w - 8, h - 8, 15); ctx.clip();
+      coverPortrait(ctx, gimg, x, y, w, h, 0.85);
       cardArtScrims(ctx, x, y, w, h);
       ctx.restore();
       return true;
@@ -1306,7 +1339,9 @@
   }
 
   function drawEnd(ctx, win) {
-    dim(ctx, 0.72);
+    // 1b/1c end keyart — VICTORY / GAME OVER backdrops with a heavy scrim so the
+    // tally text stays readable (same treatment as the title backdrop). Dim on absent.
+    drawScreenArt(ctx, win ? '1c-victory' : '1b-game-over', 0.55, 0.72);
     ctx.textAlign = 'center';
     ctx.fillStyle = win ? COL_GOLD : COL_RED; ctx.font = '800 92px Consolas, monospace';
     spaced(ctx, win ? 'RUN COMPLETE' : 'GAME OVER', W / 2, H * 0.24, 12);

@@ -259,7 +259,15 @@
 
   var atlasTex = null;
   var regions = [];      // index -> [u0, v0, du, dv]
-  var ATLAS_SIZE = 1024;
+  // Atlas grown to 8x16 = 128 cells (was 8x8 = 64). Width is unchanged (8 cols x
+  // 128); height is doubled to 2048 to seat the 2026-07-19 signature/glyph/field
+  // batch as cells 51+. Cell PIXEL positions are untouched (cellRect derives x/y
+  // from COLS/CELL only, never the atlas extent), so every existing index —
+  // procedural 0-18, authored 19-49, BOLT 50 — lands on the exact same texels;
+  // only the V denominator changes (y / ATLAS_H). The paste Y uses the same
+  // pixel rc.y, so sampling is identical: no UV drift. U still divides by ATLAS_W.
+  var ATLAS_W = 1024;   // 8 cols x 128
+  var ATLAS_H = 2048;   // 16 rows x 128
   var CELL = 128;
   var COLS = 8;
 
@@ -428,10 +436,10 @@
 
   function buildAtlas() {
     var cv = document.createElement('canvas');
-    cv.width = ATLAS_SIZE;
-    cv.height = ATLAS_SIZE;
+    cv.width = ATLAS_W;
+    cv.height = ATLAS_H;
     var c = cv.getContext('2d');
-    c.clearRect(0, 0, ATLAS_SIZE, ATLAS_SIZE);
+    c.clearRect(0, 0, ATLAS_W, ATLAS_H);
 
     // Helper: draw within cell i using a local context centered at cell center,
     // with the cell treated as [-r..r] in both axes (r = half). Everything is
@@ -445,10 +453,10 @@
       // record region inset by ~1px in uv to avoid bilinear bleed
       var pad = 1.0;
       regions[i] = [
-        (rc.x + pad) / ATLAS_SIZE,
-        (rc.y + pad) / ATLAS_SIZE,
-        (CELL - pad * 2) / ATLAS_SIZE,
-        (CELL - pad * 2) / ATLAS_SIZE
+        (rc.x + pad) / ATLAS_W,
+        (rc.y + pad) / ATLAS_H,
+        (CELL - pad * 2) / ATLAS_W,
+        (CELL - pad * 2) / ATLAS_H
       ];
     }
 
@@ -716,8 +724,8 @@
     gl.bindTexture(gl.TEXTURE_2D, atlasTex);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, ATLAS_SIZE, ATLAS_SIZE, 0, gl.RGBA, gl.UNSIGNED_BYTE,
-      premultiplied(c.getImageData(0, 0, ATLAS_SIZE, ATLAS_SIZE)));
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, ATLAS_W, ATLAS_H, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+      premultiplied(c.getImageData(0, 0, ATLAS_W, ATLAS_H)));
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -821,6 +829,8 @@
   // procedural silhouettes they replace.
   var AUTH_BASE = GL.SPR.STAR + 1;   // 19 — first free atlas cell after the procedural set
   var authored = {};                 // name -> { cell, rot, ready }
+  // ORIGINAL batch — cells 19..49 EXACTLY (31 names). These indices are frozen:
+  // cell 50 is GL.SPR.BOLT (the lightning ribbon), so nothing here may grow past 49.
   var AUTH_NAMES = [
     '32-2-gunship', '32-3-aegis-shieldbearer', '32-4-weaver', '32-5-gilded-mimic',
     '32-6-splitter', '32-7-chorus-acolyte', '32-8-carrier-hulk', '32-9-blink-moth',
@@ -832,10 +842,37 @@
     '34-1-huginn-muninn', '34-2-phobos-deimos', '34-3-thunder-court-storm-cloud',
     '34-4-zhaoyaojing', '34-5-sky-serpent-head'
   ];
+  // 2026-07-19 DELTA batch — cells 51+ (BOLT owns 50). Signature projectiles,
+  // owned-entity segments, field objects, and the glyph/flame sheets. All authored
+  // nose-UP (or orientation-free glyphs) so rot 0 — the draw site rotates to travel.
+  // The 8x16 atlas fits these as cells 51..88 (13 free cells remain, 89..127).
+  var AUTH_NAMES2 = [
+    // A — signature projectiles
+    '33-10-green-dragon-crescent', '33-11-hunt-arrow', '33-12-ankh-bolt',
+    '33-13-rune-bolt', '33-14-heartseeker',
+    // B — owned entities / ult segments
+    '34-5b-sky-serpent-body', '34-5c-sky-serpent-tail', '34-6-solar-barque',
+    '34-7-green-dragon-head',
+    // C — field objects (34d)
+    '34d-1-the-nail', '34d-2-hurled-stone', '34d-3-the-hoard', '34d-4-gold-coin',
+    '34d-5-peach-of-immortality', '34d-6-apotheosis-shard',
+    // D — glyph sheets: runes (35), status marks + scales + verdict (36), flame (37)
+    '35-1-rune', '35-2-rune', '35-3-rune', '35-4-rune', '35-5-rune',
+    '35-6-rune', '35-7-rune', '35-8-rune', '35-9-rune',
+    '36-1-scales-a', '36-2-scales-b', '36-3-scales-c', '36-4-triskele',
+    '36-5-bracket', '36-6-seal', '36-7-verdict-jackal', '36-8-verdict-jackal-shut',
+    '37-1-flame', '37-2-flame', '37-3-flame', '37-4-flame', '37-5-flame', '37-6-flame'
+  ];
+  var AUTH_DELTA_BASE = GL.SPR.BOLT + 1;   // 51 — first free cell after BOLT (50)
   (function initAuthored() {
-    for (var i = 0; i < AUTH_NAMES.length; i++) {
-      var name = AUTH_NAMES[i];
+    var i, name;
+    for (i = 0; i < AUTH_NAMES.length; i++) {
+      name = AUTH_NAMES[i];
       authored[name] = { cell: AUTH_BASE + i, rot: name.charAt(0) === '3' && name.charAt(1) === '2' ? Math.PI : 0, ready: false };
+    }
+    for (i = 0; i < AUTH_NAMES2.length; i++) {   // delta batch → cells 51+
+      name = AUTH_NAMES2[i];
+      authored[name] = { cell: AUTH_DELTA_BASE + i, rot: 0, ready: false };
     }
   })();
 
@@ -844,7 +881,7 @@
     // procedural cells 0..18). Same 1px inset formula so GL.draw can index them.
     for (var nm in authored) {
       var rc = cellRect(authored[nm].cell), pad = 1.0;
-      regions[authored[nm].cell] = [(rc.x + pad) / ATLAS_SIZE, (rc.y + pad) / ATLAS_SIZE, (CELL - pad * 2) / ATLAS_SIZE, (CELL - pad * 2) / ATLAS_SIZE];
+      regions[authored[nm].cell] = [(rc.x + pad) / ATLAS_W, (rc.y + pad) / ATLAS_H, (CELL - pad * 2) / ATLAS_W, (CELL - pad * 2) / ATLAS_H];
     }
     var registry = (typeof window !== 'undefined' && window.SPRITES) || {};
     var isChromium = /Chrome\/|Chromium\/|HeadlessChrome/.test(navigator.userAgent);
