@@ -238,27 +238,29 @@ armory, Odin NINE NIGHTS, Heimdall THE BIFRÖST.
 - **CARD ATK**: "A kinetic hammer flies out and returns, slamming foes aside." / ▸ "Hold — hammer loops out and back; displaces on hit." / "★★★ ×2.25 hammer damage"
 - **BOSS** crush lands full as heavy displacement-lite + bonus damage.
 
-**HEIMDALL** — THE BIFRÖST · Gjallarhorn (attack REWORKED, owner design 2026-07-18 — refraction as terrain, kills the 4-count)
-- **ATK THE BIFRÖST**: between bridges, ordinary dawn-gold streams. On a fixed cadence (**every 6.0s while firing**):
-  **TELEGRAPH** — a thin dotted **dawn-seam** traces left→right (~0.5s) at `player.y − 300` (clamped 180..H−600) with a
-  rising bell arpeggio — then the **BRIDGE** solidifies there: a full-width shimmering rainbow band (~26px), lifetime 4.0s,
-  altitude frozen at seam-finish (placement is the skill: stand low = big refract zone; ride high = lay it through a foe).
-  **REFRACT**: each player shot crossing the band forks AT the crossing point into **5 rainbow rays** (red/gold/green/
-  blue/violet CORE streaks), each `0.32×` the shot's dmg (Σ≈1.6×), cone ±0.45 rad unfocused / **±0.12 focused** (focus =
-  spectrum lance); rays inherit pierce, no re-refraction. Below the band your fire is white; above it, rainbow — a hard
-  seam. **THE WATCHMAN SEES**: any foe crossing the band, or whose body overlaps it, is **Marked** (`markT 6`) with a
-  shimmer flash — bosses included (fly up, lay the band across the hull: HUBRIS-courage rewarded). *Voice BELL; seam =
-  rising arpeggio (3 bells, 5th+8ve); refract = crystalline shimmer tick per fork (throttled 6/s); bridge-fade = soft
-  descending pair.* State: `G.bifrost {t, y, seamT}` — no pooled entities; band is a drawn hazard like tidal wall.
+**HEIMDALL** — THE BIFRÖST · Gjallarhorn (attack REWORKED v2, owner 2026-07-19 — VERTICAL and aimable; the
+horizontal band + 5-ray refract fan is DEAD: "I thought it would be just vertical, so I can actually aim it.
+I don't want the fan out"; owner picked SPECTRUM LANCE)
+- **ATK THE BIFRÖST**: between bridges, ordinary dawn-gold streams. On a fixed cadence (**every 6.0s while
+  firing**): **TELEGRAPH** — a thin dotted **dawn-seam** traces bottom→top (~0.5s) at the player's CURRENT
+  `x` with a rising bell arpeggio — the aim window: you steer the road by standing where it should lay —
+  then the **BRIDGE** solidifies: a full-height vertical rainbow band (~32px), lifetime 4.0s, `x` frozen at
+  seam-finish. **SPECTRUM LANCE**: shots fired while the player is INSIDE the band become prismatic lances —
+  one bolt, `×1.6` dmg, `pierce +2`, rainbow CORE streak; **no split, no fan**. Step off the bridge and your
+  fire is ordinary — planted on a glowing line everyone can see is the commitment, and the skill. **THE
+  WATCHMAN SEES**: any foe overlapping the band is **Marked** (`markT 6`), bosses included — lay the road
+  through the hull. *Voice BELL; seam = rising arpeggio (3 bells, 5th+8ve); lance = crystalline shimmer
+  (throttled 6/s); bridge-fade = soft descending pair.* State: `G.bifrost {t, x, seamT}` — no pooled
+  entities; band is a drawn hazard like tidal wall.
 - **SP GJALLARHORN** (unchanged): horn blast wounds + **Marks** every foe + shoves the whole field (`timeScale/slowT`).
   *Expanding shockwave, field shoved out.*
-- **★** atk→ray dmg (refract base) · sp→horn dmg & Mark potency.
-- **CARD ATK**: "THE BIFRÖST — a rainbow bridge forms above you on a beat; your shots crossing it refract into five
-  rays." / ▸ "A dawn-seam warns first. Foes touching the bridge are Marked; focus narrows the spectrum." /
-  "★★★ ×2.25 ray damage"
-- **BOSS** lay the band across the hull → boss stays Marked while the focused spectrum lance pours through; horn shoves
-  its wall. [VARIANT] band/seam treatment (dotted-seam density, band shimmer vs glassy). (PRISM idea deferred: possible
-  high-tier mod — "a prism rides the bridge; rays recombine 200px past it".)
+- **★** atk→lance dmg · sp→horn dmg & Mark potency.
+- **CARD ATK**: "THE BIFRÖST — a rainbow bridge lays down your lane on a beat; fire from the bridge to
+  loose spectrum lances." / ▸ "A dawn-seam warns first, at your feet. Foes on the bridge are Marked." /
+  "★★★ ×2.25 lance damage"
+- **BOSS** park the bridge through the hull → the boss stays Marked while lances pour in; horn shoves its
+  wall. [VARIANT] band treatment (dotted-seam density, band shimmer vs glassy). (Deferred mod idea, option-C
+  graft: **AT THE POST** — enemy bullets crossing the bridge are slowed while you stand on it.)
 
 ### CELESTIAL COURT
 
