@@ -1203,24 +1203,28 @@ Symbolic identity-marks earn authored art even at 10–20px — they are SYMBOLS
 whose whole job is to be read and counted, unlike motion-FX which stay
 procedural. All three prompts are **sheet gens** (one image, evenly-spaced
 grid, generous margins, fully separated cells, transparent ground) sliced into
-individual files after. Marks must be **near-solid flat shapes with no
-gradients and no fine interior detail** — they render tiny, over enemies,
-under bloom; the engine tints and glows them, so deliver them as crisp
-light-on-transparent stamps. Procedural fallback stays live until wired.
+individual files after. Marks must use a **controlled middle detail tier**:
+an unmistakable silhouette plus 3-4 broad hard-edged material/value planes,
+one bounded bright rim, and at most one small inset or fastener. They render
+tiny, over enemies, under bloom, so avoid micro-filigree, texture noise,
+airbrushed gradients, and glossy 3D rendering — but do not reduce them to flat
+vector placeholders. Procedural fallback stays live until wired. (The flame
+flipbook is the exception and keeps its intentionally simple two-tone read.)
 
 ### 35. Rune sheet — Odin's NINE NIGHTS
 
 ```
 Sprite sheet for a vertical bullet-hell, 3x3 grid on a fully TRANSPARENT
 ground: nine distinct carved Norse runes in the Elder Futhark style — angular,
-stave-based, no curves, each built from 2-4 bold straight strokes as if
-chisel-carved. Each rune is a single near-solid flat glowing mark, pale gold,
-no gradients, no outline, no decoration, no background; every rune clearly
-different from the others at a glance. These render at ~12 pixels tall on
-enemy hulls in-game: maximum boldness, zero fine detail. Even spacing, wide
-margins, nothing touching cell edges. Negative: no photorealism, no 3D, no
-texture, no knotwork ornament, no text or lettering other than the rune
-shapes themselves, no watermark, no background of any kind.
+stave-based, no curves, each built from 2-4 bold straight strokes. Every stave
+is a small forged object with a dark cold-iron core, one broad pale-gold bevel
+plane, a narrow bounded gold edge, and visibly chipped hand-forged ends. Use
+only 3-4 broad value planes per stave; no backing tile, plaque, or frame. Every
+rune must remain different at a glance and read cleanly at ~12 pixels tall on
+enemy hulls. Even spacing, wide margins, nothing touching cell edges.
+Negative: no photorealism, no glossy 3D, no micro-filigree, no texture noise,
+no knotwork ornament, no text or lettering other than the rune shapes, no
+watermark, no background of any kind.
 ```
 
 Deliver sliced as `35-1-rune.png` … `35-9-rune.png` (order = carve order; the
@@ -1229,17 +1233,19 @@ Deliver sliced as `35-1-rune.png` … `35-9-rune.png` (order = carve order; the
 ### 36. Status-mark sheet — identity glyphs
 
 ```
-Sprite sheet for a vertical bullet-hell, single row of SIX cells on a fully
-TRANSPARENT ground, each cell one flat symbolic mark, near-solid, no
-gradients, no outlines, no backgrounds, built to read at ~14 pixels: (1) a
-tiny balance scales tipping LEFT, gold; (2) the same scales LEVEL, gold; (3)
-the same scales tipping RIGHT harder, gold — three tip-states of one scales
-glyph, identical construction, only the beam angle changes; (4) a triskele of
-three tiny curved daggers radiating from a center point, green; (5) one
-crisp right-angle corner bracket like a picture-frame corner, amber; (6) a
-small square imperial seal-stamp mark with one notch, violet. Even spacing,
-wide margins, nothing touching cell edges. Negative: no photorealism, no 3D,
-no texture, no fine interior detail, no text, no watermark, no background.
+Sprite sheet for a vertical bullet-hell, 3x2 grid of SIX cells on a fully
+TRANSPARENT ground, each cell one tactile symbolic relic built from 4-6 broad
+hard-edged shapes and readable at ~14 pixels: (1) small balance scales tipping
+LEFT; (2) the exact same scales LEVEL; (3) the exact same scales tipping RIGHT
+harder — dark-bronze post and beam, broad gold rim, simple pans, and one small
+lapis inset, with only the beam angle changing; (4) a triskele of exactly three
+curved jade dagger blades with dark centers, bright green rims, and one gold
+hub; (5) one thick amber-gold right-angle reliquary bracket with a dark inset
+and one fastener; (6) a compact violet-jade square imperial seal-stamp with a
+gold rim, dark recessed face, and one notch cut from the top edge. Even
+spacing, wide margins, nothing touching cell edges. Negative: no
+photorealism, no glossy 3D, no micro-filigree, no texture noise, no medallion
+backings, no text, no watermark, no background.
 ```
 
 Deliver sliced as `36-1-scales-a.png`, `36-2-scales-b.png`,
@@ -1250,14 +1256,17 @@ copies), `36-6-seal.png` (Jade seal brand).
 ### 36b. The Verdict stamp — Anubis' devour
 
 ```
-Single sprite for a vertical bullet-hell on a fully TRANSPARENT ground: a
-jackal head in strict flat Egyptian profile, jaws open wide about to snap
-shut — one near-solid silhouette, black body with a single gold eye-line and
-a gold collar band, drawn like a tomb-wall glyph: bold, flat, no gradients,
-no texture, no background. It flashes over a devoured foe for a fifth of a
-second at ~80 pixels: silhouette carries everything. Negative: no
-photorealism, no 3D, no gore, no fine detail, no text, no watermark, no
-background.
+Two matched cells for a vertical bullet-hell on a fully TRANSPARENT ground:
+the same jackal head in strict right-facing Egyptian profile, first with jaws
+open and second with jaws fully shut. Position, scale, construction, and color
+must match exactly; the lower jaw is the only changing shape. Build each from
+6-8 broad hieroglyphic relic planes: obsidian-black silhouette, deep-lapis
+secondary face plane, bounded gold ear and muzzle edges, one bright gold eye,
+a broad gold-and-lapis collar, and one simple gold jaw hinge. It flashes over
+a devoured foe for a fifth of a second at ~80 pixels, so silhouette carries
+the read while the broad material planes keep it authored. Negative: no fur
+rendering, no photorealism, no glossy 3D, no gore, no teeth detail, no
+micro-filigree, no text, no watermark, no background.
 ```
 
 Deliver as `36-7-verdict-jackal.png`; the engine scales it up over the foe
