@@ -1041,6 +1041,7 @@ Substitutions:
 | 33.7-C | (alternate, gen only if picked) IMPERIAL EDICT — a square imperial SEAL-STAMP chop flying face-first: bronze-backed violet seal block, carved gold seal-script face, red ink edge | face DOWN toward travel, square silhouette | imperial violet #c99aff, gold #ffd766 seal face | ~34 pixels — the crisp square is the read |
 | 33.8 | THE LOOSED ARROW of Artemis — a great moon-silver hunting arrow, bright white head, two long trailing fletches | nose UP, vertical | moon-silver blending to white at the head | ~64 pixels tall |
 | 33.9 | RUYI JINGU BANG, Wukong's wish-fulfilling staff — one long, perfectly straight dark-iron staff with thick burnished gold bands at both ends and a hairline gold seam down its length | vertical, full length filling the frame | gold #ffd766 on the bands, warm-white edge light down the dark shaft | must read as a clean hard-edged rectangle at any height — it is slammed down as a pillar |
+| 33.10 | GREEN DRAGON CRESCENT of Guan Yu — a single cleaving crescent blade cut from the guandao's head: one deep jade crescent with a dragon-spine ridge along its back edge and a small gold collar at the tang; unmistakably ONE curved blade (never a double-axe — that silhouette is the labrys) | cleaving profile, crescent horns leading | jade #3be089 blending to white along the cutting edge, gold #ffd766 collar glint | ~44 pixels; also rendered colossal for CRESCENT MOON SWEEP and as the linked blade-segments of the GREEN DRAGON ASCENDS ultimate |
 
 ### 34. Owned-entity sprite template
 
