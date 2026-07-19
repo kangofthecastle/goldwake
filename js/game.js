@@ -1221,8 +1221,13 @@
       else if (hz.type === 'staff') {
         var pa = Math.min(1, hz.timer * 3);
         GL.draw(GL.SPR.GLOW, hz.x, H / 2, hz.halfW * 3.0, H, 0, 1, 0.55, 0.2, 0.4 * pa);
-        GL.draw(GL.SPR.CORE, hz.x, H / 2, hz.halfW * 1.5, H, 0, 1, 0.8, 0.4, 0.8 * pa);
-        GL.draw(GL.SPR.CORE, hz.x, H / 2, hz.halfW * 0.5, H, 0, 1, 1, 0.9, 0.9 * pa);
+        var sc = authCell('33-9-ruyi-jingu-bang');   // §9 Ruyi Jingu Bang — the special's slam IS the staff
+        if (sc >= 0) {
+          GL.draw(sc, hz.x, H / 2, hz.halfW * 2.0, H, 0, 1, 1, 1, pa);
+        } else {
+          GL.draw(GL.SPR.CORE, hz.x, H / 2, hz.halfW * 1.5, H, 0, 1, 0.8, 0.4, 0.8 * pa);
+          GL.draw(GL.SPR.CORE, hz.x, H / 2, hz.halfW * 0.5, H, 0, 1, 1, 0.9, 0.9 * pa);
+        }
       }
       else if (hz.type === 'deluge') {   // calm teal zone (placed territory)
         var da = 0.4 + 0.6 * Math.min(1, hz.timer / hz.dur), rip = 0.5 + 0.5 * Math.sin(G.time * 3);
