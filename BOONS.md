@@ -8,8 +8,11 @@ bosses. A boon is a **new weapon**, read in one frame by eye and by ear, or it d
 not ship.
 
 Binding on `js/game.js` (kit effects, status), `js/run.js` (`GODS`, cards, `STARLINE`),
-`js/sfx.js` (voices), `js/gl.js` (procedural draw). No new painted assets — every
-visual here is engine-procedural from the existing atlas.
+`js/sfx.js` (voices), `js/gl.js` (procedural draw). Every visual here ships
+engine-procedural from the existing atlas first; **signature projectiles and
+owned entities may additionally get authored sprites** (owner call 2026-07-18,
+art/PROMPTS.md §9 + §12 below) with the procedural draw as the live fallback —
+dense streams, FX and status glyphs stay procedural-only.
 
 ## 1. The Boon Laws
 
@@ -276,13 +279,30 @@ armory, Odin NINE NIGHTS, Heimdall THE BIFRÖST.
 - **CARD ATK**: "Shots become crescent blades that cleave." / ▸ "Hold fire down a lane; blades pierce every foe, brightening per hit." / "★★★ ×2.25 crescent damage"
 - **BOSS** crescents pierce + stack-brighten on the lone body; sweep hurls + heavy single-target hit.
 
-**JADE EMPEROR** — homing edicts · Heaven's Verdict
-- **ATK IMPERIAL EDICTS** (unchanged): homing edicts that **Stun**. *Violet `c99aff` seal-talismans home + burst; stunned
-  foes freeze + CROWN stars (§4).* Voice BELL (inharmonic partial stack, 1ms strike, ~250ms ring).
-- **SP HEAVEN'S VERDICT** (unchanged): homing edicts, one per foe, each Stuns; strongest foe gets a double-size edict.
-- **★** atk→edict dmg · sp→Verdict edict dmg.
-- **CARD ATK**: "Attacks fire homing imperial edicts that Stun." / ▸ "Auto — each shot seeks a foe and freezes it." / "★★★ ×2.25 edict damage"
-- **BOSS** Stun→bonus dmg (immune); per-foe Verdict collapses every edict onto the lone boss.
+**JADE EMPEROR** — IMPERIAL EDICTS (fan) · IMPERIAL JUDGEMENT (REWORKED, owner design 2026-07-18)
+- **ATK IMPERIAL EDICTS**: the attack IS the edicts now — **5 edicts per volley in a fan** (spread ~0.5 rad; focus ~0.28),
+  homing (existing Jade block), each **Stuns** non-bosses. **Clarity fix**: edicts redrawn as *scroll-talismans* — small
+  violet `c99aff` rectangular tablet w/ gold border + red seal-dot, oriented to travel, thin trailing script ticks; burst =
+  paper-flash. Distinct silhouette (only rectangular projectile in the game); needs one atlas painter (edict tablet).
+  Voice BELL (inharmonic partial stack, 1ms strike, ~250ms ring).
+- **SP IMPERIAL JUDGEMENT** (replaces Heaven's Verdict; Leigong, the Thunder Court): **two dark storm-clouds** fade in
+  flanking the field (upper-left + upper-right, ~90px wide, roiling GLOW + dark CORE puffs, gold under-flicker), duration
+  ~6s. Every **0.8s**, alternating clouds hurl a **lightning bolt** at a **RANDOM** live foe — bolt = Zeus-style strike:
+  full `chainLightning(target, dmg, …)` arcs to neighbours + brief Stun on non-boss primary. Clouds are owned entities
+  (§5: cyan heart glint in the cloud core; expire on kit-swap; despawn fx = dissipate). Recast refreshes duration.
+  **MOD — MIRROR REFLECTION** (`jadeMirror`, draftable Jade mod): a bronze **demon-revealing mirror** (zhaoyaojing)
+  hangs between the clouds; every bolt now visibly banks off the mirror mid-flight and strikes the **highest-HP foe**
+  (random targeting → intelligent). *Mirror = small gold disc, flash on each reflect.* Voice: cloud rumble loop (low
+  brown noise, throttled) + ZEUS CRACK variant per bolt (darker, −4 semitones); mirror adds a glass 'ting' pre-strike.
+- **★** atk→edict dmg · sp→bolt dmg & cloud duration (+1s @★★★).
+- **CARD ATK**: "Five imperial edicts fan out, seek foes, and Stun them." / ▸ "Auto — the fan homes; stunned foes freeze."
+  / "★★★ ×2.25 edict damage"
+- **CARD SP**: "IMPERIAL JUDGEMENT — the Thunder Court assembles: twin storm-clouds smite random foes with chain
+  lightning." / ▸ "Recast to refresh. MIRROR REFLECTION aims every bolt at the strongest foe." / "★★★ ×2.25 bolt damage"
+- **BOSS** clouds pour every bolt into the lone body (random collapses to it); with the mirror, guaranteed — plus chain
+  collapse. Stun→bonus dmg (immune) unchanged for the attack.
+- **RE-ANCHORS** Heaven's Verdict retired; old jade special mods re-point to Judgement (duration/bolt-rate). Duo
+  harmonyOfHeaven unchanged (graze→special charge).
 
 ### FIFTH SUN
 
@@ -446,7 +466,7 @@ fires **continuous** kit events; the existing `bossEnterPhase(transition=true)` 
 | ZEUS FIELD (mod) | `spawnZapField` beneath the boss each tithe unit |
 | ARES | +1 frenzy/segment-clear; frenzy decays 50% slower in any boss fight (build across the setlist) |
 | ANUBIS | phase's final blow pays +50% segment cancel-gold + drops an apotheosis shard (execute→segment) |
-| UNIVERSAL fallback | a phase-segment counts as ONE reward-kill for any un-wired kill-fed kit — fires its raw on-kill path once at 1× (Jade Verdict window, Odin raven dive target…) |
+| UNIVERSAL fallback | a phase-segment counts as ONE reward-kill for any un-wired kill-fed kit — fires its raw on-kill path once at 1× (Jade Judgement bolt window, Odin raven dive target…) |
 
 **LAYER 2 — FICTION-GATED RETINUE (additive economy, NOT the mechanism).** `killEnemy(reward=true)` already wires every kit
 for free. Shared spec: HP dies to ~0.3s of default fire; SHIP_POP tinted to boss palette; mirrored swoopHold from the boss
@@ -504,6 +524,17 @@ reroute + universal fallback + retinues + Assessors.
 Implementation proceeds on the default; `[VARIANT]` calls get variant renders for Warren to pick; `[CONFIRM]` = taste
 ratification, default proceeds; `[SCOPE]` = content-work confirm.
 
+- **ULTIMATES (owner-ruled 2026-07-18): a NEW BOON CARD TYPE + APOTHEOSIS → DIVINE INTERVENTION.**
+  Card kinds become transformA/transformS/mod/charm/**ultimate** (god-tied). The ultimate card TRANSFORMS the C-key
+  burst slot (same pattern as attack/special slots). **DEFAULT BURST = DIVINE INTERVENTION** (renames APOTHEOSIS
+  everywhere player-facing; legacy `vaunt` internals may stay): **two-beat staging, owner-ruled** — all enemy bullets
+  FREEZE on screen (a held shimmer beat, ~0.3s) → then turn to gold (today it converts instantly; the freeze beat is
+  new juice). First authored ultimate: **MANDATE OF HEAVEN** (Jade): same freeze → gild, then the gilded bullets
+  **fire back at enemies** for heavy damage + bonus gold — a strict upgrade of the default's shape. Still to settle:
+  charge economy, rarity/one-per-run, migration of per-attack-god burst riders into ultimate cards, first-wave god
+  count. Rename + staging ride the post-Pass-2 amendment build (with Jade's kit). Touches §2 riders, HUBRIS economy,
+  every "APOTHEOSIS" string.
+
 - **Artemis** — [VARIANT] arrow accent (default silver-white body + moon-blue rim; a warmer read bends the cyan/white
   player-fire law). · [VARIANT] Hunted indicator (default tightening chevron vs orbiting shard). · [SCOPE] weak-point
   authoring into TALOS/AMMIT/MIDAS + elite spellcards (default acceptable; fallback = generic Marksmanship tier).
@@ -555,8 +586,19 @@ whose *kit identity* changed against what the prompts actually depict:
 | **#15 LOKI** | shadow-twin decoy peeling off; venom-green accent | **UNCHANGED** — decoy = the still-current special; PILFER depicts no god-prop; green accent still matches |
 | **#16 ODIN** | leveling Gungnir + Huginn & Muninn circling | **UNCHANGED** — Gungnir = the still-current special; ravens migrate attack→charm but stay an Odin motif; the heavy rune-bolt is spear-adjacent |
 
-**Digest: all 32 prompts are SAFE TO GEN unchanged.** No portrait needs an edit and no new painted asset is required — the
-reworks live entirely in procedural combat art, sound, and card text. Two procedural-only notes (not PROMPTS.md edits):
-Odin's HUGINN & MUNINN is now a **charm**, so it consumes one slot in the existing charm-relic icon template batch (#30, ×15)
-rather than a bespoke asset; the Apostate mimic costume (§5) is procedural retint/orientation on existing SHIP hulls, not a
-portrait change (#25 stays as-is).
+**Digest (updated 2026-07-18, owner call):** the original 32 prompts are still SAFE TO GEN unchanged — no portrait needs an
+edit (Heimdall #12's horn-and-prism still covers THE BIFRÖST's refraction identity; Jade #20's drifting edicts still cover
+the fan). But "no new painted asset is required" is **superseded**: the rework made several god weapons into big, low-count
+signature objects, and those now have authored-sprite prompts. The manifest delta as written into art/PROMPTS.md:
+
+- **§9 NEW — signature player-side sprites (14)**: projectile template #33 × 9 (Mjölnir, Gungnir, labrys, akontia, xiphos,
+  doru bundle, edict tablet, Loosed Arrow, Ruyi Jingu Bang pillar-staff — the staff-shape fix) + owned-entity template
+  #34 × 5 (raven, dread-wraith, storm-cloud, zhaoyaojing mirror, Sky Serpent head). Ares reds are sanctioned god-hue
+  exceptions to the cool player law (§2/§5). Wukong clones + Loki Shadow-Twin = engine retints of the player ship, no gen.
+- **§8 extended — 5 enemy rows (32.14–32.18)**: AMMIT field sprite (was a straight gap — TALOS/MIDAS/Apostate had rows,
+  she didn't) + the §8-boss retinue: Assessor, Tribute Bearer, Gilded Courtier, Unweighed Heart. Rivets/splinters stay
+  procedural (too small).
+- **#30.10 edited**: Raven Quill relic icon → HUGINN & MUNINN twin-raven charm (matches the ravens' move to a charm slot).
+
+All new sprites are **drop-in**: procedural draw remains live until each is wired (engine wiring is its own pass, after
+the gens exist). The Apostate mimic costume (§5) remains procedural retint/orientation on existing hulls (#25 as-is).

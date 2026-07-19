@@ -4,14 +4,18 @@ Generation prompts for every generated asset, built from `ART.md`.
 Each prompt is **fully self-contained** — paste one fenced block into Codex with
 no other context. Every prompt ends with the standard negative tokens and the
 ground/delivery constraint. Sections 1–7 are STORYBOOK-layer painted assets;
-Section 8 is **AUTHORED COMBAT SPRITES** under the doctrine's third clause —
-rim-glow instead of ink, transparent ground, faction color law. Bullets,
-telegraphs and FX remain procedural in-engine and are never generated.
+Sections 8–9 are **AUTHORED COMBAT SPRITES** under the doctrine's third clause —
+rim-glow instead of ink, transparent ground, faction color law. Dense bullet
+streams, telegraphs and FX remain procedural in-engine and are never generated;
+**signature projectiles and owned entities** (Section 9) are the sanctioned
+exception (owner call 2026-07-18, BOONS.md §12) — the procedural draw stays the
+live fallback until each sprite is wired in.
 
 Sections: 1 title keyart · 2 pantheon emblems (5) · 3 god card portraits (15) ·
 4 boss portraits (4) · 5 sector backdrops (3) · 6 shop dressing (1) ·
 7 charm-relic icon batch (1 template × 15 subjects) ·
-8 combat sprites (1 player ship + 1 enemy template × 13 subjects).
+8 combat sprites (1 player ship + 1 enemy template × 18 subjects) ·
+9 signature player-side sprites (2 templates × 14 subjects).
 
 ---
 
@@ -665,7 +669,7 @@ Substitutions:
 | 30.7 | SUNSTONE of Ra — a faceted stone holding a captive sliver of sunlight | Egyptian tomb-wall painting and papyrus, gold leaf on lapis | `#ffe89a` |
 | 30.8 | HEART SCARAB of Anubis — a lapis scarab amulet inlaid with gold | Egyptian tomb-wall painting and papyrus, gold leaf on lapis | `#e8c46a` |
 | 30.9 | TANGLED THREAD of Loki — an impossibly knotted loop of green thread | Norse runestone knotwork and carved weathered wood | `#8cff5a` |
-| 30.10 | RAVEN QUILL of Odin — a black raven quill bound with a cold-iron ring | Norse runestone knotwork and carved weathered wood | `#cfd6e0` |
+| 30.10 | HUGINN & MUNINN of Odin — two black raven charms perched on one cold-iron ring, wings folded | Norse runestone knotwork and carved weathered wood | `#cfd6e0` |
 | 30.11 | HAMMER SHARD of Thor — a chipped fragment of hammerhead iron, humming | Norse runestone knotwork and carved weathered wood | `#8fb4d8` |
 | 30.12 | GOLDEN HAIR of Wukong — a single stiff golden monkey hair, faintly glowing | Ming dynasty court scroll painting, gold on jade | `#ff6a3d` |
 | 30.13 | OATH TABLET of Guan Yu — a small jade tablet carved with an abstract oath seal | Ming dynasty court scroll painting, gold on jade | `#3be089` |
@@ -733,6 +737,96 @@ family), no gore, no text or lettering, no busy particle noise, no background,
 no watermark.
 ```
 
+---
+
+## Section 9 — Signature player-side sprites (AUTHORED COMBAT SPRITES, third clause)
+
+Added 2026-07-18 with the kit rework (BOONS.md §2). The rework turned several
+god weapons into **big, low-count signature objects** — a returning hammer, a
+never-missing spear, ravens, a whirling labrys, scroll-edicts — and those earn
+authored art where a 200-count bullet stream never will. Same third-clause
+rules as Section 8: rim-glow instead of ink, dark mid-tone interior, transparent
+ground, no grain. **Color law**: the player default is cool cyan/white, but a
+signature keeps its GOD's body hue where BOONS.md assigns one — Ares' War-Heat
+reds and the dread-wraiths are sanctioned god-hue exceptions (BOONS.md §2/§5),
+so the per-subject RIM column is authoritative and overrides the "no warm
+color" negative for those rows.
+
+**What still never gets generated:** dense base streams (arrows, javelins fly
+3+ per volley but are listed below because their silhouettes exceed what the
+procedural atlas draws well — gen them small-readable), beams, the tidal wall,
+the Bifröst band and dawn-seam, the Skyfall column, splinter shards, coil
+rings, rune glyphs, status glyphs, all telegraphs and FX. **Engine retints,
+not gens:** Wukong's hair-clones and Loki's Shadow-Twin are tinted copies of
+the player ship (#31).
+
+### 33. Signature projectile template
+
+One templated prompt; generate each weapon by substituting `{SUBJECT}`,
+`{ORIENTATION}`, `{RIM}` and `{READ SIZE}` from the table below.
+
+```
+Game sprite for a vertical bullet-hell: {SUBJECT} — a signature divine weapon
+fired BY the player, shown alone as a single object, no figures, no hands, no
+scene, {ORIENTATION}. This is a sacred relic-weapon of the gods: reliquary
+craftsmanship, ceremonial, mythic — never sci-fi, never a machine. THE EDGE IS
+LIGHT: the silhouette is carried by a self-luminous rim-glow in {RIM}; there is
+NO drawn outline; the interior is quiet dark mid-tone planes with gilded-myth
+detail suggested in broad dark shapes only. Silhouette must read instantly at
+{READ SIZE} over a black field under additive bloom. Deliver: PNG, 1:1 square,
+sprite centered, on a fully TRANSPARENT ground — never white, never light gray,
+no backdrop of any kind. Negative: no photorealism, no airbrushed or plastic
+gradients, no glossy 3D render, no mixed mythological traditions, no ink
+outline, no paper grain, no figures or hands, no text or lettering, no busy
+particle noise, no background, no watermark.
+```
+
+Substitutions:
+
+| # | `{SUBJECT}` | `{ORIENTATION}` | `{RIM}` | `{READ SIZE}` |
+| --- | --- | --- | --- | --- |
+| 33.1 | MJÖLNIR, Thor's returning war-hammer — a massive square-cut iron head far too big for its short knot-carved haft | side profile, mid-tumble | storm-iron #8fb4d8 blending to white on the head's leading edges | ~48 pixels |
+| 33.2 | GUNGNIR, Odin's never-missing spear — a long dark ash shaft with a narrow knotwork-etched iron head | nose UP, vertical | cold-iron #cfd6e0 blending to white at the point | ~96 pixels tall, slim |
+| 33.3 | THE LABRYS of Ares — a double-headed bronze war-axe, two mirrored crescent heads on a short haft, unmistakable vs any single-crescent blade | spinning profile, radially symmetric | deep arterial red #ff5a6e with a bronze glint on the twin edges (sanctioned red — ignore any no-warm-color instinct) | ~40 pixels |
+| 33.4 | AKONTIA of Ares — a slim thrown war-javelin with a small bronze leaf-point | nose UP, vertical | ember red, dark and smouldering (sanctioned red) | ~44 pixels tall, very slim |
+| 33.5 | XIPHOS of Ares — a leaf-bladed short sword with the classic waisted swell profile, short cross-guard | nose UP, vertical | arterial red #ff5a6e with a bronze hilt glint (sanctioned red) | ~44 pixels tall |
+| 33.6 | DORU BUNDLE of Ares — three hoplite spears braided into one heavy bolt, broad bronze heads staggered | nose UP, vertical | white-hot core with a red rim (sanctioned red) | ~56 pixels tall |
+| 33.7 | IMPERIAL EDICT of the Jade Emperor — a small rectangular scroll-talisman: violet tablet, thin gold border, one red seal-dot near the head, abstract vertical script ticks | nose UP, long axis vertical | imperial violet #c99aff with the gold #ffd766 border carrying the edge | ~40 pixels tall — the game's ONLY rectangular projectile; the right-angle corners are the read |
+| 33.8 | THE LOOSED ARROW of Artemis — a great moon-silver hunting arrow, bright white head, two long trailing fletches | nose UP, vertical | moon-silver blending to white at the head | ~64 pixels tall |
+| 33.9 | RUYI JINGU BANG, Wukong's wish-fulfilling staff — one long, perfectly straight dark-iron staff with thick burnished gold bands at both ends and a hairline gold seam down its length | vertical, full length filling the frame | gold #ffd766 on the bands, warm-white edge light down the dark shaft | must read as a clean hard-edged rectangle at any height — it is slammed down as a pillar |
+
+### 34. Owned-entity sprite template
+
+Player-summoned combatants. The engine draws a small breathing **cyan heart-gem**
+at each entity's center (the friend-or-foe marker, BOONS.md §5) plus any halo —
+so like the player ship, the sprite's center must stay dark and quiet.
+
+```
+Game sprite for a vertical bullet-hell, strict top-down view seen from directly
+above, nose or head pointing UP (it fights FOR the player): {SUBJECT}. {BODY}.
+THE EDGE IS LIGHT: the silhouette is carried by a self-luminous rim-glow in the
+body hue given above; there is NO drawn outline; the interior is quiet dark
+mid-tone planes. CRITICAL: the exact center of the body must stay dark, empty
+and visually quiet — the game engine draws a small glowing heart-gem there and
+it must read on top. Sacred and ceremonial, never cute, never gory. Silhouette
+must read instantly at small sprite size over a black field under additive
+bloom. Deliver: PNG, 1:1 square, sprite centered, on a fully TRANSPARENT ground
+— never white, never light gray, no backdrop of any kind. Negative: no
+photorealism, no airbrushed or plastic gradients, no glossy 3D render, no mixed
+mythological traditions, no ink outline, no paper grain, no text or lettering,
+no busy particle noise, no background, no watermark.
+```
+
+Substitutions:
+
+| # | `{SUBJECT}` | `{BODY}` |
+| --- | --- | --- |
+| 34.1 | HUGINN / MUNINN — one of Odin's twin ravens in a hunting dive (generate once; the engine mirrors and reuses it for the pair) | near-black feathered body, wings swept back mid-dive, a cold-iron #cfd6e0 sheen along the feather edges; the engine adds the gold kill-count halo |
+| 34.2 | PHOBOS & DEIMOS — one dread-wraith of Ares (generate once for the pair) | a thin vertical wraith of smoke and dread, hooded suggestion of a head, tattered trailing hem, dread-red #ff5a6e body (sanctioned god hue) |
+| 34.3 | THUNDER-COURT STORM-CLOUD — one of the Jade Emperor's twin Leigong judgment clouds | a wide dark roiling cumulus slab, deep violet-black puffs edged in imperial violet #c99aff, a gold #ffd766 lightning under-flicker glowing in its belly |
+| 34.4 | ZHAOYAOJING — the demon-revealing mirror of MIRROR REFLECTION | a small round burnished bronze disc hung frontally like an icon, gold #ffd766 rim, a faint cold gleam crossing its polished face, short mounting tassel below |
+| 34.5 | SKY SERPENT head — the head of Quetzalcoatl's bullet-devouring hazard serpent | a flat codex-styled feathered serpent head, jaws open forward, streaming quetzal plumes swept back, turquoise #5affc0 body over obsidian dark planes (the engine draws the trailing coil procedurally) |
+
 Substitutions:
 
 | # | `{SUBJECT}` | `{SILHOUETTE MOTIF}` | `{ACCENT}` |
@@ -750,3 +844,11 @@ Substitutions:
 | 32.11 | TALOS — field sprite of the bronze sentinel boss | a great open bronze ring with a single molten core-eye hub at its center | `#ff8a5a` |
 | 32.12 | MIDAS — field sprite of the gilded king (final boss) | a gaunt crowned figure half-turned to gold, one grasping hand, a heaped hoard dragging at his feet | `#ffd766` (white-hot core reserved for its unavoidable attacks) |
 | 32.13 | THE APOSTATE — field sprite of the renegade elite | a lean asymmetric duelist dart carrying two mismatched relic pods, one glowing warm and one cool (its stolen boons — the sole enemy permitted a cool glint) | `#ff5ae0` |
+| 32.14 | AMMIT — field sprite of the devourer of hearts (boss) | a flat-profile tri-beast coil — crocodile jaws, lion forequarters, hippo bulk — wrapped around a set of tipped golden judgment scales (gold on the scales only, never on the beast) | `#ff5ae0` (bruised magenta with a sickly green undertone) |
+| 32.15 | ASSESSOR — a jackal judgment-emitter orbiting AMMIT (retinue, spawns as a pair) | a jackal-masked censer node ringed by a thin counter-rotating judgment wheel of tally-notches | `#ff5ae0` |
+| 32.16 | TRIBUTE BEARER — a porter of MIDAS's stolen gold (retinue) | a stooped hooded bearer hauling an open urn that visibly drinks coin-motes inward | `#ff8a5a` (warm amber — NEVER loot-gold #ffd766; only the urn's swallowed motes may glint gold) |
+| 32.17 | GILDED COURTIER — an orbiting noble of MIDAS's Gilded Court (retinue) | a slim masked courtier slab, half-petrified in hardening gold, court-robe fanned into a stiff ceremonial silhouette | `#ff8a5a` |
+| 32.18 | UNWEIGHED HEART — a soul-heart of AMMIT's tipping scales (retinue) | one large, slow, votive stylized heart bound in linen bandage-bands, rising | `#ff5ae0` |
+
+(TALOS's orbiting RIVETS and BRONZE SPLINTERS stay procedural — too small to
+carry authored art.)
