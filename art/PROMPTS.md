@@ -1156,6 +1156,23 @@ Deliver sliced as `36-1-scales-a.png`, `36-2-scales-b.png`,
 (Loki MISCHIEF), `36-5-bracket.png` (MARKED corner, engine places 4 rotated
 copies), `36-6-seal.png` (Jade seal brand).
 
+### 36b. The Verdict stamp — Anubis' devour
+
+```
+Single sprite for a vertical bullet-hell on a fully TRANSPARENT ground: a
+jackal head in strict flat Egyptian profile, jaws open wide about to snap
+shut — one near-solid silhouette, black body with a single gold eye-line and
+a gold collar band, drawn like a tomb-wall glyph: bold, flat, no gradients,
+no texture, no background. It flashes over a devoured foe for a fifth of a
+second at ~80 pixels: silhouette carries everything. Negative: no
+photorealism, no 3D, no gore, no fine detail, no text, no watermark, no
+background.
+```
+
+Deliver as `36-7-verdict-jackal.png`; the engine scales it up over the foe
+and snaps the jaw shut (two-frame rotation of the lower jaw is acceptable as
+a second cell `36-8-verdict-jackal-shut.png` if one gen produces both).
+
 ### 37. Flame flipbook — BURN / on-fire
 
 ```
