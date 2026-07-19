@@ -77,24 +77,24 @@
   var GODS = {
     zeus:      { name: 'ZEUS', epithet: 'the Stormbreaker', pantheon: 'OLYMPUS', css: '#9fd8ff', color: [0.62, 0.85, 1.0],
                  attack: 'Attacks arc chain lightning to nearby foes.',
-                 special: 'Lance becomes a storm bolt; foes near its path are chained.' },
+                 special: 'SKYFALL: a bolt cracks straight down your lane and forks to nearby foes; struck foes are Stunned.' },
     poseidon:  { name: 'POSEIDON', epithet: 'Lord of Tides', pantheon: 'OLYMPUS', css: '#4fe0e0', color: [0.2, 0.82, 0.85],
                  attack: 'Attacks knock foes back; slams deal impact damage.',
                  special: 'A tidal wall sweeps up, carrying bullets off as gold.' },
     artemis:   { name: 'ARTEMIS', epithet: 'the Huntress', pantheon: 'OLYMPUS', css: '#b6ff5a', color: [0.7, 1.0, 0.3],
-                 attack: '+18% crit chance; crits deal triple with gold pops.',
-                 special: 'A guaranteed-crit arrow that Marks its victim (+25% taken).' },
+                 attack: 'Silver arrows brand the first foe hit as your HUNTED and home to it; hits ramp, kills chain the hunt.',
+                 special: 'THE LOOSED ARROW: a piercing precise needle that Marks all it strikes; the first becomes your Hunted at full ramp.' },
     aphrodite: { name: 'APHRODITE', epithet: 'the Beguiling', pantheon: 'OLYMPUS', css: '#ff77c8', color: [1.0, 0.45, 0.8],
                  attack: 'Attacks stack Charm; +15% damage to the charm-touched and Weakened.',
-                 special: 'Charm missile: charms the first foe (Weakens bosses).' },
+                 special: 'HEARTSEEKER: a slow heart weaves to a foe — charms a minion, or Weakens a boss and melts its bullets to gold.' },
     ares:      { name: 'ARES', epithet: 'God of War', pantheon: 'OLYMPUS', css: '#ff5a6e', color: [0.95, 0.28, 0.4],
-                 attack: 'Bloodlust: kills stack battle-frenzy for +fire rate.',
+                 attack: 'WAR-HEAT: fight at the muzzle to stoke it — javelins escalate to xiphos blades, then a doru bundle + labrys.',
                  special: 'Phobos & Deimos dive-bomb foes, sowing Terror with every strike.' },
     heimdall:  { name: 'HEIMDALL', epithet: 'the Watchman', pantheon: 'ASGARD', css: '#ffe3c2', color: [1.0, 0.89, 0.76],
-                 attack: 'Bifröst Prism: every 4th volley refracts into a piercing rainbow fan.',
+                 attack: 'THE BIFRÖST: a rainbow bridge forms above you on a beat; shots crossing it refract into five rays and it Marks foes.',
                  special: 'Gjallarhorn: a blast that wounds and Marks all foes, hurling their bullets away.' },
     ra:        { name: 'RA', epithet: 'the Radiant', pantheon: 'KEMET', css: '#ffe89a', color: [1.0, 0.9, 0.55],
-                 attack: 'Streams fuse into a solar beam that ramps on a held target.',
+                 attack: 'SOLAR LENS: hold fire on ONE foe to focus the beam through 4 heat stages, up to ×2.5.',
                  special: 'Solar Flare: a screen flash that ignites every foe with Burn.' },
     anubis:    { name: 'ANUBIS', epithet: 'Weigher of Hearts', pantheon: 'KEMET', css: '#e8c46a', color: [0.9, 0.75, 0.35],
                  attack: '+25% damage below half health; executes non-bosses below 25% for +50% gold.',
@@ -104,7 +104,7 @@
                  attack: 'PILFER — your hits pickpocket a foe (3 marks); on the third, snatch the 8 nearest enemy bullets.',
                  special: 'Shadow-Twin: a decoy that draws all aimed fire and soaks bullets.' },
     odin:      { name: 'ODIN', epithet: 'the Allfather', pantheon: 'ASGARD', css: '#cfd6e0', color: [0.8, 0.85, 0.92],
-                 attack: 'Huginn & Muninn orbit and dive at the nearest foe.',
+                 attack: 'NINE NIGHTS: one heavy rune-bolt; every 4th hit carves a rune into the foe, each +15% against it — forever.',
                  special: 'Gungnir: the spear that never misses, piercing foe after foe (Marks each).' },
     wukong:    { name: 'WUKONG', epithet: 'the Monkey King', pantheon: 'CELESTIAL COURT', css: '#ff6a3d', color: [1.0, 0.42, 0.24],
                  attack: 'Kills may spawn a hair-clone that mirrors your fire.',
@@ -116,7 +116,7 @@
                  attack: 'Attacks issue homing imperial edicts that Stun the condemned.',
                  special: "Heaven's Verdict: a volley of homing edicts Stuns every foe on the field." },
     quetz:     { name: 'QUETZALCOATL', epithet: 'the Plumed Serpent', pantheon: 'FIFTH SUN', css: '#5affc0', color: [0.35, 1.0, 0.75],
-                 attack: 'Shots weave serpentine, +1 pierce, wider coverage.',
+                 attack: 'Three streams braid into a plumed helix (pierces 1); hold it on ONE body to COIL it +10%/bite, up to +60%.',
                  special: 'Sky Serpent sweeps the field, eating bullets into your apotheosis gauge.' },
     thor:      { name: 'THOR', epithet: 'the Thunderer', pantheon: 'ASGARD', css: '#8fb4d8', color: [0.56, 0.66, 0.82],
                  attack: 'Mjölnir: a returning hammer that smashes twice per throw.',
@@ -130,14 +130,14 @@
   var CHARMS = {
     charmZeus:      { god: 'zeus',      name: 'EAGLE FEATHER',    desc: '+12% damage to elites and bosses' },
     charmPoseidon:  { god: 'poseidon',  name: 'PEARL OF THE DEEP', desc: '+50% magnet radius' },
-    charmArtemis:   { god: 'artemis',   name: 'SILVER FLETCHING', desc: '+6% crit chance' },
+    charmArtemis:   { god: 'artemis',   name: 'SILVER FLETCHING', desc: '+precise damage & +15% weak-point size' },
     charmAphrodite: { god: 'aphrodite', name: 'DOVE TOKEN',       desc: 'shop prices -15%' },
     charmAres:      { god: 'ares',      name: 'SPEAR SPLINTER',   desc: '+10% attack damage' },
     charmHeimdall:  { god: 'heimdall',  name: "WATCHMAN'S EYE",   desc: '+12% damage to Marked foes' },
     charmRa:        { god: 'ra',        name: 'SUNSTONE',         desc: '+20% special recharge' },
     charmAnubis:    { god: 'anubis',    name: 'HEART SCARAB',     desc: 'death spills no gold' },
     charmLoki:      { god: 'loki',      name: 'TANGLED THREAD',   desc: '+35% graze gauge gain' },
-    charmOdin:      { god: 'odin',      name: 'RAVEN QUILL',      desc: 'shop rerolls cost half' },
+    charmOdin:      { god: 'odin',      name: 'RAVEN QUILL',      desc: 'Huginn & Muninn fly with you, diving at foes (any attack)' },
     charmThor:      { god: 'thor',      name: 'HAMMER SHARD',     desc: '+15% special damage' },
     charmWukong:    { god: 'wukong',    name: 'GOLDEN HAIR',      desc: '+12% move speed, +15% focus speed' },
     charmQuetz:     { god: 'quetz',     name: 'PLUMED CREST',     desc: '+1.2s apotheosis duration' },
@@ -151,16 +151,15 @@
   var MODS = {
     zeus: [['zeusChain', '+1 chain lightning jump', 'attack'], ['zeusCrit', 'chains crit-strike the source', 'attack'], ['zeusFork', 'chains fork to a 2nd target', 'attack'], ['zeusField', 'kills leave a static zap field', 'attack']],
     poseidon: [['poseidonBig', 'bigger knockback & impact', 'attack'], ['poseidonDrag', 'tidal wave drags gold to you', 'special'], ['poseidonSplash', 'wall-slams splash damage', 'attack'], ['poseidonForce', '+40% impulse & impact', 'attack']],
-    artemis: [['artemisCrit', '+8% crit chance', 'attack'], ['artemisRefund', 'crits refund special charge', 'special'], ['artemisSpread', 'marked kills spread the Mark', 'attack'], ['artemisMulti', 'crits deal x4 (from x3)', 'attack']],
+    artemis: [['artemisCrit', "HUNTER'S REACH: +2 ramp cap & +0.6 arrow homing", 'attack'], ['artemisRefund', 'a 6+ stack Hunted hit refunds special charge', 'attack'], ['artemisSpread', 'chain hops carry ALL stacks (no decay)', 'attack'], ['artemisMulti', 'DEEPER HUNT: ramp +0.18/stack (from +0.12)', 'attack']],
     aphrodite: [['aphroLong', 'charm lasts longer', 'any'], ['aphroExplode', 'charmed foes explode on expiry', 'any'], ['aphroTaunt', 'foes near a charmed ally target it', 'any'], ['aphroFast', 'charm at fewer hits', 'attack']],
     ares: [['aresDecay', 'frenzy decays half as fast', 'attack'], ['aresCharge', 'frenzy charges special 2x at 5+', 'attack'], ['aresTerror', 'terror lasts +1.5s', 'special'], ['aresSpoils', 'terror-slams drop gold', 'special']],
-    heimdall: [['heimVigil', '+20% damage to Marked foes', 'any'], ['heimPrism', 'refraction every 3rd volley; +2 prism shots', 'attack'], ['heimHorn', 'Gjallarhorn hits harder; shove 350px', 'special'], ['heimEcho', 'the horn echoes once at 50% after 1s', 'special']],
+    heimdall: [['heimVigil', '+20% damage to Marked foes', 'any'], ['heimHorn', 'Gjallarhorn hits harder; shove 350px', 'special'], ['heimEcho', 'the horn echoes once at 50% after 1s', 'special']],
     ra: [['raRamp', 'beam ramps faster & higher', 'attack'], ['raSpread', 'burning foes spread Burn on death', 'any'], ['raSplit', 'beam splits vs swarms', 'attack'], ['raBurn', 'beam ignites its target', 'attack']],
     anubis: [['anubisThresh', 'execute threshold 25% → 33%', 'attack'], ['anubisRefund', 'executes refund special charge', 'attack'], ['anubisShard', 'executes drop an apotheosis shard', 'attack'], ['anubisBossDmg', 'below-half bonus vs bosses +25% → +40%', 'attack']],
-    // PASS2: lokiVaunt + lokiChance removed from the draftable pool — their readers died with Confuse.
-    // They re-anchor under PILFER next pass (lokiChance→PICKPOCKET steal-on-2nd-stack, lokiVaunt→daggers charge apotheosis).
-    loki: [['lokiLong', 'decoy lasts 6 → 9s', 'special'], ['lokiBoom', 'decoy explodes: bullets → gold', 'special']],
-    odin: [['odinRaven', 'ravens dive more & hit harder', 'attack'], ['odinMark', 'Gungnir marks last; bonus x1.4', 'special'], ['odinRavenMark', 'ravens Mark on hit', 'attack'], ['odinGungnir', 'Gungnir +50% damage & longer', 'special']],
+    // PASS2: lokiVaunt + lokiChance restored under PILFER (their Confuse-era readers are replaced).
+    loki: [['lokiLong', 'decoy lasts 6 → 9s', 'special'], ['lokiBoom', 'decoy explodes: bullets → gold', 'special'], ['lokiVaunt', 'pilfered daggers charge APOTHEOSIS', 'attack'], ['lokiChance', 'PICKPOCKET: Pilfer on the 2nd mark; steal 12', 'attack']],
+    odin: [['odinRaven', 'odinFury: runes carve every 3rd hit (from 4th)', 'attack'], ['odinMark', 'Gungnir marks last; bonus x1.4', 'special'], ['odinRavenMark', 'odinSunder: doom-bolts splash 50% to a nearby foe', 'attack'], ['odinGungnir', 'Gungnir +50% damage & longer', 'special']],
     wukong: [['wukongClones', 'clones last 7s, cap 3', 'attack'], ['wukongStaff', 'staff wider; survivors Stunned', 'special'], ['wukongSpecial', 'clones echo your special at 25%', 'special'], ['wukongChance', 'clone spawn 20% → 35%', 'attack']],
     quetz: [['quetzBig', 'serpent larger & slower', 'special'], ['quetzGold', 'eaten bullets also pay gold', 'special'], ['quetzCircle', 'serpent circles you at the end', 'special'], ['quetzPierce', '+1 more pierce', 'attack']],
     thor: [['thorBelt', 'Megingjörð: +40% dmg, +50% knockback', 'any'], ['thorFast', 'throw cycle 1.4s → 0.9s', 'attack'], ['thorGauntlet', 'Járngreipr: catch grants +30% stream 2s', 'any'], ['thorSkymark', 'hammer hovers spinning at apex', 'attack']],
@@ -285,8 +284,7 @@
     if (!slots.length) return null;
     var slot = slots[Math.floor(Run.rng() * slots.length)];
     var owned = slot === 'attack' ? st.attackGod : st.specialGod;
-    // PASS2: exclude Loki from ATTACK swaps too (his ATTACK transform is out until PILFER); his SPECIAL stays swappable.
-    var others = GOD_KEYS.filter(function (g) { return g !== owned && !(slot === 'attack' && g === 'loki'); });
+    var others = GOD_KEYS.filter(function (g) { return g !== owned; });   // PASS2: Loki ATTACK restored (PILFER)
     var g = others[Math.floor(Run.rng() * others.length)];
     return slot === 'attack' ? tAttack(g, true) : tSpecial(g, true);
   }
@@ -316,7 +314,7 @@
     // attack / special transforms — only while the slot is empty.
     // Swaps are NOT part of the weighted pool: they'd flood it (11 gods × weight
     // per filled slot). A single swap card is rarely injected in pickDistinct.
-    if (!st.attackGod) GOD_KEYS.forEach(function (g) { if (g === 'loki') return; /* PASS2: restore with PILFER (Loki ATTACK removed while its Confuse reader is gone) */ push(tAttack(g, false), 14); });
+    if (!st.attackGod) GOD_KEYS.forEach(function (g) { push(tAttack(g, false), 14); });   // PASS2: Loki ATTACK restored (PILFER)
     if (!st.specialGod) GOD_KEYS.forEach(function (g) { push(tSpecial(g, false), 12); });
     // transform LEVEL-UP (pom) cards — your own equipped god, up the ladder
     if (st.attackGod && st.attackR < 3.5) push(tLevel('attack', st.attackGod), 10);
@@ -571,7 +569,7 @@
     var st = Game.st();
     if (idx === 0) {
       // Hades opening: three ATTACK transforms from three different gods
-      var gs = GOD_KEYS.filter(function (g) { return g !== 'loki'; });   // PASS2: restore Loki ATTACK opening pick with PILFER
+      var gs = GOD_KEYS.slice();   // PASS2: Loki ATTACK restored (PILFER) — all gods eligible for the opening pick
       for (var s = gs.length - 1; s > 0; s--) { var j = ri(s + 1); var t = gs[s]; gs[s] = gs[j]; gs[j] = t; }
       Run.draftOffers = [finalizeBoon(tAttack(gs[0], false), false), finalizeBoon(tAttack(gs[1], false), false), finalizeBoon(tAttack(gs[2], false), false)];
     } else {

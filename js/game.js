@@ -180,19 +180,28 @@
         swornBrothers: false, saintOfWar: false, twoThrones: false, godsOfWar: false, peachBanquet: false,
         theAllseeing: false, heraldOfRagnarok: false, falseDawn: false
       },
-      frenzy: { stacks: 0, decayT: 0 },
+      // ARES WAR-HEAT: frenzyF (0..1) is the real proximity meter; stacks = round(frenzyF*10)
+      // is kept in lockstep so every existing consumer (HUD pips, frenzyRate, mods) keeps working.
+      frenzy: { stacks: 0, decayT: 0, frenzyF: 0, graceT: 0, prevTier: 0, bloom: 0 },
       thorBuff: 0,
       hammers: [],
+      // ARTEMIS THE HUNT — the Hunted brand lives here (a pointer + ramp), not per-enemy,
+      // so it survives target motion and chains cleanly. huntSwap/huntStray = sticky counter.
+      hunt: { foe: null, foeSeq: 0, stacks: 0, stackT: 0, stray: null, straySeq: 0, swap: 0 },
+      // HEIMDALL THE BIFRÖST — a drawn hazard (not a pooled entity): t = cadence clock,
+      // seamT = telegraph clock, y = band altitude, life = band remaining once solid.
+      bifrost: { t: 0, seamT: 0, y: 0, life: 0, active: false },
       // god entities
-      ra: { active: false, target: null, ramp: 0, tx: 0, ty0: 0, ty1: 0 },
+      ra: { active: false, target: null, ramp: 0, hold: 0, graceT: 0, tier: 0, tx: 0, ty0: 0, ty1: 0 },
       decoy: { active: false, x: 0, y: 0, timer: 0, absorb: 0 },
-      ravens: [],
+      ravens: [], ravenKills: 0,
       gungnir: { active: false, x: 0, y: 0, timer: 0, tx: 0, ty: 0, ang: 0, visited: [] },
       wraiths: [],
       clones: [],
       debris: [],
       // god-special timers: Ra apotheosis surge, Gjallarhorn echo, Verdict 2nd wave + peach window
       raSurgeT: 0, hornEchoT: 0, verdict: { t: 0, mult: 0.5 }, verdictPeachT: 0,
+      skyfall: { x: 0, t: 0 },   // ZEUS SKYFALL — transient column draw (~0.22s)
       hermes: { speed: 0, focus: 0, recharge: 0, graze: 0 },
       charms: {},
       charmElite: 1, critBonus: 0, charmShop: 0, noSpill: false, rerollHalf: false, keepMult: false, vauntBonusMul: 1, charmMark: 0,
@@ -921,6 +930,7 @@
     s.weave = 0; s.phase = 0;
     s.cloneShot = false; s.crescent = false;
     s.markHit = false; s.forceCrit = 0;
+    s.huntHome = false; s.refracted = false; s.loosed = false; s.brandedFirst = false;
     resetShotHits(s);
     return s;
   }
@@ -949,26 +959,55 @@
     lanceShot(G.player.x - 46, 1, d * 0.7, [0.6, 0.95, 1.0]);
     lanceShot(G.player.x + 46, 1, d * 0.7, [0.6, 0.95, 1.0]);
   }
+  // ZEUS SKYFALL — instant column strike (no projectile), then a storm chain.
   function stormBolt() {
-    var d = LANCE_DMG * G.stats.spDmg * G.specialR;
-    lanceShot(G.player.x, 3, d, [0.6, 0.85, 1.0]);
-    lanceShot(G.player.x - 40, 3, d * 0.7, [0.7, 0.9, 1.0]);
-    lanceShot(G.player.x + 40, 3, d * 0.7, [0.7, 0.9, 1.0]);
+    var p = G.player;
+    var colX = p.x, near = null, bd = 140 * 140;
+    Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; var dx = e.x - p.x, dy = e.y - p.y; var d = dx * dx + dy * dy; if (Math.abs(e.x - p.x) < 140 && d < bd) { bd = d; near = e; } });
+    if (near) colX = near.x;
+    var d = LANCE_DMG * 2.4 * G.stats.spDmg * G.specialR;
+    var primary = null;
+    Engine.enemies.forEach(function (e) {
+      if (e.dying || e.charmed) return;
+      if (Math.abs(e.x - colX) < 55) { damageEnemy(e, d, false); if (!e.boss && !e.dying) e.stunT = Math.max(e.stunT, 0.4); if (!primary) primary = e; }
+    });
+    if (primary) chainLightning(primary, LANCE_DMG * 0.5 * G.stats.spDmg * G.specialR, true);   // inherits +2 jumps, boss collapse, all zeus mods
+    G.skyfall.x = colX; G.skyfall.t = 0.22;
+    G.flashAll = Math.max(G.flashAll, 0.2); addShake(6);
+    for (var i = 0; i < 6; i++) flash(colX + (Math.random() - 0.5) * 36, 100 + i * 300, [0.7, 0.85, 1], 90, 0.18);
   }
+  // ARTEMIS THE LOOSED ARROW — fastest moon-silver needle; pierces everything (999),
+  // always precise, Marks each pierced foe; the FIRST struck becomes the Hunted at 8.
   function huntArrow() {
     var s = allocShot(); if (!s) return;
-    s.x = G.player.x; s.y = G.player.y - 30; s.vx = 0; s.vy = -2000;
-    s.radius = 34; s.scale = 80; s.damage = LANCE_DMG * 2.2 * G.stats.spDmg * G.specialR;
-    s.age = 0; s.life = 0.8; s.r = 0.7; s.g = 1.0; s.b = 0.3;
-    s.pierce = 3; s.kind = 4; s.faction = 1; s.big = true; s.markHit = true; s.forceCrit = 1;
-    flash(s.x, s.y, [0.7, 1, 0.3], 150, 0.2);
+    var t = loosedTarget();
+    var a = t ? Math.atan2(aimTargetY(t) - (G.player.y - 30), aimTargetX(t) - G.player.x) : UP;
+    var sp = 2600;
+    s.x = G.player.x; s.y = G.player.y - 30; s.vx = Math.cos(a) * sp; s.vy = Math.sin(a) * sp;
+    s.radius = 14; s.scale = 64; s.damage = LANCE_DMG * 2.2 * G.stats.spDmg * G.specialR;
+    s.age = 0; s.life = 0.9; s.r = 0.85; s.g = 0.9; s.b = 1.0;
+    s.pierce = 999; s.kind = 4; s.faction = 1; s.big = true; s.markHit = true; s.forceCrit = 1;
+    s.homing = true; s.turn = 5.0; s.loosed = true; s.brandedFirst = false;
+    flash(s.x, s.y, [0.85, 0.9, 1], 150, 0.2);
   }
+  // LOOSED ARROW target priority: marked → lowest-HP → boss → straight up.
+  function loosedTarget() {
+    var best = null;
+    Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; if (e.marked && !best) best = e; });
+    if (best) return best;
+    var lo = null, lh = 1e18;
+    Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; if (e.hp < lh) { lh = e.hp; lo = e; } });
+    return lo;
+  }
+  // APHRODITE HEARTSEEKER — a slow weaving heart that charms a minion, or Weakens a
+  // boss (+8%/heart ×3) and sweeps its nearby bullets to gold.
   function charmMissile() {
     var s = allocShot(); if (!s) return;
-    s.x = G.player.x; s.y = G.player.y - 30; s.vx = 0; s.vy = -1200;
-    s.radius = 24; s.scale = 56; s.damage = LANCE_DMG * 1.2 * G.stats.spDmg;
-    s.age = 0; s.life = 1.4; s.r = 1.0; s.g = 0.45; s.b = 0.85;
+    s.x = G.player.x; s.y = G.player.y - 30; s.vx = 0; s.vy = -900;
+    s.radius = 24; s.scale = 56; s.damage = LANCE_DMG * 1.2 * G.stats.spDmg * G.specialR;   // §7 bug fix: *specialR
+    s.age = 0; s.life = 1.8; s.r = 1.0; s.g = 0.3; s.b = 0.55;
     s.pierce = 0; s.kind = 5; s.faction = 1; s.big = true;
+    s.homing = true; s.turn = 3.0; s.weave = 1; s.phase = 0;
     flash(s.x, s.y, [1, 0.5, 0.85], 120, 0.2);
   }
   function tidalWave() {
@@ -1184,14 +1223,27 @@
       if (e.dying || e.charmed) return;
       if (e.y < p.y - 30 && Math.abs(e.x - p.x) < halfW + e.radius * 0.7) { if (e.y > bestY) { bestY = e.y; target = e; } }
     });
-    var cap = 2.5 * (G.mods.raRamp ? 1.15 : 1);
-    var rate = G.mods.raRamp ? 0.9 : 0.5;   // ~2s to full (faster with mod)
-    if (target && target === G.ra.target) G.ra.ramp = Math.min(1, G.ra.ramp + rate * dt);
-    else { G.ra.ramp = 0; G.ra.target = target; }
-    if (G.raSurgeT > 0) G.ra.ramp = 1;   // apotheosis rider: beam surges at full ramp
+    // THE LENS — 4 stepped heat tiers on continuous held-time on ONE target.
+    // raRamp charm scales thresholds ×0.556 (reaches CORONA faster) + caps ×2.875.
+    var rr = G.mods.raRamp, tscale = rr ? 0.556 : 1;
+    var THR = [0, 0.60 * tscale, 1.30 * tscale, 2.00 * tscale];
+    var MUL = [1.0, 1.5, 2.0, rr ? 2.875 : 2.5];
+    var boss = target && target.boss;
+    if (target && target === G.ra.target) { G.ra.hold += dt; G.ra.graceT = 0.30; }
+    else if (target) { G.ra.target = target; G.ra.hold = Math.max(0, G.ra.hold - THR[1]); G.ra.graceT = 0.30; }   // switch: bleed a tier
+    else {
+      // no target: BOSS LOCK holds hold monotonic only while a boss is the target;
+      // otherwise the grace window, then bleed ~one tier per 0.30s.
+      if (G.ra.graceT > 0) G.ra.graceT -= dt;
+      else if (!(G.ra.target && G.ra.target.boss)) G.ra.hold = Math.max(0, G.ra.hold - dt * 2.2);
+    }
+    if (boss) G.ra.graceT = 0.30;   // boss target never decays (Ra's boss signature)
+    var tier = G.ra.hold >= THR[3] ? 3 : G.ra.hold >= THR[2] ? 2 : G.ra.hold >= THR[1] ? 1 : 0;
+    if (G.raSurgeT > 0) { tier = 3; G.ra.hold = Math.max(G.ra.hold, THR[3]); }   // APOTHEOSIS forces CORONA
+    G.ra.tier = tier; G.ra.ramp = Math.min(1, G.ra.hold / THR[3]);
     G.ra.active = true; G.ra.tx = p.x; G.ra.ty0 = p.y - 24; G.ra.ty1 = target ? target.y : 30;
     if (target) {
-      var mult = 1 + (cap - 1) * G.ra.ramp;
+      var mult = MUL[tier];
       var tick = BEAM_DPS * mult * G.stats.atkDmg * dt;
       // raSplit: when a 2nd foe is in the column, split into two half beams (swarm answer)
       if (G.mods.raSplit) {
@@ -1214,6 +1266,41 @@
     GL.draw(GL.SPR.CORE, x, cy, 46 + ramp * 26, hh, 0, 1, 0.92, 0.5, 0.8 * pulse);
     GL.draw(GL.SPR.CORE, x, cy, 16 + ramp * 12, hh, 0, 1, 1, 0.95, pulse);
     GL.draw(GL.SPR.GLOW, x, G.ra.ty1, 130, 130, 0, 1, 0.9, 0.5, 0.7);
+    // THE LENS — 1..4 gold notch-glyphs riding the beam (occlusion-proof tier count).
+    for (var ni = 0; ni <= (G.ra.tier || 0); ni++) {
+      var ny = G.ra.ty0 - 40 - ni * 34;
+      GL.draw(GL.SPR.GOLD, x, ny, 20, 26, 0, 1, 0.85, 0.4, 0.9);
+    }
+  }
+  // HEIMDALL THE BIFRÖST — a full-width rainbow band (white below / rainbow above,
+  // hard seam) once solid; a dotted dawn-seam tracing L→R during the telegraph.
+  function drawBifrost() {
+    var bf = G.bifrost;
+    if (bf.seamT > 0) {   // telegraph: dotted seam sweeping across
+      var prog = 1 - bf.seamT / 0.5, sx = W * prog;
+      for (var dx = 0; dx < sx; dx += 34) GL.draw(GL.SPR.CORE, dx, bf.y, 10, 6, 0, 1, 0.95, 0.8, 0.7);
+      GL.draw(GL.SPR.GLOW, sx, bf.y, 60, 30, 0, 1, 0.95, 0.85, 0.6);
+      return;
+    }
+    if (bf.active) {
+      var fade = Math.min(1, bf.life);
+      for (var x = 20; x < W; x += 44) {
+        var col = Patterns.hue((x / W) + G.time * 0.25);
+        GL.draw(GL.SPR.GLOW, x, bf.y, 60, 34, 0, col[0], col[1], col[2], 0.5 * fade);
+        GL.draw(GL.SPR.CORE, x, bf.y, 30, 13, 0, col[0], col[1], col[2], 0.85 * fade);
+      }
+    }
+  }
+  // ZEUS SKYFALL — a stacked white column full-height on colX, x-jitter/frame.
+  function drawSkyfall() {
+    if (G.skyfall.t <= 0) return;
+    G.skyfall.t -= Engine.DT;
+    var a = Math.min(1, G.skyfall.t / 0.22), x = G.skyfall.x;
+    for (var i = 0; i < 14; i++) {
+      var jx = x + (Math.random() - 0.5) * 36, sy = 40 + i * (H / 14);
+      GL.draw(GL.SPR.GLOW, jx, sy, 70, H / 12, 0, 0.6, 0.85, 1, 0.5 * a);
+      GL.draw(GL.SPR.CORE, jx, sy, 22, H / 13, 0, 0.9, 0.95, 1, 0.9 * a);
+    }
   }
 
   function nearestEnemy(x, y) {
@@ -1232,12 +1319,16 @@
   function aimTargetX(e) { return (e && e.nailActive) ? e.nailX : (e ? e.x : 0); }
   function aimTargetY(e) { return (e && e.nailActive) ? e.nailY : (e ? e.y : 0); }
 
-  // ODIN — ravens
+  // ODIN — HUGINN & MUNINN. Re-anchored to a CHARM (RAVEN QUILL / G.charms.charmOdin):
+  // the ravens fly with ANY attack god, not just Odin. MEMORY: +1 dive dmg / 8 kills
+  // (cap +18); past 30 kills the pair dives faster (interval 1.0) in tighter pairs.
   function updateRavens(dt) {
-    if (G.attackGod !== 'odin') { if (G.ravens.length) G.ravens.length = 0; return; }
+    if (!G.charms.charmOdin) { if (G.ravens.length) G.ravens.length = 0; return; }
     while (G.ravens.length < 2) G.ravens.push({ ang: G.ravens.length * Math.PI, state: 0, x: G.player.x, y: G.player.y, tx: 0, ty: 0, cd: 1.2 + G.ravens.length * 0.6 });
-    var p = G.player, interval = G.mods.odinRaven ? 1.0 : 1.7;
-    var dmg = RAVEN_DMG * (G.mods.odinRaven ? 1.7 : 1) * G.stats.atkDmg;
+    var p = G.player, memoryK = G.ravenKills;
+    var interval = memoryK >= 30 ? 1.0 : 1.4;
+    var memoryDmg = Math.min(18, Math.floor(memoryK / 8));   // MEMORY: +1/8 kills, cap +18
+    var dmg = (12 + memoryDmg) * G.stats.atkDmg * G.attackR;
     for (var i = 0; i < G.ravens.length; i++) {
       var r = G.ravens[i]; r.ang += dt * 2.4;
       if (r.state === 0) {
@@ -1249,7 +1340,7 @@
         var dx = r.tx - r.x, dy = r.ty - r.y, d = Math.hypot(dx, dy) || 1;
         r.x += dx / d * 720 * dt; r.y += dy / d * 720 * dt;
         var hitFlag = false;
-        Engine.enemies.forEach(function (e) { if (hitFlag || e.dying || e.charmed) return; if (Engine.hit(r.x, r.y, 20, e.x, e.y, e.radius)) { damageEnemy(e, ((G.duos.wildHunt && e.terrorT > 0) ? dmg * 3 : dmg) * (G.duos.theAllseeing && e.marked ? 1.4 : 1), false); if (G.mods.odinRavenMark) markEnemy(e); hitFlag = true; } });
+        Engine.enemies.forEach(function (e) { if (hitFlag || e.dying || e.charmed) return; if (Engine.hit(r.x, r.y, 20, e.x, e.y, e.radius)) { damageEnemy(e, ((G.duos.wildHunt && e.terrorT > 0) ? dmg * 3 : dmg) * (G.duos.theAllseeing && e.marked ? 1.4 : 1), false); if (!e.dying) markEnemy(e); hitFlag = true; } });   // Mark-on-dive (baseline)
         if (hitFlag || d < 24) r.state = 2;
       } else {
         var dx2 = p.x - r.x, dy2 = p.y - r.y, d2 = Math.hypot(dx2, dy2) || 1;
@@ -1498,27 +1589,44 @@
   // ---------------------------------------------------------------------
   // ARES — Bloodlust (frenzy) + Phobos & Deimos (Terror wraiths)
   // ---------------------------------------------------------------------
+  // ARES WAR-HEAT — proximity builds the meter. addFrenzy (kill/segment gravy) now
+  // nudges the continuous meter up rather than adding a whole discrete stack.
   function addFrenzy() {
-    G.frenzy.stacks = Math.min(10, G.frenzy.stacks + 1);
-    G.frenzy.decayT = G.mods.aresDecay ? 3.0 : 1.5;
+    G.frenzy.frenzyF = Math.min(1, G.frenzy.frenzyF + 0.10);   // redefined +0.10 (terror-kill duos = gravy)
+    syncFrenzyStacks();
   }
+  function syncFrenzyStacks() { G.frenzy.stacks = Math.round(G.frenzy.frenzyF * 10); }
   function anyBurning() {
     var found = false;
     Engine.enemies.forEach(function (e) { if (e.burnT > 0) found = true; });
     return found;
   }
+  // WAR-HEAT proximity meter: stand a spear's length from a foe and the heat climbs;
+  // back off past FAR (after a 0.4s grace) and it cools. Proximity ALONE builds it —
+  // no trigger-hold. frenzyF (0..1) drives G.frenzy.stacks so all consumers keep working.
+  var WARHEAT_CLOSE = 260, WARHEAT_FAR = 440;
   function updateFrenzy(dt) {
-    if (G.attackGod !== 'ares' && G.frenzy.stacks === 0) return;
-    // BLOOD AND FIRE duo: stacks don't decay while anything burns
-    var hold = G.duos.bloodAndFire && anyBurning();
-    if (!hold && G.frenzy.stacks > 0) {
-      G.frenzy.decayT -= dt;
-      if (G.frenzy.decayT <= 0) { G.frenzy.stacks--; G.frenzy.decayT = G.mods.aresDecay ? 3.0 : 1.5; }
+    if (G.frenzy.bloom > 0) G.frenzy.bloom -= dt;
+    if (G.attackGod !== 'ares') {
+      if (G.frenzy.frenzyF !== 0 || G.frenzy.stacks !== 0) { G.frenzy.frenzyF = 0; G.frenzy.stacks = 0; }
+      return;
     }
+    var ne = nearestEnemy(G.player.x, G.player.y);
+    var dist = ne ? Math.hypot(ne.x - G.player.x, ne.y - G.player.y) : 1e9;
+    var hold = G.duos.bloodAndFire && anyBurning();           // BLOOD AND FIRE: never cool while burning
+    if (dist <= WARHEAT_CLOSE) { G.frenzy.frenzyF = Math.min(1, G.frenzy.frenzyF + 0.25 * dt); G.frenzy.graceT = 0.4; }
+    else if (dist > WARHEAT_FAR) {
+      if (G.frenzy.graceT > 0) G.frenzy.graceT -= dt;
+      else if (!hold) {
+        var drain = 0.18 * (G.mods.aresDecay ? 0.5 : 1) * (G.waveKind === 'boss' ? 0.5 : 1);   // aresDecay + boss-mode slow drain
+        G.frenzy.frenzyF = Math.max(0, G.frenzy.frenzyF - drain * dt);
+      }
+    } else { G.frenzy.graceT = 0.4; }                          // between bands: hold
+    syncFrenzyStacks();
     // aresCharge fork: charge special ~2x faster while >= 5 stacks
     if (G.mods.aresCharge && G.frenzy.stacks >= 5) addCharge(SP_RECHARGE * G.stats.spRecharge * dt);
   }
-  function frenzyRate() { return 1 + 0.06 * G.frenzy.stacks; }  // +6% fire rate per stack
+  function frenzyRate() { return 1 + 0.03 * G.frenzy.stacks; }  // +3%/stack (WAR-HEAT rewrite)
 
   // Terror application from a passing wraith (or LOVE AND WAR duo)
   function terrify(e, fromX, fromY) {
@@ -1803,11 +1911,12 @@
     // Ra replaces projectile fire with a continuous solar beam
     if (G.attackGod === 'ra') {
       if (wantFire()) raBeam(dt);
-      else { G.ra.active = false; G.ra.target = null; G.ra.ramp = 0; }
+      else { G.ra.active = false; G.ra.target = null; G.ra.ramp = 0; G.ra.hold = 0; }
     } else {
       p.fireT -= dt;
       if (wantFire() && p.fireT <= 0) {
-        var cad = (G.attackGod === 'guanyu') ? 1.7 : 1;   // crescents: slower, heavier cadence
+        // ODIN NINE NIGHTS collapses to ONE heavy rune-bolt on a slow 0.14s cadence.
+        var cad = (G.attackGod === 'guanyu') ? 1.7 : (G.attackGod === 'odin') ? (0.14 / FIRE_CD) : 1;
         p.fireT = FIRE_CD * cad / (G.stats.atkRate * frenzyRate());
         fireShots(focus); SFX.shot();
       }
@@ -1849,12 +1958,8 @@
     return out;
   }
   function fireShots(focus) {
-    // HEIMDALL — Bifröst Prism: every 4th volley (3rd with heimPrism) refracts
-    // into a rainbow fan of piercing prism shots instead of the normal stream.
-    if (G.attackGod === 'heimdall') {
-      G.player.volleyN++;
-      if (G.player.volleyN >= (G.mods.heimPrism ? 3 : 4)) { G.player.volleyN = 0; firePrismFan(focus); return; }
-    }
+    // HEIMDALL fires ordinary dawn-gold streams; THE BIFRÖST band (updateBifrost)
+    // refracts those shots that cross it — the every-4th-volley prism is retired.
     fireStreams(G.player.x, G.player.y, focus, 1, false);
   }
   function firePrismFan(focus) {
@@ -1877,6 +1982,8 @@
   function fireStreams(px, py, focus, dmgScale, isClone) {
     // Guan Yu crescents: the player fires them, and clones fire mini ones under SWORN BROTHERS.
     var guan = (G.attackGod === 'guanyu') || (isClone && G.duos.swornBrothers);
+    var artemis = (G.attackGod === 'artemis') && !isClone;
+    var ares = (G.attackGod === 'ares') && !isClone;
     var n = focus ? 4 : 3;
     if (G.attackGod === 'thor') n = Math.max(1, n - 1);   // Mjolnir: thinned normal stream
     if (guan) n = focus ? 3 : 2;                          // fewer, broader blades
@@ -1887,6 +1994,38 @@
     var dmg = (focus ? 1.0 : 1.05) * SHOT_DMG * G.stats.atkDmg * dmgScale * (G.thorBuff > 0 ? 1.3 : 1);
     if (guan) dmg *= 1.7 * G.attackR * (isClone ? 0.55 : 1) * ((G.mods.guanOath && focus) ? 1.3 : 1);
     var ww = (guan && G.mods.guanWide) ? 1.3 : 1;         // wider crescents
+
+    // ARTEMIS THE HUNT — silver arrow-needles (kind 9). Straight until a Hunted is
+    // branded, then they home to it (weak on purpose; the ramp is the skill).
+    if (artemis) {
+      var reach = G.mods.artemisCrit ? 0.6 : 0;           // HUNTER'S REACH re-anchor: +0.6 turn
+      var admg = (focus ? 1.0 : 1.05) * SHOT_DMG * G.stats.atkDmg * G.attackR * dmgScale;
+      var aangs = streamAngles(n, spread);
+      for (var ai = 0; ai < aangs.length; ai++) {
+        var as = allocShot(); if (!as) break;
+        var aa = UP + aangs[ai];
+        as.x = px + Math.cos(aa) * 26; as.y = py + Math.sin(aa) * 26 - 20;
+        as.vx = Math.cos(aa) * SHOT_SPEED; as.vy = Math.sin(aa) * SHOT_SPEED;
+        as.radius = 12; as.scale = 40; as.damage = admg; as.age = 0; as.life = 1.7;
+        as.pierce = 1; as.kind = 9; as.faction = 0; as.big = false;
+        as.homing = true; as.turn = 2.2 + reach; as.huntHome = true;
+        as.r = 0.85; as.g = 0.9; as.b = 1.0;
+      }
+      return;
+    }
+    // ARES GREEK ARMORY — the shot metal escalates with WAR-HEAT (three hard tiers).
+    if (ares) { fireArmory(px, py, focus, dmg * G.attackR); return; }
+
+    // ODIN NINE NIGHTS — a single heavy steel-blue rune-bolt (n=1, no spread).
+    if (G.attackGod === 'odin' && !isClone) {
+      var ob = allocShot(); if (!ob) return;
+      ob.x = px; ob.y = py - 20; ob.vx = 0; ob.vy = -SHOT_SPEED;
+      ob.radius = 16; ob.scale = 52; ob.damage = 3.2 * SHOT_DMG * G.stats.atkDmg * G.attackR * dmgScale;
+      ob.age = 0; ob.life = 1.6; ob.pierce = 0; ob.kind = 15; ob.faction = 0; ob.big = false;
+      ob.r = 0.8; ob.g = 0.85; ob.b = 0.92;
+      return;
+    }
+
     var angs = streamAngles(n, spread);
     for (var i = 0; i < angs.length; i++) {
       var s = allocShot(); if (!s) break;
@@ -1900,16 +2039,100 @@
       s.faction = 0; s.big = false; s.cloneShot = !!isClone;
       s.crescent = guan;
       if (guan) { s.r = 0.30; s.g = 0.95; s.b = 0.55; }
-      else if (quetz) { s.weave = 1; s.phase = i * 1.3 + Math.random() * 6.28; s.r = 0.4; s.g = 1.0; s.b = 0.7; }
-      else { var fr = G.frenzy.stacks / 10; s.r = 0.6 + 0.4 * fr; s.g = 1.0 - 0.7 * fr; s.b = 1.0 - 0.85 * fr; }
+      else if (quetz) { s.weave = 1; s.phase = i * (TAU / 3); s.r = 0.4; s.g = 1.0; s.b = 0.7; }   // locked triple-helix (no RNG phase)
+      else if (G.attackGod === 'heimdall') { s.r = 1.0; s.g = 0.92; s.b = 0.8; }                    // dawn-gold below the bridge
+      else { s.r = 0.6; s.g = 1.0; s.b = 1.0; }
     }
+  }
+  // ARES GREEK ARMORY — javelins (akontia) → xiphos leaf-blades → doru bundle, one
+  // LABRYS per volley at FRENZY. Tier is read from WAR-HEAT stacks (0..10).
+  function fireArmory(px, py, focus, dmg) {
+    var st = G.frenzy.stacks;
+    var tier = st >= 8 ? 2 : st >= 4 ? 1 : 0;             // CALM / HEATED / FRENZY
+    var n = focus ? 4 : 3;
+    var baseSpread = focus ? 0.16 : 0.30;
+    var spread = tier === 2 ? baseSpread * 0.33 : tier === 1 ? baseSpread * 0.8 : baseSpread;
+    var scale = tier === 2 ? 44 * 1.9 : tier === 1 ? 44 * 1.5 : 44;
+    var rad = tier === 2 ? 14 * 1.6 : tier === 1 ? 14 * 1.35 : 14;
+    var pierce = tier === 2 ? 3 : tier === 1 ? 1 : 0;
+    var kind = tier === 2 ? 13 : tier === 1 ? 12 : 11;    // doru / xiphos / akontia painters
+    var col = tier === 2 ? [1.0, 0.55, 0.35] : tier === 1 ? [1.0, 0.15, 0.12] : [0.70, 0.20, 0.15];
+    var angs = streamAngles(n, spread);
+    for (var i = 0; i < angs.length; i++) {
+      var s = allocShot(); if (!s) break;
+      var a = UP + angs[i];
+      // HEATED xiphos + FRENZY doru converge toward centre lane
+      if (tier >= 1) a = UP + angs[i] * (tier === 2 ? 0.5 : 0.7);
+      var ctr = (tier === 2 && Math.abs(angs[i]) < 0.001) ? 1.0 : (tier === 2 ? 0.85 : 1);
+      s.x = px + Math.cos(a) * 26; s.y = py + Math.sin(a) * 26 - 20;
+      s.vx = Math.cos(a) * SHOT_SPEED; s.vy = Math.sin(a) * SHOT_SPEED;
+      s.radius = rad; s.damage = dmg; s.age = 0; s.life = 1.6; s.scale = scale * ctr;
+      s.pierce = pierce; s.kind = kind; s.faction = 0; s.big = false;
+      s.r = col[0]; s.g = col[1]; s.b = col[2];
+    }
+    if (tier === 2) {                                     // FRENZY — one whirling LABRYS per volley
+      var lb = allocShot(); if (lb) {
+        lb.x = px; lb.y = py - 20; lb.vx = 0; lb.vy = -SHOT_SPEED * 0.72;   // ~520px reach over its life
+        lb.radius = 34; lb.scale = 74; lb.damage = dmg * 1.6; lb.age = 0; lb.life = 1.35;
+        lb.pierce = 3; lb.kind = 14; lb.faction = 0; lb.big = false;
+        lb.r = 0.78; lb.g = 0.12; lb.b = 0.12; lb.spin = 0;
+      }
+    }
+    // tier-cross upward → red muzzle bloom + kindle
+    if (tier > G.frenzy.prevTier) { flash(px, py - 30, [1, 0.3, 0.2], 130, 0.18); G.frenzy.bloom = 0.16; SFX.boom(); }
+    G.frenzy.prevTier = tier;
+  }
+
+  // ================= HEIMDALL — THE BIFRÖST =================
+  // A rainbow bridge that forms above the player on a 6.0s beat: a 0.5s dotted
+  // dawn-seam telegraph, then a solid full-width band (life 4.0s) frozen at the
+  // seam-finish altitude. Player shots crossing it fork into 5 rays; foes touching
+  // it are Marked. A drawn hazard (G.bifrost), never a pooled entity.
+  function updateBifrost(dt) {
+    var bf = G.bifrost;
+    if (G.attackGod !== 'heimdall') { if (bf.active || bf.seamT > 0) { bf.active = false; bf.seamT = 0; bf.life = 0; bf.t = 0; } return; }
+    if (bf.life > 0) {
+      // solid band: Mark any foe crossing / overlapping it.
+      Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; if (Math.abs(e.y - bf.y) < 13 + e.radius) { markEnemy(e); if (!e.markShimmer) { e.markShimmer = 1; flash(e.x, e.y, [1, 0.95, 0.85], 60, 0.2); } } else e.markShimmer = 0; });
+      bf.life -= dt; if (bf.life <= 0) { bf.active = false; SFX.bell && SFX.bell(); }
+      return;
+    }
+    if (bf.seamT > 0) {   // telegraph tracing L→R
+      bf.seamT -= dt;
+      if (bf.seamT <= 0) { bf.active = true; bf.life = 4.0; SFX.hit(); }   // solidify (bell arpeggio in Pass 3)
+      return;
+    }
+    // between bridges: count the cadence only while actually firing.
+    if (wantFire()) {
+      bf.t += dt;
+      if (bf.t >= 6.0) { bf.t = 0; bf.seamT = 0.5; bf.y = Math.max(180, Math.min(H - 600, G.player.y - 300)); SFX.hit(); }
+    }
+  }
+  // Refract a faction-0 shot crossing the band into 5 rainbow rays at the crossing point.
+  var RAY_HUES = [[1, 0.25, 0.2], [1, 0.8, 0.25], [0.3, 1, 0.4], [0.35, 0.7, 1], [0.7, 0.4, 1]];
+  function refractShot(s) {
+    var focus = Engine.focusHeld();
+    var cone = focus ? 0.12 : 0.45;
+    var baseA = Math.atan2(s.vy, s.vx), spd = Math.hypot(s.vx, s.vy) || SHOT_SPEED;
+    var each = s.damage * 0.32, cy = G.bifrost.y;
+    for (var i = 0; i < 5; i++) {
+      var r = allocShot(); if (!r) break;
+      var a = baseA + (i / 4 - 0.5) * 2 * cone;
+      r.x = s.x; r.y = cy; r.vx = Math.cos(a) * spd; r.vy = Math.sin(a) * spd;
+      r.radius = 11; r.scale = 34; r.damage = each; r.age = 0; r.life = 1.4;
+      r.pierce = s.pierce; r.kind = 16; r.faction = 0; r.big = false; r.refracted = true;
+      var col = RAY_HUES[i]; r.r = col[0]; r.g = col[1]; r.b = col[2];
+    }
+    spark(s.x, cy, [1, 0.95, 0.85], 3, 220, 18);
   }
 
   function updateShots(dt) {
     Engine.shots.forEach(function (s) {
       s.age += dt;
       if (s.homing && s.turn > 0) {                       // Jade edict homing
-        var t = nearestEnemy(s.x, s.y);
+        // ARTEMIS arrows steer ONLY toward the branded Hunted; with none branded
+        // they fly dead straight (huntHome, no fallback) — the "straight until branded" law.
+        var t = s.huntHome ? huntFoe() : s.loosed ? loosedTarget() : nearestEnemy(s.x, s.y);
         if (t) {
           var desired = Math.atan2(aimTargetY(t) - s.y, aimTargetX(t) - s.x);   // seek the nail, not the immune body
           var cur = Math.atan2(s.vy, s.vx);
@@ -1921,8 +2144,14 @@
           if (Math.random() < 0.5) spark(s.x, s.y, [0.8, 0.6, 1], 1, 90, 14);
         }
       }
+      var py0 = s.y;
       s.x += s.vx * dt; s.y += s.vy * dt;
       if (s.weave) s.x += Math.sin(s.age * 16 + s.phase) * 340 * dt; // serpentine
+      // HEIMDALL THE BIFRÖST — a faction-0 shot crossing the solid band upward forks
+      // into 5 rainbow rays at the crossing point; the original is consumed (no re-refract).
+      if (G.bifrost.active && s.faction === 0 && !s.refracted && s.kind !== 16 && py0 > G.bifrost.y && s.y <= G.bifrost.y) {
+        refractShot(s); Engine.shots.release(s); return;
+      }
       if (s.y < -80 || s.y > H + 60 || s.age > s.life || s.x < -80 || s.x > W + 80) Engine.shots.release(s);
     });
   }
@@ -1982,8 +2211,18 @@
     e.boss = false; e.phase = 0; e.name = ''; e.invuln = false; e.dying = false; e.elite = !!elite;
     e.terrorT = 0; e.shakenT = 0;
     e.charmMeter = 0; e.charmed = false; e.charmT = 0;
-    e.marked = false; e.markT = 0; e.weak = false; e.weakT = 0; e.ghost = false;
+    e.marked = false; e.markT = 0; e.weak = false; e.weakT = 0; e.weakStacks = 0; e.markShimmer = 0; e.ghost = false;
     e.burnT = 0; e.burnDps = 0; e.trickStacks = 0; e.stunT = 0; e.trickBudget = 0; e.judgeT = 0;
+    // ODIN NINE NIGHTS — carved runes (0..9) are PERMANENT for this enemy's life
+    // (per-enemy knowledge; reset ONLY here on pool reuse, never by phase transitions).
+    e.runes = 0; e.runeHits = 0;
+    // QUETZ THE COIL — per-target coil count (0..6) + decay clock (0.9s to uncoil).
+    e.coilQ = 0; e.coilT = 0;
+    // LOKI MISCHIEF — pickpocket stack (0..3) + decay clock + per-foe pilfer cooldown.
+    e.mischief = 0; e.mischiefT = 0; e.pilferCd = 0;
+    // §3 PRECISION weak-point node: nodeState 0=none 1=telegraph 2=open; nodeT = phase clock.
+    // nodeDX/nodeDY = offset from hull centre; nodeX/nodeY = tracked absolute position.
+    e.nodeState = 0; e.nodeT = 0; e.nodeDX = 0; e.nodeDY = 0; e.nodeX = 0; e.nodeY = 0; e.nodeHit = 0; e.nodeCd = 2.5;
     e.dispX = 0; e.dispY = 0; e.dispVX = 0; e.dispVY = 0; e.impactDmg = 0; e.slamCd = 0;
     e.arch = ''; e.aura = ''; e.link = null; e.gen = 0; e.g1 = ''; e.g2 = ''; e.shieldT = 0;
     e.knx = 0; e.kny = 0; e.fireHold = 0;
@@ -2018,9 +2257,11 @@
         else { e.charmMeter += CHARM_PER_HIT; if (e.charmMeter >= (G.mods.aphroFast ? 3 : CHARM_THRESHOLD)) charmEnemy(e); }
         break;
       case 'loki':
-        // CONFUSE REMOVED (ruling 1). Loki's attack is a plain default shot with
-        // no rider this pass; PILFER (and its trickStacks/trickBudget boss budget)
-        // lands in Pass 2. Deliberately dead — nothing to apply on hit.
+        // PILFER — every landed shot +1 MISCHIEF (cap 3 / decay 2.5s). PICKPOCKET
+        // (lokiChance) pilfers on the 2nd mark and steals 12 instead of 8.
+        var need = G.mods.lokiChance ? 2 : 3;
+        e.mischief = Math.min(need, e.mischief + 1); e.mischiefT = 2.5;
+        if (e.mischief >= need && e.pilferCd <= 0) lokiPilfer(e, G.mods.lokiChance ? 12 : 8);
         break;
       case 'anubis':
         if (!e.boss && !e.dying && e.hp < anubisThreshold() * e.maxhp) executeEnemy(e);
@@ -2076,6 +2317,9 @@
     var force = 300 * (G.mods.poseidonBig ? 1.6 : 1) * (G.mods.poseidonForce ? 1.4 : 1);
     pushDisp(e, G.player.x, G.player.y, force);
     e.impactDmg = dmg * 1.5 * (G.mods.poseidonBig ? 1.8 : 1) * (G.mods.poseidonForce ? 1.4 : 1);
+    // To-code: a KINETIC water-slap per landed shot so the shove is *felt*.
+    spark(e.x, e.y + e.radius * 0.4, [0.4, 0.85, 0.95], 3, 220, 18);
+    if (Math.random() < 0.25) SFX.thud();
   }
 
   // spring-damper displacement integration + slam resolution
@@ -2140,6 +2384,25 @@
     if (e.shakenT > 0) e.shakenT -= dt;
     // charm meter slow decay
     if (!e.charmed && e.charmMeter > 0) e.charmMeter = Math.max(0, e.charmMeter - dt * 0.5);
+    // QUETZ THE COIL — uncoil 0.9s after the last bite (whole coil releases at once).
+    if (e.coilT > 0) { e.coilT -= dt; if (e.coilT <= 0) e.coilQ = 0; }
+    // LOKI MISCHIEF — pickpocket stacks decay after 2.5s; per-foe pilfer cooldown.
+    if (e.mischiefT > 0) { e.mischiefT -= dt; if (e.mischiefT <= 0) e.mischief = 0; }
+    if (e.pilferCd > 0) e.pilferCd -= dt;
+    // §3 PRECISION weak-point node lifecycle: telegraph → open → expire; tracks the hull.
+    if (e.nodeState > 0) {
+      e.nodeX = e.x + e.nodeDX; e.nodeY = e.y + e.nodeDY;
+      e.nodeT -= dt;
+      if (e.nodeState === 1 && e.nodeT <= 0) { e.nodeState = 2; e.nodeT = 2.0; }
+      else if (e.nodeState === 2 && e.nodeT <= 0) { e.nodeState = 0; }
+    }
+    if (e.nodeHit > 0) e.nodeHit -= dt;
+    // HUNTER'S EYE re-anchor — Marked foes always expose a node (kept re-armed).
+    if (G.duos.huntersEye && e.marked && e.nodeState === 0) openNode(e, 0, -e.scale * 0.2);
+    // §3 PRECISION cadence for ELITES (bosses author nodes on spellcard beats instead):
+    // a telegraphed node opens ~every 3.4s so crit lives on the add-less/elite fights.
+    if (e.elite && !e.boss) { if (e.nodeCd > 0) e.nodeCd -= dt; else if (e.nodeState === 0) { openNode(e, (Math.random() - 0.5) * e.scale * 0.4, -e.scale * 0.15); e.nodeCd = 3.4; } }
+    // ODIN NINE NIGHTS — carve-timing knowledge (runes never decay; nothing to tick).
   }
 
   function updateCharmed(e, dt) {
@@ -2977,7 +3240,7 @@
       // (single geometry, the Foundry Breath material adapted to a moving patrol).
       { name: 'THE CIRCUIT', hp: 0.16, timeout: 32, path: bp_pendulum, loop: 2.8, script: [
         pose(BRZ),
-        { t: 0.5, fn: function (e) { e.s0 += 0.4; P.pulse(e.x, e.y, { rings: 3, count: 16, speed: rankSpd(P.SPD.slow), speedStep: 58, offset: e.s0, colorA: BRZ, colorB: HOT }); } },
+        { t: 0.5, fn: function (e) { e.s0 += 0.4; P.pulse(e.x, e.y, { rings: 3, count: 16, speed: rankSpd(P.SPD.slow), speedStep: 58, offset: e.s0, colorA: BRZ, colorB: HOT }); openNode(e, 0, -e.scale * 0.2); } },   // §3 weak-point beat
         { t: 1.6, fn: function (e) { e.poseT = 0.42; muzzle(e, HOT); } },
         { t: 2.1, fn: function (e) { e.s0 += 0.4; P.pulse(e.x, e.y, { rings: 3, count: 14, speed: rankSpd(P.SPD.slow), speedStep: 64, offset: -e.s0, colorA: HOT, colorB: MAG }); } }
       ] },
@@ -3014,7 +3277,7 @@
         onEnter: function (e) { e.nailActive = true; e.nailR = 30; e.nailX = e.x; e.nailY = e.y + e.scale * 0.44; },
         script: [
         pose(BRZ, 0.36),
-        { t: 0.3, fn: function (e) { e.s0 += 0.5; P.pulse(e.x, e.y, { rings: 3, count: 18, speed: rankSpd(P.SPD.slow), speedStep: 60, offset: e.s0, colorA: BRZ, colorB: HOT }); } },
+        { t: 0.3, fn: function (e) { e.s0 += 0.5; P.pulse(e.x, e.y, { rings: 3, count: 18, speed: rankSpd(P.SPD.slow), speedStep: 60, offset: e.s0, colorA: BRZ, colorB: HOT }); openNode(e, 0, -e.scale * 0.2); } },   // §3 weak-point beat (THE NAIL)
         { t: 1.0, fn: function (e) { hurl(e, 4, HOT); } },
         { t: 1.7, fn: function (e) { e.s0 += 0.5; P.pulse(e.x, e.y, { rings: 2, count: 16, speed: rankSpd(P.SPD.mid), speedStep: 62, offset: -e.s0, colorA: HOT, colorB: MAG }); } },
         { t: 2.4, fn: function (e) { e.poseT = 0.3; muzzle(e, ACC); } },
@@ -3053,7 +3316,7 @@
         { t: 0.4, fn: function (e) { e.s0 += 0.6; P.rain(32, { speed: rankSpd(P.SPD.slow), waves: 3, phase: e.s0, gapThresh: 0.05, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } },
         { t: 1.1, fn: function (e) { e.s0 += 0.6; P.rain(32, { speed: rankSpd(P.SPD.slow), waves: 3, phase: e.s0, gapThresh: 0.05, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } },
         { t: 1.9, fn: function (e) { e.poseT = 0.4; muzzle(e, LIME); } },
-        { t: 2.3, fn: function (e) { e.s1 += 0.5; P.ring(e.x, e.y, 20, rankSpd(P.SPD.slow), { fam: P.FAM.SHARD, tier: 'M', color: LIME, offset: e.s1, accel: -150, accel2: 130, accelSwitchT: 0.8, minSpeed: 8 }); } }
+        { t: 2.3, fn: function (e) { e.s1 += 0.5; P.ring(e.x, e.y, 20, rankSpd(P.SPD.slow), { fam: P.FAM.SHARD, tier: 'M', color: LIME, offset: e.s1, accel: -150, accel2: 130, accelSwitchT: 0.8, minSpeed: 8 }); openNode(e, 0, -e.scale * 0.2); } }   // §3 weak-point beat
       ] },
       // II THE FORTY-TWO CONFESSIONS — judgment rings of LITERALLY 42 bullets each,
       // counter-rotating at stepped speeds so their interleave drifts the safe gaps.
@@ -3124,7 +3387,7 @@
       // (gild:true — updateBullets streaks a fading gold mote behind each).
       { name: 'THE GOLDEN TOUCH', hp: 0.14, timeout: 32, path: bp_holdCenter, loop: 2.8, script: [
         pose(AMB),
-        { t: 0.4, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 34, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 4.2, offset: e.s0, fam: P.FAM.ORB, tier: 'M', color: AMB, gild: true }); } },
+        { t: 0.4, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 34, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 4.2, offset: e.s0, fam: P.FAM.ORB, tier: 'M', color: AMB, gild: true }); openNode(e, 0, -e.scale * 0.2); } },   // §3 weak-point beat
         { t: 1.0, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 34, rankSpd(P.SPD.slow), { gaps: 2, gapWidth: 4.2, offset: e.s0 + 0.2, fam: P.FAM.RING, tier: 'M', color: ROSE, gild: true }); } },
         { t: 1.7, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 34, rankSpd(P.SPD.mid), { gaps: 2, gapWidth: 4.2, offset: e.s0 + 0.4, fam: P.FAM.ORB, tier: 'S', color: AMB, gild: true }); } }
       ] },
@@ -3252,21 +3515,23 @@
     if (e.dying) return;
     var m = 1;
     if (e.marked) m *= (G.mods.odinMark ? 1.4 : 1.25) + (G.mods.heimVigil ? 0.20 : 0) + G.charmMark; // Mark (+heimVigil, +WATCHMAN'S EYE)
-    if (e.weak) m *= 1.10;
+    if (e.weak) m *= 1.10 + 0.08 * (e.weakStacks || 0);   // HEARTSEEKER Weaken stacks (+8%/heart)
     if (e.terrorT > 0) m *= 1.20;                 // Ares Terror
     if (e.shakenT > 0) m *= 1.10;                 // Ares Shaken (boss)
     if (e.stunT > 0 && G.mods.jadeStun) m *= 1.25; // Jade: Stunned foes take +25%
     if ((e.boss || e.elite) && G.charmElite > 1) m *= G.charmElite; // EAGLE FEATHER charm
     dmg *= m;
-    if (isCrit) dmg *= (G.mods.artemisMulti ? 4 : 3);
+    // §3 PRECISION — RNG crit is retired. `isCrit` now means PRECISE: weak-point
+    // overlap or forceCrit. ×2.5 (+critBonus from SILVER FLETCHING re-anchor).
+    if (isCrit) dmg *= (2.5 + G.critBonus);
     if (G.communion === 'KEMET' && hasStatus(e)) dmg *= 1.1;   // Rite of Two Suns
     e.hp -= dmg;
     clampBossHp(e);                         // spellcard floor: discard overkill on non-final phases / during breath
     e.hitFlash = isCrit ? 0.14 : 0.08;
-    if (isCrit) { addPopup(e.x, e.y - 30, commas(Math.round(dmg)) + '!', UI_GOLD, 30); SFX.crit(); spark(e.x, e.y, [0.8, 1, 0.4], 5, 320, 22); }
+    if (isCrit) { addPopup(e.x, e.y - 30, commas(Math.round(dmg)) + '!', UI_GOLD, 30); SFX.crit(); spark(e.x, e.y, [1, 0.9, 0.5], 5, 320, 22); if (Engine.gold.freeTop > 1) spawnGold(e.x, e.y, 1, 0.35); }
     else if (Math.random() < 0.2) SFX.hit();
     if (e.hp <= 0) { killEnemy(e, true); return; }
-    // DEATH SENTENCE duo: crits execute non-boss foes below 40%
+    // DEATH SENTENCE duo: precise strikes execute non-boss foes below 40%
     if (isCrit && G.duos.deathSentence && !e.boss && e.hp < 0.40 * e.maxhp) { executeEnemy(e); return; }
   }
 
@@ -3293,7 +3558,10 @@
       if (G.duos.peachBanquet && G.verdictPeachT > 0) addGauge(4);      // PEACH BANQUET: kills within 3s of a Verdict drop peaches
       if (G.attackGod === 'wukong' && Math.random() < (G.mods.wukongChance ? 0.35 : 0.20)) spawnClone();  // Body Beyond Body
       if (G.mods.raSpread && e.burnT > 0) spreadBurn(e);
-      if (G.attackGod === 'ares') addFrenzy();                              // Bloodlust
+      if (G.attackGod === 'ares') addFrenzy();                              // WAR-HEAT gravy
+      // ARTEMIS THE HUNT — a Hunted kill splinters + chains the brand to the next prey.
+      if (G.attackGod === 'artemis' && G.hunt.foe === e && G.hunt.foeSeq === e.seq) huntChainOnKill(e);
+      if (G.charms.charmOdin) G.ravenKills++;                               // HUGINN & MUNINN MEMORY
       if (G.mods.artemisSpread && e.marked) spreadMark(e);
       if (G.mods.zeusField) spawnZapField(e.x, e.y);
       ringShock(e.x, e.y, [1, 0.7, 0.4], 30, e.boss ? 2600 : 1400, 0.5);
@@ -3352,11 +3620,21 @@
       // is deleted), so this branch never runs; the per-frame cost is just the boolean
       // check below. KEEP it: PILFER's bullet-snatch is its consumer next pass.
       if (b.friendly) {
+        // PILFER — gentle-home (2.2 rad/s) to the nearest OTHER live enemy.
+        var htgt = null, hbd = 1e18;
+        Engine.enemies.forEach(function (e) { if (e.dying || e.charmed || e._i === b.srcId) return; var dx = e.x - b.x, dy = e.y - b.y, d = dx * dx + dy * dy; if (d < hbd) { hbd = d; htgt = e; } });
+        if (htgt) { var des = Math.atan2(htgt.y - b.y, htgt.x - b.x), dd = des - b.dir; while (dd > Math.PI) dd -= TAU; while (dd < -Math.PI) dd += TAU; var mx = 2.2 * dt; if (dd > mx) dd = mx; if (dd < -mx) dd = -mx; b.dir += dd; }
         var hitF = false;
         Engine.enemies.forEach(function (e) {
           if (hitF || e.dying || e.charmed || e._i === b.srcId) return;
           var tx = e.nailActive ? e.nailX : e.x, ty = e.nailActive ? e.nailY : e.y, tr = e.nailActive ? e.nailR : e.radius;
-          if (Engine.hit(b.x, b.y, b.radius, tx, ty, tr)) { damageEnemy(e, flipDmg, false); if (G.mods.lokiVaunt) addGauge(0.6); spark(b.x, b.y, [0.5, 1, 0.35], 3, 180, 16); hitF = true; }
+          if (Engine.hit(b.x, b.y, b.radius, tx, ty, tr)) {
+            var fd = flipDmg;
+            if (e.boss) { var bud = e.trickBudget || 0; fd = Math.min(fd, bud); e.trickBudget = Math.max(0, bud - fd); }   // boss cap: 0.5% maxhp/cast
+            if (fd > 0) damageEnemy(e, fd, false);
+            if (G.mods.lokiVaunt) addGauge(0.6);   // pilfered daggers charge APOTHEOSIS
+            spark(b.x, b.y, [0.5, 1, 0.35], 3, 180, 16); hitF = true;
+          }
         });
         if (hitF) Engine.bullets.release(b);
         return;
@@ -3389,22 +3667,31 @@
     if ((e.arch === 'aegis' || e.aura === 'bulwark') && e.shieldT <= 0 && (s.faction === 0 || s.faction === 1) && s.vy < 0) {
       dmg *= 0.2; spark(s.x, s.y, [0.5, 0.85, 1.0], 2, 200, 16);
     }
+    // §3 PRECISION — RNG crit deleted. A shot is PRECISE only via weak-point
+    // overlap or forceCrit (Artemis LOOSED ARROW). No dice anywhere.
     var isCrit = false;
-    if (s.faction === 0 && G.attackGod === 'artemis' && Math.random() < artemisCritChance()) isCrit = true;
-    if (s.faction === 0 && !isCrit && G.critBonus > 0 && Math.random() < G.critBonus) isCrit = true; // SILVER FLETCHING charm
     if (s.forceCrit) isCrit = true;
-    if (G.duos.huntersEye && s.faction === 0 && e.marked) isCrit = true;   // HUNTER'S EYE: marked always crit
-    if (s.crescent && G.duos.godsOfWar && e.terrorT > 0) isCrit = true;    // GODS OF WAR: crescents crit the Terrified
+    if (s.faction === 0 && e.nodeState === 2 && Engine.hit(s.x, s.y, s.radius, e.nodeX, e.nodeY, nodeRadius(e))) {
+      isCrit = true; e.nodeHit = 0.2; addGauge(1.5);   // hitting the exposed node feeds the gauge
+    }
+    if (s.crescent && G.duos.godsOfWar && e.terrorT > 0) isCrit = true;    // GODS OF WAR: crescents precise vs Terrified
     // Anubis — Weigher of Hearts: +25% to any foe below half health
     // (anubisBossDmg amps the below-half bonus to +40% vs bosses)
     if (s.faction === 0 && G.attackGod === 'anubis' && e.hp < 0.5 * e.maxhp) dmg *= (e.boss && G.mods.anubisBossDmg ? 1.4 : 1.25);
     // Aphrodite: +15% to the charm-touched and the Weakened
     if (s.faction === 0 && G.attackGod === 'aphrodite' && (e.weak || e.charmMeter > 0)) dmg *= 1.15;
-    if (s.kind === 5) { // charm missile
-      if (e.boss) { e.weak = true; e.weakT = 6; damageEnemy(e, dmg, false); }
-      else { charmEnemy(e); flash(e.x, e.y, [1, 0.5, 0.85], 60, 0.2); }
+    if (s.kind === 5) { // HEARTSEEKER — charm a minion, or Weaken + gild a boss's bullets
+      if (e.boss) {
+        e.weakStacks = Math.min(3, (e.weakStacks || 0) + 1); e.weak = true; e.weakT = 6;
+        damageEnemy(e, dmg, false);
+        // sweep enemy bullets within 220px of the boss to gold
+        Engine.bullets.forEach(function (b) { if (b.friendly) return; var dx = b.x - e.x, dy = b.y - e.y; if (dx * dx + dy * dy < 220 * 220) { if (Engine.gold.freeTop > 0) spawnGold(b.x, b.y, 1, 0.4); spark(b.x, b.y, [1, 0.5, 0.85], 2, 160, 16); Engine.bullets.release(b); } });
+        flash(e.x, e.y, [1, 0.4, 0.7], 90, 0.25);
+      } else { charmEnemy(e); flash(e.x, e.y, [1, 0.5, 0.85], 60, 0.2); }
       return;
     }
+    // ARTEMIS THE LOOSED ARROW — the first foe struck becomes the Hunted at full ramp.
+    if (s.kind === 4 && s.loosed && !s.brandedFirst && G.attackGod === 'artemis') { s.brandedFirst = true; brandHunted(e, 8 + (G.mods.artemisCrit ? 2 : 0)); }
     if (s.kind === 7) { // Jade imperial edict — Stun the condemned
       damageEnemy(e, dmg, isCrit);
       if (!e.boss && !e.dying) { e.stunT = Math.max(e.stunT, 0.9); flash(e.x, e.y, [0.8, 0.6, 1], 70, 0.2); }
@@ -3417,6 +3704,13 @@
       return;
     }
     if (s.markHit) { e.marked = true; e.markT = 6; }
+    // ARTEMIS THE HUNT — ramp on the branded Hunted / brand-on-first-hit / sticky.
+    // Returns the ramped damage; kill-chain + splinter fire from killEnemy.
+    if (s.kind === 9 && s.faction === 0) dmg = artemisHuntHit(e, dmg);
+    // QUETZ THE COIL — a quetz weave hit tightens the coil on THIS foe (0..6, ×1.60 max).
+    if (s.weave && s.faction === 0 && G.attackGod === 'quetz') dmg = quetzCoilHit(e, dmg);
+    // ODIN NINE NIGHTS — permanent per-foe runes: ×(1+0.15·runes), carve every 4th hit.
+    if (s.kind === 15 && s.faction === 0) dmg = odinBoltHit(e, dmg);
     var wasTerror = e.terrorT > 0;
     damageEnemy(e, dmg, isCrit);
     if (s.crescent) {
@@ -3424,12 +3718,138 @@
       if (G.duos.saintOfWar && !e.dying) { e.weak = true; e.weakT = 4; }  // SAINT OF WAR: cleaves Weaken
       if (G.duos.godsOfWar && e.dying && wasTerror) addFrenzy();          // GODS OF WAR: terrified crescent-kills feed frenzy
     }
-    if (isCrit && s.faction === 0 && G.mods.artemisRefund) addCharge(0.1);
     if (s.cloneShot && G.duos.havocInHeaven && !e.dying) chainLightning(e, dmg * 0.5, false); // HAVOC IN HEAVEN (no re-chain)
     if (s.faction === 0) applyAttackGod(e, s, dmg);
     else if (s.kind === 3) chainLightning(e, dmg * 0.5, true); // storm lance chains
   }
-  function artemisCritChance() { return Math.min(0.6, 0.18 + 0.03 * (G.attackR - 1) + G.mods.artemisCrit); }
+  // §3 PRECISION — weak-point node radius (SILVER FLETCHING re-anchor: +15% size;
+  // huntersEye keeps a node open on Marked foes). Bosses read slightly bigger.
+  function nodeRadius(e) { return (e.boss || e.elite ? 34 : 26) * (G.critBonus > 0 ? 1.15 : 1); }
+  // Open a weak-point node on e at hull offset (dx,dy): ~0.4s pre-flash, ~2s open.
+  function openNode(e, dx, dy) {
+    if (e.nodeState !== 0) return;
+    e.nodeState = 1; e.nodeT = 0.4; e.nodeDX = dx; e.nodeDY = dy;
+  }
+
+  // ================= ARTEMIS — THE HUNT =================
+  function huntFoe() { var h = G.hunt; return (h.foe && h.foe.active && !h.foe.dying && h.foe.seq === h.foeSeq) ? h.foe : null; }
+  function clearHunt() { var h = G.hunt; h.foe = null; h.foeSeq = 0; h.stacks = 0; h.stackT = 0; h.stray = null; h.straySeq = 0; h.swap = 0; }
+  function brandHunted(e, stacks) {
+    var h = G.hunt;
+    h.foe = e; h.foeSeq = e.seq; h.stacks = Math.max(0, Math.min(8 + (G.mods.artemisCrit ? 2 : 0), stacks || 0)); h.stackT = 3.0;
+    h.stray = null; h.straySeq = 0; h.swap = 0;
+    flash(e.x, e.y, [0.8, 0.9, 1.0], 80, 0.22); SFX.hit();
+  }
+  // Called on a kind-9 arrow hit; returns ramped damage. Manages brand/ramp/sticky.
+  function artemisHuntHit(e, dmg) {
+    var h = G.hunt, hunted = huntFoe();
+    if (!hunted) { brandHunted(e, 0); return dmg; }              // first foe hit → the Hunted at 0
+    if (e === hunted) {
+      var per = G.mods.artemisMulti ? 0.18 : 0.12;              // DEEPER HUNT re-anchor
+      var mult = 1 + per * h.stacks;                             // ramp uses current depth
+      var cap = 8 + (G.mods.artemisCrit ? 2 : 0);
+      h.stacks = Math.min(cap, h.stacks + 1); h.stackT = 3.0; h.stray = null; h.swap = 0;
+      if (G.mods.artemisRefund && h.stacks >= 6) addCharge(0.1); // re-anchor: 6+ stacks refund charge
+      return dmg * mult;
+    }
+    // STICKY — a stray hit on a non-Hunted foe never re-brands; 3 consecutive on the
+    // SAME other foe abandon the hunt and re-brand it at 0 (a deliberate switch).
+    if (e === h.stray && e.seq === h.straySeq) h.swap++;
+    else { h.stray = e; h.straySeq = e.seq; h.swap = 1; }
+    if (h.swap >= 3) { SFX.graze(); brandHunted(e, 0); }         // slack-string abandon
+    return dmg;
+  }
+  function nearestOtherEnemy(e) {
+    var best = null, bd = 1e18;
+    Engine.enemies.forEach(function (o) { if (o === e || o.dying || o.charmed) return; var dx = o.x - e.x, dy = o.y - e.y, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = o; } });
+    return best;
+  }
+  // On a Hunted death: SPLINTER (stacks silver shards to nearby foes) + CHAIN
+  // (auto-brand the nearest other foe, carrying stacks−1 — or ALL with DEEPER HUNT reach).
+  function huntChainOnKill(e) {
+    var st = G.hunt.stacks;
+    var shardDmg = 0.4 * SHOT_DMG * G.stats.atkDmg * G.attackR;
+    for (var i = 0; i < st; i++) {
+      var t = nearestOtherEnemy(e); if (!t) break;
+      var s = allocShot(); if (!s) break;
+      var a = Math.atan2(t.y - e.y, t.x - e.x) + (Math.random() - 0.5) * 0.5;
+      s.x = e.x; s.y = e.y; s.vx = Math.cos(a) * 1300; s.vy = Math.sin(a) * 1300;
+      s.radius = 10; s.scale = 26; s.damage = shardDmg; s.age = 0; s.life = 0.6;
+      s.r = 0.85; s.g = 0.92; s.b = 1.0; s.pierce = 0; s.kind = 10; s.faction = 0;
+      s.homing = true; s.turn = 6.0; s.huntHome = false;
+      spark(e.x, e.y, [0.85, 0.92, 1], 2, 260, 18);
+    }
+    var carry = G.mods.artemisSpread ? st : Math.max(0, st - 1);   // artemisSpread: carry ALL stacks
+    var nt = nearestOtherEnemy(e);
+    if (nt) brandHunted(nt, carry); else clearHunt();
+  }
+  function updateHunt(dt) {
+    if (G.attackGod !== 'artemis') { if (G.hunt.foe) clearHunt(); return; }
+    var h = G.hunt;
+    if (!huntFoe()) { if (h.foe) clearHunt(); return; }
+    if (h.stackT > 0) { h.stackT -= dt; if (h.stackT <= 0) h.stacks = 0; }
+  }
+
+  // ================= QUETZ — THE COIL =================
+  function quetzCoilHit(e, dmg) {
+    e.coilQ = Math.min(6, e.coilQ + 1); e.coilT = 0.9;
+    return dmg * (1 + 0.10 * e.coilQ);   // ×1.60 at 6 bites
+  }
+
+  // ================= ODIN — NINE NIGHTS =================
+  function odinBoltHit(e, dmg) {
+    var mult = 1 + 0.15 * e.runes;                          // +135% at 9 (current knowledge)
+    e.runeHits++;
+    var every = G.mods.odinRaven ? 3 : 4;                   // odinFury re-anchor: carve every 3rd
+    if (e.runeHits >= every && e.runes < 9) {
+      e.runes++; e.runeHits = 0;
+      spark(e.x, e.y - e.scale * 0.4, [1, 0.85, 0.4], 3, 200, 18); SFX.hit();   // stone-chisel chip
+      if (e.runes === 9) { flash(e.x, e.y, [1, 0.85, 0.4], 140, 0.3); ringShock(e.x, e.y, [1, 0.85, 0.4], 40, 1800, 0.4); SFX.boom(); }   // the ninth: doom-toll
+    }
+    var out = dmg * mult;
+    // THE NINTH RUNE — doom-bolts Mark (feeds Gungnir / THE ALLSEEING) + optional splash.
+    if (e.runes >= 9) {
+      markEnemy(e);
+      if (G.mods.odinRavenMark) { var o = nearestOtherEnemy(e); if (o) { var dx = o.x - e.x, dy = o.y - e.y; if (dx * dx + dy * dy < 120 * 120) damageEnemy(o, out * 0.5, false); } }   // odinSunder
+      if (G.duos.wildHunt && e.terrorT > 0) out *= 2;       // WILD HUNT: doom-bolts ×2 to Terrified
+    }
+    if (G.duos.theAllseeing && e.marked) out *= 1.4;        // THE ALLSEEING: +40% to Marked
+    return out;
+  }
+
+  // ================= LOKI — PILFER =================
+  // At the 3rd MISCHIEF mark, snatch the `count` live enemy bullets nearest the foe
+  // within 240px — biased to bullets already >80px from any emitter (never a whiff,
+  // never a panic-clear). Each flips friendly, reverses 180°, gently homes to its own kind.
+  function lokiPilfer(foe, count) {
+    foe.mischief = 0; foe.pilferCd = 1.2;
+    // gather candidates within 240px, scored by distance minus an emitter-proximity bias
+    var cand = [];
+    Engine.bullets.forEach(function (b) {
+      if (b.friendly) return;
+      var dx = b.x - foe.x, dy = b.y - foe.y, d = Math.sqrt(dx * dx + dy * dy);
+      if (d > 240) return;
+      var emit = 1e9;
+      Engine.enemies.forEach(function (e) { if (e.dying) return; var ex = b.x - e.x, ey = b.y - e.y, ed = ex * ex + ey * ey; if (ed < emit) emit = ed; });
+      var score = d + (emit < 80 * 80 ? 300 : 0);   // penalise bullets still hugging an emitter
+      cand.push({ b: b, s: score });
+    });
+    cand.sort(function (a, b) { return a.s - b.s; });
+    var n = Math.min(count, cand.length);
+    // boss self-harm budget: a single cast can bleed a boss for at most 0.5% maxhp.
+    var boss = G.boss;
+    if (boss && !boss.dying) boss.trickBudget = (boss.trickBudget || 0) + boss.maxhp * 0.005;
+    for (var i = 0; i < n; i++) {
+      var b = cand[i].b;
+      b.friendly = true; b.srcId = foe._i;
+      b.r = 0.55; b.g = 1.0; b.b = 0.35;
+      b.dir += Math.PI;                              // reverse 180°
+      b.flash = 0.15;
+      spark(b.x, b.y, [0.55, 1, 0.35], 2, 160, 14);
+      flash(b.x, b.y, [0.9, 1, 0.85], 24, 0.1);     // white pop on the flip
+    }
+    if (n > 0) { ringShock(foe.x, foe.y, [0.4, 1, 0.4], 40, 2400, 0.35); SFX.graze(); }   // green RING implode + LIFT voice
+  }
 
   // §9a HONEST PIERCE. maxHits = pierce+1 is the shot's LIFETIME cap on distinct
   // enemies (s.hitN persists across frames now). Per-enemy dedup is a stamp: the
@@ -3651,7 +4071,29 @@
       if (st.charm) { e.charmed = true; e.charmT = st.charm; e.charmMeter = 0; }
       if (st.terror) e.terrorT = st.terror;
       if (st.shaken) e.shakenT = st.shaken;
-    }
+    },
+    // ---- Pass-2 kit verify surface (zero cost unless called) ----
+    setAttackGod: function (g, r) { if (G.attackGod && G.attackGod !== g) expireOwned('attack'); G.attackGod = g; if (r != null) G.attackR = r; updateCommunion(); },
+    setSpecialGod: function (g, r) { if (G.specialGod && G.specialGod !== g) expireOwned('special'); G.specialGod = g; if (r != null) G.specialR = r; updateCommunion(); },
+    setMod: function (id) { applyMod(id, 1); },
+    setCharm: function (id) { applyCharm(id, 1); },
+    setDuo: function (id) { G.duos[id] = true; },
+    fireNow: function (focus) { fireShots(!!focus); },
+    specialNow: function () { doSpecial(true); },
+    huntInfo: function () { var h = G.hunt; return { foeSeq: h.foe ? h.foeSeq : 0, foeIdx: (h.foe ? h.foe._i : -1), stacks: h.stacks, swap: h.swap }; },
+    frenzyInfo: function () { return { f: G.frenzy.frenzyF, stacks: G.frenzy.stacks, prevTier: G.frenzy.prevTier }; },
+    setFrenzy: function (f) { G.frenzy.frenzyF = f; G.frenzy.stacks = Math.round(f * 10); },
+    enemyKit: function (i) { var e = Engine.enemies.items[i]; if (!e || !e.active) return null; return { runes: e.runes, runeHits: e.runeHits, coilQ: e.coilQ, coilT: e.coilT, mischief: e.mischief, nodeState: e.nodeState, marked: e.marked, weakStacks: e.weakStacks || 0, hp: e.hp, maxhp: e.maxhp }; },
+    openNode: function (i) { var e = Engine.enemies.items[i]; if (e && e.active) openNode(e, 0, -e.scale * 0.2); },
+    forceNodeOpen: function (i) { var e = Engine.enemies.items[i]; if (e && e.active) { e.nodeState = 2; e.nodeT = 2.0; e.nodeDX = 0; e.nodeDY = 0; e.nodeX = e.x; e.nodeY = e.y; } },
+    bifrostInfo: function () { var b = G.bifrost; return { t: b.t, seamT: b.seamT, active: b.active, life: b.life, y: b.y }; },
+    setBifrostBand: function (y) { var b = G.bifrost; b.active = true; b.life = 4.0; b.seamT = 0; b.y = y == null ? (G.player.y - 300) : y; },
+    ravenKills: function () { return G.ravenKills; },
+    setRavenKills: function (n) { G.ravenKills = n; },
+    friendlyBulletCount: function () { var n = 0; Engine.bullets.forEach(function (b) { if (b.friendly) n++; }); return n; },
+    skyfallT: function () { return G.skyfall.t; },
+    raInfo: function () { return { tier: G.ra.tier, hold: G.ra.hold, active: G.ra.active }; },
+    spawnBulletAt: function (x, y, dir, spd) { var b = Patterns.bullet(x, y, dir == null ? Math.PI / 2 : dir, spd == null ? 120 : spd, { fam: Patterns.FAM.ORB, tier: 'M', color: Patterns.MAGENTA }); return b ? b._i : -1; }
   };
 
   function detectClear() {
@@ -3692,6 +4134,8 @@
     updateTimers(dt);
     updateSpecial(dt);
     updateFrenzy(dt);
+    updateHunt(dt);
+    updateBifrost(dt);
     updatePlayer(dt);
     updateDecoy(dt);
     refreshAim();               // decoy may redirect all aimed fire this frame
@@ -3810,8 +4254,12 @@
       // Recall like every other owned entity (implosion pop + immediate release).
       for (i = 0; i < G.hammers.length; i++) { c = G.hammers[i]; recallFx(c.x, c.y); }
       G.hammers.length = 0;
-      G.ra.active = false; G.ra.target = null; G.ra.ramp = 0;   // stale beam can't paint post-swap
+      G.ra.active = false; G.ra.target = null; G.ra.ramp = 0; G.ra.hold = 0;   // stale beam can't paint post-swap
       expireKitHazards('zap');                                  // zeusField attack-mod hazard
+      // §9 hygiene — attack-kit state clears on swap: Artemis brand, WAR-HEAT, BIFRÖST band.
+      clearHunt();
+      G.frenzy.frenzyF = 0; G.frenzy.stacks = 0; G.frenzy.prevTier = 0;
+      G.bifrost.active = false; G.bifrost.seamT = 0; G.bifrost.life = 0; G.bifrost.t = 0;
     } else {
       if (G.decoy.active) { recallFx(G.decoy.x, G.decoy.y); G.decoy.active = false; }
       for (i = 0; i < G.wraiths.length; i++) { c = G.wraiths[i]; recallFx(c.x, c.y); }
@@ -3926,14 +4374,14 @@
     switch (id) {
       case 'charmZeus': G.charmElite += 0.12 * mag; break;                              // +dmg to elites & bosses
       case 'charmPoseidon': G.up.magnet += 0.5 * mag; break;                            // +magnet radius
-      case 'charmArtemis': G.critBonus += 0.06 * mag; break;                            // +crit chance (all attacks)
+      case 'charmArtemis': G.critBonus += 0.35 * mag; break;                            // §3 PRECISION: +precise dmg & +15% node size
       case 'charmAphrodite': G.charmShop += 0.15 * mag; break;                          // shop discount
       case 'charmAres': G.stats.atkDmg += 0.10 * mag; break;                            // +attack damage
       case 'charmHeimdall': G.charmMark += 0.12 * mag; break;                           // +dmg to Marked (stacks with heimVigil)
       case 'charmRa': G.stats.spRecharge += 0.20 * mag; break;                          // +special recharge
       case 'charmAnubis': G.noSpill = true; break;                                      // death spills no gold
       case 'charmLoki': G.hermes.graze += 0.35 * mag; break;                            // +graze gauge gain
-      case 'charmOdin': G.rerollHalf = true; break;                                     // rerolls half price
+      case 'charmOdin': break;   // HUGINN & MUNINN — the ravens gate on G.charms.charmOdin (set above)
       case 'charmThor': G.stats.spDmg += 0.15 * mag; break;                             // +special damage
       case 'charmWukong': G.hermes.speed += 0.12 * mag; G.hermes.focus += 0.15 * mag; break; // +move / focus speed
       case 'charmQuetz': G.up.vdur += 1.2 * mag; break;                                 // +apotheosis duration
@@ -4144,6 +4592,8 @@
       // PASS A — additive base: everything the opaque bullet bodies draw over
       // (explosions included, so a bullet frozen over a white blast still reads).
       drawHazards();
+      drawBifrost();          // HEIMDALL rainbow bridge / dawn-seam telegraph (drawn hazard)
+      drawSkyfall();          // ZEUS SKYFALL transient column
       drawGold(); drawEnemies(); drawShots(); drawParticles(); drawBulletHalos();
       // PASS B — enemy-bullet opaque bodies (premultiplied-over). The bullet
       // shader recolours each cell so the baked white cores survive the family
@@ -4280,7 +4730,56 @@
       else if (e.arch === 'apostateclone') drawMimicGem(e.x, e.y, e.scale, 1, 1);                                     // instant fake
       // §4 status shape-language (zones + shapes; hue never carries a status alone)
       drawStatus(e);
+      drawKitOverlays(e);   // Pass-2 player-brand overlays (Hunt chevron, runes, coil, node)
     });
+  }
+  // Pass-2 KIT OVERLAYS — player-brand marks drawn near the enemy loop (the Hunted
+  // chevron is a player brand, NOT a status; the rune-band is Odin's meter; the coil
+  // rings are Quetz's; the diamond node is §3 PRECISION). Read by shape, not hue.
+  function drawKitOverlays(e) {
+    var s = e.scale, t = G.time;
+    // ARTEMIS — the tightening chevron bracket on the Hunted, cinching with stacks.
+    if (G.hunt.foe === e && e.seq === G.hunt.foeSeq) {
+      var cinch = 1 - 0.5 * (G.hunt.stacks / 8);          // brackets close inward as stacks climb
+      var off = s * (0.85 * cinch), arm = s * 0.3, th = s * 0.06;
+      for (var ci = 0; ci < 2; ci++) {
+        var sx = ci ? 1 : -1, cx = e.x + sx * off, cy = e.y - s * 0.1;
+        GL.draw(GL.SPR.STREAK, cx, cy, th, arm, sx * 0.25, 0.75, 0.9, 1.0, 0.95);        // slanted chevron arm
+        GL.draw(GL.SPR.STREAK, cx, cy, th, arm, -sx * 0.25 + Math.PI, 0.75, 0.9, 1.0, 0.95);
+      }
+    }
+    // ODIN — carved runes: small gold glyphs filling a band arced over the hull.
+    if (e.runes > 0) {
+      var ignite = e.runes >= 9, gy = e.y - s * 0.75, span = s * 1.0;
+      for (var ri = 0; ri < e.runes; ri++) {
+        var rf = e.runes > 1 ? (ri / (e.runes - 1) - 0.5) : 0;
+        var rx = e.x + rf * span, ry = gy - Math.abs(rf) * s * 0.14;   // arced band
+        GL.draw(GL.SPR.SHARD, rx, ry, s * 0.11, s * 0.16, rf, 1, 0.85, 0.4, 0.95);
+      }
+      if (ignite) { var ip = 0.6 + 0.4 * Math.sin(t * 12); GL.draw(GL.SPR.GLOW, e.x, gy, span * 1.3, s * 0.4, 0, 1, 0.85, 0.4, 0.4 * ip); }
+    }
+    // QUETZ — coil rings tightening jade → hot-white; a CONSTRICT pulse-ring at max.
+    if (e.coilQ > 0) {
+      var cf = e.coilQ / 6, cr = e.radius * (1.6 - 0.6 * cf);
+      var cr2 = cf, r2 = 0.4 + 0.6 * cr2, g2 = 1.0, b2 = 0.5 + 0.5 * cr2;   // jade → hot-white
+      GL.draw(GL.SPR.RING, e.x, e.y, cr * 2, cr * 2, t * 2, r2, g2, b2, 0.8);
+      if (e.coilQ >= 6) { var pp = (t * 2) % 1; GL.draw(GL.SPR.RING, e.x, e.y, cr * 2 * (1 + pp), cr * 2 * (1 + pp), 0, 1, 1, 1, 0.6 * (1 - pp)); }
+    }
+    // §3 PRECISION — the weak-point node: a pulsing diamond-shard (telegraph flash → open).
+    if (e.nodeState > 0) {
+      var open = e.nodeState === 2, pu = 0.55 + 0.45 * Math.sin(t * (open ? 10 : 26));
+      var nr = nodeRadius(e), col = e.nodeHit > 0 ? [1, 1, 0.7] : [1, 0.92, 0.5];
+      GL.draw(GL.SPR.GLOW, e.nodeX, e.nodeY, nr * 2.0, nr * 2.0, 0, col[0], col[1], col[2], (open ? 0.5 : 0.3) * pu);
+      GL.draw(GL.SPR.GOLD, e.nodeX, e.nodeY, nr * 1.0, nr * 1.2, t * 3, col[0], col[1], col[2], (open ? 0.95 : 0.6) * pu);
+      if (open) GL.draw(GL.SPR.RING, e.nodeX, e.nodeY, nr * 2.4, nr * 2.4, -t * 2, col[0], col[1], col[2], 0.5);
+    }
+    // LOKI — MISCHIEF triskele: 1/2/3 green kunai over the hull (stack = shape).
+    if (e.mischief > 0 && !e.dying) {
+      for (var mi = 0; mi < e.mischief; mi++) {
+        var ma = t * 2 + mi * (TAU / 3), mx = e.x + Math.cos(ma) * s * 0.3, my = e.y - s * 0.55 + Math.sin(ma) * s * 0.12;
+        GL.draw(GL.SPR.KUNAI, mx, my, s * 0.16, s * 0.28, ma, 0.55, 1.0, 0.35, 0.9);
+      }
+    }
   }
   // §4 STATUS SHAPE-LANGUAGE. Read WHERE (zone) before WHAT (shape). Four disjoint
   // zones around the enemy (offsets in e.scale): FRAME (4 corners), CROWN (over-
@@ -4366,6 +4865,32 @@
   function drawShots() {
     Engine.shots.forEach(function (s) {
       var ang = Math.atan2(s.vy, s.vx) + Math.PI / 2;
+      // ARTEMIS arrow-needle (kind 9): silver-white body + moon-blue rim, oriented.
+      if (s.kind === 9) {
+        GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 0.55, s.scale * 1.9, ang, 0.55, 0.75, 1.0, 0.45);
+        GL.draw(GL.SPR.NEEDLE, s.x, s.y, s.scale * 0.5, s.scale * 1.7, ang, 0.9, 0.95, 1.0, 0.95);
+        GL.draw(GL.SPR.CORE, s.x, s.y, s.scale * 0.24, s.scale * 0.24, 0, 1, 1, 1, 0.9);
+        return;
+      }
+      if (s.kind === 10) {   // Hunt SPLINTER shard
+        GL.draw(GL.SPR.SHARD, s.x, s.y, s.scale * 0.9, s.scale * 1.5, ang, 0.85, 0.92, 1, 0.95);
+        return;
+      }
+      // ARES GREEK ARMORY — akontia (11) / xiphos (12) / doru (13) / labrys (14).
+      if (s.kind >= 11 && s.kind <= 14) { drawArmoryShot(s, ang); return; }
+      // ODIN rune-bolt (15): steel-blue STREAK + NEEDLE spine, gold core once at doom.
+      if (s.kind === 15) {
+        GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 0.7, s.scale * 2.0, ang, 0.6, 0.72, 0.95, 0.5);
+        GL.draw(GL.SPR.STREAK, s.x, s.y, s.scale * 0.5, s.scale * 1.9, ang, 0.8, 0.85, 0.95, 0.95);
+        GL.draw(GL.SPR.NEEDLE, s.x, s.y, s.scale * 0.28, s.scale * 1.4, ang, 0.95, 0.98, 1, 0.9);
+        GL.draw(GL.SPR.CORE, s.x, s.y, s.scale * 0.34, s.scale * 0.34, 0, 1, 0.95, 0.85, 0.9);
+        return;
+      }
+      if (s.kind === 16) {   // BIFRÖST refracted ray
+        GL.draw(GL.SPR.STREAK, s.x, s.y, s.scale * 0.4, s.scale * 1.6, ang, s.r, s.g, s.b, 0.95);
+        GL.draw(GL.SPR.CORE, s.x, s.y, s.scale * 0.28, s.scale * 0.28, 0, 1, 1, 1, 0.85);
+        return;
+      }
       if (s.crescent) {
         // broad crescent blade — wide across its travel; brightens as it cleaves
         var cw = s.scale, perp = ang + Math.PI / 2;
@@ -4387,6 +4912,32 @@
         GL.draw(GL.SPR.CORE, s.x, s.y, s.scale * 0.32, s.scale * 0.32, 0, 1, 1, 1, 0.9);
       }
     });
+  }
+  // ARES GREEK ARMORY procedural silhouettes (composed from the existing atlas —
+  // no new atlas cells): a slim leaf-point javelin, a waisted xiphos leaf-blade, a
+  // broad-headed doru, and a mirrored twin-head labrys (unmistakable vs Guan Yu).
+  function drawArmoryShot(s, ang) {
+    var sc = s.scale, r = s.r, g = s.g, b = s.b, sp = s.age * 14;
+    if (s.kind === 11) {          // akontia javelin — slim shaft + small bronze leaf point
+      GL.draw(GL.SPR.STREAK, s.x, s.y, sc * 0.18, sc * 1.5, ang, r, g, b, 0.9);          // shaft
+      GL.draw(GL.SPR.SHARD, s.x + Math.sin(ang) * 0 - Math.sin(ang) * sc * 0.5, s.y - Math.cos(ang) * sc * 0.5, sc * 0.34, sc * 0.5, ang, 0.9, 0.65, 0.3, 0.95);   // leaf point
+    } else if (s.kind === 12) {   // xiphos — waisted leaf-blade + bronze hilt glint
+      GL.draw(GL.SPR.GLOW, s.x, s.y, sc * 0.5, sc * 1.4, ang, r, g, b, 0.4);
+      GL.draw(GL.SPR.SHARD, s.x, s.y - Math.cos(ang) * sc * 0.15, sc * 0.5, sc * 1.5, ang, r, g, b, 0.95);   // waisted blade
+      GL.draw(GL.SPR.CORE, s.x, s.y, sc * 0.24, sc * 0.24, 0, 1, 1, 1, 0.85);
+      GL.draw(GL.SPR.CORE, s.x + Math.sin(ang) * sc * 0.6, s.y + Math.cos(ang) * sc * 0.6, sc * 0.2, sc * 0.2, 0, 1, 0.75, 0.35, 0.8);   // hilt glint
+    } else if (s.kind === 13) {   // doru bundle — broad bronze head
+      GL.draw(GL.SPR.GLOW, s.x, s.y, sc * 0.7, sc * 1.8, ang, r, g, b, 0.5);
+      GL.draw(GL.SPR.STREAK, s.x, s.y, sc * 0.3, sc * 1.7, ang, r, g, b, 0.95);
+      GL.draw(GL.SPR.SHARD, s.x - Math.sin(ang) * sc * 0.6, s.y - Math.cos(ang) * sc * 0.6, sc * 0.6, sc * 0.7, ang, 0.95, 0.7, 0.35, 0.95);   // broad head
+      GL.draw(GL.SPR.CORE, s.x, s.y, sc * 0.34, sc * 0.34, 0, 1, 1, 0.9, 0.85);
+    } else {                      // labrys — spinning mirrored double-axe
+      GL.draw(GL.SPR.GLOW, s.x, s.y, sc * 1.6, sc * 1.6, sp, 0.78, 0.12, 0.12, 0.5);
+      GL.draw(GL.SPR.SHARD, s.x, s.y, sc * 0.9, sc * 0.6, sp + Math.PI / 2, 0.85, 0.15, 0.12, 0.95);   // head A
+      GL.draw(GL.SPR.SHARD, s.x, s.y, sc * 0.9, sc * 0.6, sp - Math.PI / 2, 0.85, 0.15, 0.12, 0.95);   // head B (mirrored)
+      GL.draw(GL.SPR.STREAK, s.x, s.y, sc * 0.16, sc * 1.1, sp, 0.9, 0.7, 0.35, 0.9);                  // bronze haft
+      GL.draw(GL.SPR.CORE, s.x, s.y, sc * 0.3, sc * 0.3, 0, 1, 0.85, 0.6, 0.85);
+    }
   }
   // Enemy bullets draw in two passes. PASS A (additive): a dim family-colour
   // halo UNDER the body — glow without eating the outline. PASS B (premult):
