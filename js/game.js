@@ -241,7 +241,7 @@
       chroma: 0, chromaTarget: 0, bloom: 1.0, bloomTarget: 1.0,
       flashAll: 0,
       popups: makePopups(),
-      announce: { text: '', sub: '', t: 0, dur: 0 }
+      announce: { text: '', sub: '', t: 0, dur: 0, art: '' }
     };
   }
 
@@ -477,7 +477,7 @@
       if (p.age >= p.life) p.active = false;
     }
   }
-  function announce(text, sub, dur) { G.announce.text = text; G.announce.sub = sub || ''; G.announce.t = 0; G.announce.dur = dur || 2.6; }
+  function announce(text, sub, dur, art) { G.announce.text = text; G.announce.sub = sub || ''; G.announce.t = 0; G.announce.dur = dur || 2.6; G.announce.art = art || ''; }
 
   var K_SPARK = 0, K_RING = 1, K_FLASH = 2;
   function spark(x, y, col, count, spd, size) {
@@ -1046,12 +1046,15 @@
     // wave-clear / MIDAS-phase cancels that share this path).
     var val = mandate ? 0.5 * 1.25 : 0.5, n = 0;
     var boltDmg = 2.0 * G.attackR * G.stats.atkDmg * 1.5;   // flipDmg-class
+    // §5 fix: cap the gold-bolt burst so a dense-screen gild can't fill the 384-slot
+    // shots pool and starve the player's own weapon for the bolts' ~0.9s lifetime.
+    var boltsLeft = mandate ? 64 : 0;
     Engine.bullets.forEach(function (b) {
       if (Engine.gold.freeTop > 0) spawnGold(b.x, b.y, 1, val, 0, 0, midas);
       flash(b.x, b.y, midas ? [1, 0.72, 0.22] : [1, 0.8, 0.3], 22, 0.12);
-      if (mandate) {
+      if (mandate && boltsLeft > 0) {
         var tgt = nearestEnemy(b.x, b.y);
-        if (tgt) { var s = allocShot(); if (s) { var a = Math.atan2(tgt.y - b.y, tgt.x - b.x); s.x = b.x; s.y = b.y; s.vx = Math.cos(a) * 1300; s.vy = Math.sin(a) * 1300; s.radius = 12; s.scale = 30; s.damage = boltDmg; s.age = 0; s.life = 0.9; s.r = 1; s.g = 0.85; s.b = 0.4; s.pierce = 0; s.kind = 0; s.faction = 0; s.big = false; s.homing = true; s.turn = 3.0; } }
+        if (tgt) { var s = allocShot(); if (s) { var a = Math.atan2(tgt.y - b.y, tgt.x - b.x); s.x = b.x; s.y = b.y; s.vx = Math.cos(a) * 1300; s.vy = Math.sin(a) * 1300; s.radius = 12; s.scale = 30; s.damage = boltDmg; s.age = 0; s.life = 0.9; s.r = 1; s.g = 0.85; s.b = 0.4; s.pierce = 0; s.kind = 0; s.faction = 0; s.big = false; s.homing = true; s.turn = 3.0; s.mandateBolt = true; boltsLeft--; } }   // §6 fix: mandateBolt = a plain flipDmg strike, NOT a full attack-god proc
       }
       Engine.bullets.release(b); n++;
     });
@@ -1117,6 +1120,7 @@
     s.homing = false; s.turn = 0;
     s.weave = 0; s.phase = 0;
     s.cloneShot = false; s.crescent = false;
+    s.mandateBolt = false;                     // §6: recycled slot must never inherit a prior MANDATE-bolt's proc-suppression
     s.markHit = false; s.forceCrit = 0;
     s.huntHome = false; s.loosed = false; s.brandedFirst = false;
     resetShotHits(s);
@@ -1228,6 +1232,7 @@
   var hazards = [];
   (function () { for (var i = 0; i < 8; i++) hazards.push({ active: false, type: '', x: 0, y: 0, vy: 0, r: 0, timer: 0, dur: 1, tick: 0, dmg: 0, rot: 0, halfW: 0, esc: 0, trail: null, hue: 0 }); })();
   function allocHazard() { for (var i = 0; i < hazards.length; i++) if (!hazards[i].active) { var z = hazards[i]; z.active = true; z.rot = 0; z.halfW = 0; z.esc = 0; z.trail = null; z.hue = 0; return z; } return null; }
+  function hazardFree() { for (var i = 0; i < hazards.length; i++) if (!hazards[i].active) return true; return false; }   // #7: does a hazard slot exist right now?
 
   function updateHazards(dt) {
     var px = G.player.x, py = G.player.y;
@@ -1513,10 +1518,17 @@
     if (!G.ra.active) return;
     var x = G.ra.tx, cy = (G.ra.ty0 + G.ra.ty1) / 2, hh = Math.abs(G.ra.ty0 - G.ra.ty1) + 20;
     var pulse = 0.8 + 0.2 * Math.sin(G.time * 40), ramp = G.ra.ramp;
-    GL.draw(GL.SPR.GLOW, x, cy, 90 + ramp * 46, hh, 0, 1, 0.85, 0.35, 0.5 * pulse);
-    GL.draw(GL.SPR.CORE, x, cy, 46 + ramp * 26, hh, 0, 1, 0.92, 0.5, 0.8 * pulse);
-    GL.draw(GL.SPR.CORE, x, cy, 16 + ramp * 12, hh, 0, 1, 1, 0.95, pulse);
-    GL.draw(GL.SPR.GLOW, x, G.ra.ty1, 130, 130, 0, 1, 0.9, 0.5, 0.7);
+    // COLOR (BOONS.md §RA, owner 2026-07-19 "laser should be way more red"): the sun as a
+    // FURNACE, never honey-gold — deep solar red (KINDLE) → red-orange (FLARE) → hot red-white
+    // (SOLAR) → white-hot core inside a red corona (CORONA), + a rotating corona flare. A
+    // sanctioned god-hue exception; the notch-glyphs below stay gold. Tier/lens math untouched.
+    // KEY: keep g≈b on every layer so the hue rides the RED→pink→white line and never
+    // drifts to amber/orange (g>b) — the owner's "way more red" is a furnace, not honey.
+    GL.draw(GL.SPR.GLOW, x, cy, 104 + ramp * 52, hh, 0, 1, 0.08 + 0.12 * ramp, 0.05 + 0.10 * ramp, 0.62 * pulse);  // deep blood-red corona sheath (wide)
+    GL.draw(GL.SPR.CORE, x, cy, 44 + ramp * 22, hh, 0, 1, 0.15 + 0.40 * ramp, 0.12 + 0.40 * ramp, 0.82 * pulse);   // deep red → red-white beam
+    GL.draw(GL.SPR.CORE, x, cy, 15 + ramp * 11, hh, 0, 1, 0.45 + 0.55 * ramp, 0.42 + 0.55 * ramp, pulse);          // core climbs to white-hot
+    GL.draw(GL.SPR.GLOW, x, G.ra.ty1, 130, 130, 0, 1, 0.14 + 0.18 * ramp, 0.10 + 0.16 * ramp, 0.7);                // red impact bloom
+    GL.draw(GL.SPR.RING, x, G.ra.ty0, 70 + ramp * 70, 70 + ramp * 70, G.time * 3, 1, 0.22, 0.16, 0.24 + 0.40 * ramp);   // rotating red corona flare (intensifies with ramp)
     // THE LENS — 1..4 gold notch-glyphs riding the beam (occlusion-proof tier count).
     for (var ni = 0; ni <= (G.ra.tier || 0); ni++) {
       var ny = G.ra.ty0 - 40 - ni * 34;
@@ -1659,7 +1671,11 @@
     var g = G.gungnir, ang = g.ang + Math.PI / 2;
     GL.draw(GL.SPR.GLOW, g.x, g.y, 60, 170, ang, 1, 0.9, 0.5, 0.6);
     var gc = authCell('33-2-gungnir');   // §9 Gungnir spear sprite (nose-up → rotate to travel)
-    if (gc >= 0) GL.draw(gc, g.x, g.y, 150, 220, ang, 1, 1, 1, 1);
+    // ASPECT AUDIT: the authored sprite is a SQUARE cell (the spear occupies its own tall/thin
+    // fraction of that square). Drawing it non-square (was 150×220) double-stretched the spear —
+    // draw square (220) so its authored proportions read true; the procedural NEEDLE fallback is a
+    // genuinely thin quad, so it keeps its own 42×190 shape.
+    if (gc >= 0) GL.draw(gc, g.x, g.y, 220, 220, ang, 1, 1, 1, 1);
     else GL.draw(GL.SPR.NEEDLE, g.x, g.y, 42, 190, ang, 1, 0.95, 0.6, 1);
     GL.draw(GL.SPR.CORE, g.x, g.y, 26, 26, 0, 1, 1, 0.9, 0.9);
   }
@@ -1788,12 +1804,13 @@
       if (!e.dying) { e.weakStacks = Math.min(3, (e.weakStacks || 0) + 2); e.weak = true; e.weakT = 6; }
     }
   }
-  // ANUBIS — GATE OF DUAT: a sand-vortex gate tears open at the field bottom (~2.5s).
-  // Every wounded foe (hp<max) is dragged toward it (bosses immovable) and bleeds a share
-  // of its missing HP over the duration; non-boss deaths at the gate pay bonus gold.
+  // ANUBIS — GATE OF DUAT: a sand-vortex gate tears open AT THE CAST POSITION (owner-ruled
+  // 2026-07-19 option 2 — the player is free to move away, the gate stays where opened, so
+  // placement is the skill). Every wounded foe (hp<max) is dragged toward it (bosses immovable)
+  // and bleeds a share of its missing HP over the duration; non-boss deaths at the gate pay bonus gold.
   function gateOfDuat() {
-    var d = G.duat;
-    d.active = true; d.x = W / 2; d.y = H - 70; d.dur = 2.5; d.timer = 2.5;
+    var d = G.duat, p = G.player;
+    d.active = true; d.x = p.x; d.y = p.y; d.dur = 2.5; d.timer = 2.5;   // open at the player's position at cast
     // fresh per-cast boss cap: zero every live foe's gate-drain accumulator so a recast
     // (or a boss that survived a prior gate) gets its own min(0.05·specialR,0.15)·maxhp ceiling.
     Engine.enemies.forEach(function (e) { e.duatDmg = 0; });
@@ -1983,7 +2000,12 @@
     // cross-kit boost (addFrenzy) decays on its own timer regardless of attack god,
     // so GODS OF WAR / WILD HUNT terror-kills keep feeding frenzy under Guan Yu etc.
     if (G.frenzy.boost > 0) G.frenzy.boost = Math.max(0, G.frenzy.boost - 0.20 * dt);
-    if (G.attackGod !== 'ares') {
+    // #3 fix: ARISTEIA (the Ares ULTIMATE) pins War-Heat for its whole contract REGARDLESS
+    // of which slot Ares holds — updateUlt keeps pinT refreshed while it lives, so a build
+    // running Ares-as-special still gets the promised fire-rate/damage boost (the pinT branch
+    // below honors it). Without this, the non-Ares-attack guard zeroed pinT every frame first.
+    var aristeia = (G.ult.god === 'aristeia');
+    if (G.attackGod !== 'ares' && !aristeia) {
       // proximity meter is Ares-only: zero frenzyF, but leave the boost (synced below) alone.
       if (G.frenzy.frenzyF !== 0) G.frenzy.frenzyF = 0;
       G.frenzy.pinT = 0;
@@ -2214,11 +2236,15 @@
   // Dispatch a NON-default ultimate (JADE MANDATE is handled inline in tryVaunt).
   function castUltimate(g) {
     var v = G.vaunt, p = G.player, i;
+    endUltimate();                                               // drop any prior live ultimate FIRST (frees its pooled hazards before the pre-check)
+    // #7 fix: THE DELUGE / THE WORLD-PILLAR both place a pooled hazard. If the 8-slot pool
+    // is saturated, allocHazard would return null and the cast is a silent no-op — so bail
+    // BEFORE spending the gauge or firing the announce/shield, rather than eating the gauge.
+    if ((g === 'poseidon' || g === 'wukong') && !hazardFree()) { SFX.hit(); return; }
     v.gauge = 0; v.ready = false;                                 // consume the burst gauge
     p.invuln = Math.max(p.invuln, 0.6);                          // brief cast-safety (most ults are close-range)
     G.flashAll = Math.max(G.flashAll, 0.16); addShake(6);
     sfxUlt(g);
-    endUltimate();                                               // drop any prior live ultimate before starting
     var D = G.stats.atkDmg;
     switch (g) {
       case 'zeus':      // OLYMPIAN STORM — THE one instant nuke: every live foe struck at once.
@@ -2256,7 +2282,7 @@
       case 'wukong':    // THE WORLD-PILLAR — planted cover: a stun ring, then a standing bullet-blocking pillar.
         announce('THE WORLD-PILLAR', '', 1.4);
         var pl = allocHazard();
-        if (pl) { pl.type = 'ultpillar'; pl.x = p.x; pl.halfW = 90; pl.timer = 4; pl.dur = 4; pl.tick = 0; }
+        if (pl) { pl.type = 'ultpillar'; pl.x = p.x; pl.y = p.y; pl.halfW = 90; pl.timer = 4; pl.dur = 4; pl.tick = 0; }   // #11: set y so the recall FX fires at the pillar, not a stale slot value
         ringShock(p.x, p.y, [1, 0.8, 0.35], 100, 5200, 0.7); addShake(9);
         eachFoe(function (e) { if (e.boss) { e.shakenT = Math.max(e.shakenT, 0.8); if (!e.dying) e.stunT = Math.max(e.stunT, 0.8); } else if (!e.dying) e.stunT = Math.max(e.stunT, 2.5); });
         break;
@@ -2284,9 +2310,14 @@
         announce("ALLFATHER'S EYE", '', 1.4);
         G.ult.god = 'allfather'; G.ult.t = 6;
         break;
-      case 'thor':      // GIANT'S END — orbiting wrecking ball: hurl foes to the wall, destroy bullets in the arc.
+      case 'thor':      // GIANT'S END — the giant boomerang (orbit REPLACED, owner 2026-07-19 "too confusing").
+        // Mjölnir grows colossal and is HURLED up the player's cast lane: out-pass to the top edge,
+        // a brief hang, then a return-pass back down the SAME lane (~2.2s round trip). One object,
+        // two readable straight passes; aimed by where you stand at cast. u.x = lane x (fixed),
+        // u.y = head y (animated), u.castT = start/return y (the hand), u.ang = tumble spin.
         announce("GIANT'S END", '', 1.4);
-        G.ult.god = 'thor'; G.ult.t = 4; G.ult.ang = 0;
+        G.ult.god = 'thor'; G.ult.t = 2.2; G.ult.x = p.x; G.ult.y = p.y - 24; G.ult.castT = p.y - 24; G.ult.ang = 0;
+        addShake(6);
         break;
       case 'heimdall':  // DAWNBREAK — mode transform: every shot a spectrum lance, all foes continuously Marked.
         announce('DAWNBREAK', '', 1.4);
@@ -2324,6 +2355,7 @@
       if (u.god === 'greathunt') Engine.enemies.forEach(function (e) { e.huntTag = false; });
       if (u.god === 'adoration') Engine.enemies.forEach(function (e) { e.adoreT = 0; });
       u.god = ''; u.t = 0; u.trail = null; u.castT = 0; u.ang = 0; u.bossT = 0; u.cd = 0;
+      u.x = 0; u.y = 0;   // #10: clear the entity position so a later ult that never sets it (THE FIFTH SUN) recalls at the player (u.x||player.x), not a stale thor/guanyu coordinate
     }
     expireKitHazards('deluge'); expireKitHazards('ultpillar');
   }
@@ -2337,7 +2369,8 @@
         Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; if (Math.abs(e.x - p.x) < 40) e.huntTag = true; });
         break;
       case 'adoration':   // heart-aura r200: dwell ~0.4s charms non-bosses; bosses accrue Weak.
-        u.bossT += dt;
+        // (#14: the old per-frame u.bossT accumulator was dead state — boss-weaken timing keys
+        //  off per-enemy e.adoreT below, never u.bossT — so the misleading write is gone.)
         Engine.enemies.forEach(function (e) {
           if (e.dying || e.charmed) return;
           var dx = e.x - p.x, dy = e.y - p.y, inside = (dx * dx + dy * dy < 200 * 200);
@@ -2363,28 +2396,42 @@
         var dopx = Math.max(60, Math.min(W - 60, p.x - 90));
         u.x += (dopx - u.x) * Math.min(1, dt * 8); u.y += (p.y - u.y) * Math.min(1, dt * 8);
         u.cd -= dt;
-        if (u.cd <= 0) { u.cd = FIRE_CD / (G.stats.atkRate * frenzyRate()); fireStreams(u.x, u.y, false, 1.0, true); }
-        if (u.castT > 0) { u.castT -= dt; if (u.castT <= 0) { var sx = p.x, sy = p.y; p.x = u.x; p.y = u.y; doSpecial(true); p.x = sx; p.y = sy; } }   // cast the special once from the copy
+        if (u.cd <= 0) { u.cd = FIRE_CD / (G.stats.atkRate * frenzyRate()); dopplerFiring = true; fireStreams(u.x, u.y, false, 1.0, true); dopplerFiring = false; }   // #4: the mirror fires the player's REAL attack (signature branches enabled via dopplerFiring)
+        if (u.castT > 0) { u.castT -= dt; if (u.castT <= 0) {
+          // borrow the player's coil to fire the copy's ONE special, then FULLY restore —
+          // #9: doSpecial also writes p.recoil / G.sp.flash on the shared player, so save+restore
+          // those too (else the real ship visibly recoils and the SPECIAL HUD flashes with no input).
+          // #13: try/finally so a throw inside any special sub-cast can't strand the player at the copy's offset.
+          var sx = p.x, sy = p.y, srec = p.recoil, sfl = G.sp.flash;
+          p.x = u.x; p.y = u.y;
+          try { doSpecial(true); } finally { p.x = sx; p.y = sy; p.recoil = srec; G.sp.flash = sfl; }
+        } }
         break;
       }
       case 'allfather':   // study window — no per-frame work; odinBoltHit reads G.ult.god to carve every hit.
         break;
-      case 'thor': {      // GIANT'S END — colossal Mjölnir orbits r180 ~1.2 rev/s, hurls foes to the wall, eats bullets.
-        u.ang += dt * 1.2 * TAU;
-        u.x = p.x + Math.cos(u.ang) * 180; u.y = p.y + Math.sin(u.ang) * 180;
+      case 'thor': {      // GIANT'S END — the giant boomerang: one colossal Mjölnir hurled up the cast
+        // lane to the top, a brief hang, then back down the SAME lane. Damages on BOTH passes;
+        // foes touched are slammed (LANCE_DMG*2) and hurled to the nearer side wall, bullets destroyed.
+        u.ang += dt * 3 * TAU;                                  // fast tumble spin
+        var pr = 1 - Math.max(0, u.t) / 2.2;                   // 0 at cast → 1 back in hand
+        var topY = 60, startY = u.castT, outEnd = 0.42, hangEnd = 0.52;
+        if (pr < outEnd) u.y = startY + (topY - startY) * (pr / outEnd);            // out-pass (down→up the lane)
+        else if (pr < hangEnd) u.y = topY;                                          // brief hang at the top edge
+        else u.y = topY + (startY - topY) * ((pr - hangEnd) / (1 - hangEnd));       // return-pass (up→down)
+        var hitR = 72;
         Engine.enemies.forEach(function (e) {
           if (e.dying || e.charmed) return;
           var dx = e.x - u.x, dy = e.y - u.y;
-          if (dx * dx + dy * dy < (60 + e.radius) * (60 + e.radius)) {
+          if (dx * dx + dy * dy < (hitR + e.radius) * (hitR + e.radius)) {
             damageEnemy(e, LANCE_DMG * 2 * D, false);
             if (!e.boss && !e.dying) {
-              var dL = e.x - 40, dR = (W - 40) - e.x, dT = e.y - 60, mn = Math.min(dL, dR, dT);
-              if (mn === dL) e.x = 40; else if (mn === dR) e.x = W - 40; else e.y = 60;   // REAL move to nearest wall
+              e.x = (e.x - 40 < (W - 40) - e.x) ? 40 : W - 40;   // hurl aside to the NEARER side wall
               e.stunT = Math.max(e.stunT, 0.5); spark(e.x, e.y, [0.6, 0.66, 0.8], 8, 400, 30);
             }
           }
         });
-        Engine.bullets.forEach(function (b) { if (b.friendly) return; var bx = b.x - u.x, by = b.y - u.y; if (bx * bx + by * by < 70 * 70) { flash(b.x, b.y, [0.6, 0.66, 0.8], 18, 0.1); Engine.bullets.release(b); } });
+        Engine.bullets.forEach(function (b) { if (b.friendly) return; var bx = b.x - u.x, by = b.y - u.y; if (bx * bx + by * by < hitR * hitR) { flash(b.x, b.y, [0.6, 0.66, 0.8], 18, 0.1); Engine.bullets.release(b); } });
         break;
       }
       case 'dawnbreak':   // mode transform — Mark every foe continuously (spectrum lances fire from fireStreams).
@@ -2395,10 +2442,18 @@
         u.trail.push(p.x); u.trail.push(p.y);
         while (u.trail.length > 40) { u.trail.shift(); u.trail.shift(); }   // ~0.3s of frames at 60Hz (2 nums/frame)
         u.x = u.trail[0]; u.y = u.trail[1];   // head = oldest sample (the lag)
-        for (var ti = 0; ti < u.trail.length; ti += 6) {
-          var sx2 = u.trail[ti], sy2 = u.trail[ti + 1];
-          Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; var dx = e.x - sx2, dy = e.y - sy2; if (dx * dx + dy * dy < (54 + e.radius) * (54 + e.radius)) damageEnemy(e, BEAM_DPS * D * dt, false); });
-        }
+        // #1 fix: carve each foe AT MOST ONCE per frame. The ~7 sampled trail points coincide
+        // when the player holds still, so damaging per-sample stacked up to ~7× the tuned DPS on
+        // a stationary foe. Test each foe against all samples but apply one carving tick.
+        Engine.enemies.forEach(function (e) {
+          if (e.dying || e.charmed) return;
+          var hit = false;
+          for (var ti = 0; ti < u.trail.length && !hit; ti += 6) {
+            var dx = e.x - u.trail[ti], dy = e.y - u.trail[ti + 1];
+            if (dx * dx + dy * dy < (54 + e.radius) * (54 + e.radius)) hit = true;
+          }
+          if (hit) damageEnemy(e, BEAM_DPS * D * dt, false);
+        });
         break;
       }
       case 'quetz': {     // THE FIFTH SUN — serpent coils around the player, eating bullets to gauge (zero damage).
@@ -2435,11 +2490,13 @@
       GL.draw(GL.SPR.GLOW, u.x, u.y, 72, 72, 0, 0.4, 1, 0.5, 0.5 * pulse * la);
       GL.draw(GL.SPR.SHIP_PLAYER, u.x, u.y, 72, 72, 0, 0.4, 1, 0.5, 0.9 * la);
       drawOwnedGem(u.x, u.y, la);
-    } else if (u.god === 'thor') {   // colossal orbiting slate hammer
-      GL.draw(GL.SPR.GLOW, u.x, u.y, 210, 210, 0, 0.5, 0.6, 0.75, 0.55);
-      GL.draw(GL.SPR.SHIP_MID, u.x, u.y, 150, 150, u.ang * 3, 0.6, 0.66, 0.8, 1);
-      GL.draw(GL.SPR.CORE, u.x, u.y, 54, 54, 0, 0.95, 0.35, 0.3, 0.7);
-      GL.draw(GL.SPR.RING, p.x, p.y, 380, 380, t * 2, 0.5, 0.6, 0.75, 0.25);
+    } else if (u.god === 'thor') {   // GIANT'S END — one colossal boomerang hurled up the lane (spins)
+      var mc = authCell('33-1-mjolnir');   // reuse the authored §9 Mjölnir at ult scale
+      // faint lane guide the boomerang rides (cast x, from the hand up to the head)
+      GL.draw(GL.SPR.GLOW, u.x, (u.y + u.castT) / 2, 60, Math.abs(u.castT - u.y) + 40, 0, 0.5, 0.6, 0.75, 0.10);
+      GL.draw(GL.SPR.GLOW, u.x, u.y, 240, 240, 0, 0.5, 0.6, 0.75, 0.55);
+      if (mc >= 0) GL.draw(mc, u.x, u.y, 200, 200, u.ang, 1, 1, 1, 1);   // authored Mjölnir, square aspect, spin rotation
+      else { GL.draw(GL.SPR.SHIP_MID, u.x, u.y, 150, 150, u.ang, 0.6, 0.66, 0.8, 1); GL.draw(GL.SPR.CORE, u.x, u.y, 54, 54, 0, 0.95, 0.35, 0.3, 0.7); }   // procedural fallback
     } else if (u.god === 'guanyu' && u.trail) {   // jade blade-dragon along the lagged trail
       for (var gi = 0; gi < u.trail.length; gi += 2) {
         var f = gi / Math.max(2, u.trail.length), sz = 44 + f * 40;
@@ -2460,8 +2517,17 @@
       var ap = 0.5 + 0.5 * Math.sin(t * 4);
       GL.draw(GL.SPR.GLOW, p.x, p.y, 420, 420, 0, 1, 0.4, 0.7, 0.28 + 0.1 * ap);
       GL.draw(GL.SPR.RING, p.x, p.y, 400, 400, t * 1.5, 1, 0.4, 0.7, 0.5);
-    } else if (u.god === 'greathunt') {   // time-freeze wash
+    } else if (u.god === 'greathunt') {   // time-freeze wash + a hunt-arrow lock over every tagged foe
       GL.draw(GL.SPR.GLOW, W / 2, H / 2, W * 2, H * 2, 0, 0.6, 0.7, 1, 0.12);
+      // task 5d: the authored kind-4 hunt-arrow sprite marks each foe the column has tagged
+      // (the arrow that looses on resume). Nose-up sprite rotated pi to point DOWN at the foe.
+      var hac = authCell('33-8-loosed-arrow');
+      Engine.enemies.forEach(function (e) {
+        if (!e.huntTag || e.dying || e.charmed) return;
+        var ay = e.y - e.radius - 34 + Math.sin(t * 6 + e.x * 0.01) * 4;
+        if (hac >= 0) GL.draw(hac, e.x, ay, 46, 46, Math.PI, 0.85, 0.9, 1, 0.9);
+        else GL.draw(GL.SPR.NEEDLE, e.x, ay, 16, 40, Math.PI, 0.85, 0.9, 1, 0.9);
+      });
     } else if (u.god === 'aristeia') {   // war-heat corona on the player
       GL.draw(GL.SPR.RING, p.x, p.y, 150, 150, -t * 4, 1, 0.3, 0.2, 0.6);
     }
@@ -2632,6 +2698,9 @@
     for (var i = 0; i < n; i++) out.push(-spread / 2 + step * i);
     return out;
   }
+  // #4: set true only while the DOPPELGÄNGER copy fires, so fireStreams runs the player's
+  // real signature-attack branches for the mirror (they are otherwise suppressed for clones).
+  var dopplerFiring = false;
   function fireShots(focus) {
     // HEIMDALL fires ordinary dawn-gold streams; THE BIFRÖST band (updateBifrost)
     // refracts those shots that cross it — the every-4th-volley prism is retired.
@@ -2643,10 +2712,13 @@
     // DAWNBREAK ultimate (§2.5): the whole field is the bridge — every player shot
     // becomes a spectrum lance from anywhere, overriding the equipped attack god.
     if (G.ult.god === 'dawnbreak' && !isClone) { fireSpectrumLance(px, py, dmgScale); return; }
+    // #4: the DOPPELGÄNGER mirror is a clone (isClone) but must fire the player's SIGNATURE
+    // attack, not the generic cyan default — so its signature branches key off (!isClone || mirror).
+    var mirror = dopplerFiring, sig = !isClone || mirror;
     // Guan Yu crescents: the player fires them, and clones fire mini ones under SWORN BROTHERS.
     var guan = (G.attackGod === 'guanyu') || (isClone && G.duos.swornBrothers);
-    var artemis = (G.attackGod === 'artemis') && !isClone;
-    var ares = (G.attackGod === 'ares') && !isClone;
+    var artemis = (G.attackGod === 'artemis') && sig;
+    var ares = (G.attackGod === 'ares') && sig;
     var n = focus ? 4 : 3;
     if (G.attackGod === 'thor') n = Math.max(1, n - 1);   // Mjolnir: thinned normal stream
     if (guan) n = focus ? 3 : 2;                          // fewer, broader blades
@@ -2680,7 +2752,7 @@
     if (ares) { fireArmory(px, py, focus, dmg * G.attackR); return; }
 
     // ODIN NINE NIGHTS — a single heavy steel-blue rune-bolt (n=1, no spread).
-    if (G.attackGod === 'odin' && !isClone) {
+    if (G.attackGod === 'odin' && sig) {
       var ob = allocShot(); if (!ob) return;
       ob.x = px; ob.y = py - 20; ob.vx = 0; ob.vy = -SHOT_SPEED;
       ob.radius = 16; ob.scale = 52; ob.damage = 3.2 * SHOT_DMG * G.stats.atkDmg * G.attackR * dmgScale;
@@ -2690,10 +2762,10 @@
     }
 
     // JADE EMPEROR — the attack IS the 5-edict fan.
-    if (G.attackGod === 'jade' && !isClone) { fireJadeEdicts(px, py, focus, dmgScale); return; }
+    if (G.attackGod === 'jade' && sig) { fireJadeEdicts(px, py, focus, dmgScale); return; }
 
     // ANUBIS THE WEIGHING — amber ankh-bolts (kind 17) that load the scales on every foe.
-    if (G.attackGod === 'anubis' && !isClone) {
+    if (G.attackGod === 'anubis' && sig) {
       var wangs = streamAngles(n, spread);
       var wdmg = (focus ? 1.0 : 1.05) * SHOT_DMG * G.stats.atkDmg * dmgScale;   // base torrent (star-flat); scaleW rides the dealt dmg
       for (var wi = 0; wi < wangs.length; wi++) {
@@ -3353,6 +3425,7 @@
   function spawnGunship(fromLeft) {
     var side = fromLeft ? -1 : 1;
     var e = newEnemy(4, fromLeft ? -140 : W + 140, 300, 34, GL.SPR.SHIP_GUN, 130, 52, [1, 0.5, 0.15], 12, 3000, true); if (!e) return;
+    e.arch = 'gunship';   // #8: wire the archetype so enemyDrawCell resolves the authored '32-2-gunship' sprite (was orphaned)
     P_flankRail(e, side, 420);
     setScript(e, [
       { t: 0.0, fn: function (e) { e.poseT = 0.35; muzzle(e, [1, 0.5, 0.2]); } },
@@ -3709,7 +3782,7 @@
     var e = newEnemy(28, W / 2, -220, 12000 * rank, GL.SPR.SHIP_BOSS, 260, 118, [0.8, 0.3, 0.9], 70, 150000, true); if (!e) return;
     e.arch = 'apostate'; e.boss = true; e.g1 = g1; e.g2 = g2; e.name = 'THE APOSTATE'; G.boss = e;
     var gn = function (g) { return Run.GODS[g] ? Run.GODS[g].name : g; };
-    announce('THE APOSTATE', 'renegade of ' + gn(g1) + ' & ' + gn(g2), 3.2);
+    announce('THE APOSTATE', 'renegade of ' + gn(g1) + ' & ' + gn(g2), 3.2, '25-the-apostate');
     e.onUpdate = updateApostate; e.onDeath = apostateDeath;
   }
   function updateApostate(e, dt) {
@@ -3904,7 +3977,7 @@
   function spawnWarden(rank) {
     var e = newEnemy(5, W / 2, -160, 3000 * rank, GL.SPR.SHIP_MID, 210, 92, [1.0, 0.58, 0.22], 40, 40000, true); if (!e) return;
     e.name = 'TALOS';
-    announce('TALOS', 'the bronze sentinel', 2.4);
+    announce('TALOS', 'the bronze sentinel', 2.4, '22-talos');
     var BRZ = [1.0, 0.5, 0.16], HOT = [1.0, 0.72, 0.28], MAG = P.MAGENTA, ACC = [1.0, 0.86, 0.4];
     var cfg = { holdY: 360, centerX: W / 2, strafe: 250 };
     function pose(col, h) { return { t: 0, fn: function (e) { e.poseT = h || 0.42; muzzle(e, col || BRZ); } }; }
@@ -3996,7 +4069,7 @@
   function spawnWarden2(rank) {
     var e = newEnemy(5, W / 2, -160, 5400 * rank, GL.SPR.SHIP_MID, 230, 100, [0.82, 0.28, 0.55], 60, 70000, true); if (!e) return;
     e.name = 'AMMIT';
-    announce('AMMIT', 'devourer of hearts', 2.6);
+    announce('AMMIT', 'devourer of hearts', 2.6, '23-ammit');
     var MAG = [0.9, 0.22, 0.5], ROSE = [1.0, 0.3, 0.62], PALE = [1.0, 0.62, 0.78], LIME = P.LIME, ACC = [1.0, 0.86, 0.4];
     var cfg = { holdY: 360, centerX: W / 2, strafe: 260 };
     function pose(col, h) { return { t: 0, fn: function (e) { e.poseT = h || 0.42; muzzle(e, col || MAG); } }; }
@@ -4070,7 +4143,7 @@
     var e = newEnemy(6, W / 2, -260, 23000 * rank, GL.SPR.SHIP_BOSS, 300, 130, [1, 0.5, 0.28], 90, 200000, true); if (!e) return;
     e.name = 'MIDAS';
     e.isMidas = true; e.hoard = 0; e.hoardBank = 0; e.hoardCount = 0;
-    announce('MIDAS', 'the gilded king', 3.0);
+    announce('MIDAS', 'the gilded king', 3.0, '24-midas');
     var AMB = [1.0, 0.58, 0.2], ROSE = [1.0, 0.32, 0.55], MAG = P.MAGENTA, ACC = [1.0, 0.86, 0.4];
     var cfg = { holdY: 420, centerX: W / 2, strafe: 260 };
     function pose(col, h) { return { t: 0, fn: function (e) { e.poseT = h || 0.44; muzzle(e, col || AMB); } }; }
@@ -4415,7 +4488,7 @@
       if (G.duos.godsOfWar && e.dying && wasTerror) addFrenzy();          // GODS OF WAR: terrified crescent-kills feed frenzy
     }
     if (s.cloneShot && G.duos.havocInHeaven && !e.dying) chainLightning(e, dmg * 0.5, false); // HAVOC IN HEAVEN (no re-chain)
-    if (s.faction === 0) applyAttackGod(e, s, dmg);
+    if (s.faction === 0 && !s.mandateBolt) applyAttackGod(e, s, dmg);   // §6: MANDATE gold bolts are a plain flipDmg strike, not a proc re-trigger
     else if (s.kind === 3) chainLightning(e, dmg * 0.5, true); // storm lance chains
   }
   // §3 PRECISION — weak-point node radius (SILVER FLETCHING re-anchor: +15% size;
@@ -4847,7 +4920,7 @@
     authoredReady: function (name) { return GL.authoredSpr(name) >= 0; },
     spriteDrawCount: function (name) { return spriteUse[name] || 0; },
     spriteStats: function () { var o = {}; for (var k in spriteUse) o[k] = spriteUse[k]; return o; },
-    resetSpriteStats: function () { spriteUse = {}; },
+    resetSpriteStats: function () { spriteUse = {}; trackSprites = true; },   // #15: enables the verify-only per-name draw counter
     // set an enemy's archetype (and boss name) so the per-archetype sprite path can
     // be exercised; s0=0 keeps a mimic in its authored gold-loot disguise.
     setArch: function (i, arch, name) { var e = Engine.enemies.items[i]; if (e && e.active) { e.arch = arch; if (name) e.name = name; if (arch === 'mimic') e.s0 = 0; } },
@@ -5493,10 +5566,13 @@
   // one helper every wired draw site funnels through: returns the authored atlas
   // cell (and counts the hit) when the PNG has loaded, else -1 so the caller
   // keeps its procedural / generic-slot fallback intact.
-  var spriteUse = {};
+  var spriteUse = {}, trackSprites = false;
   function authCell(name) {
     var c = GL.authoredSpr(name);
-    if (c >= 0) spriteUse[name] = (spriteUse[name] || 0) + 1;
+    // #15: the per-name draw counter is a verify-only aid — gated off in production so the
+    // hottest draw loop (enemyDrawCell, per enemy per frame) skips the map write entirely.
+    // The verify surface turns it on via Game.test.resetSpriteStats().
+    if (c >= 0 && trackSprites) spriteUse[name] = (spriteUse[name] || 0) + 1;
     return c;
   }
   // enemy archetype (e.arch) -> authored sprite name. Bosses are keyed by e.name
@@ -6179,6 +6255,15 @@
     if (an.dur >= 9000 || an.t >= an.dur) return;
     var f = an.t / an.dur;
     var a = f < 0.15 ? f / 0.15 : (f > 0.7 ? Math.max(0, (1 - f) / 0.3) : 1);
+    // 5a: boss-intro portrait splash (art/gen 22-25) — large, screen-centered, fading with the
+    // announce envelope UNDER the title text. Graceful when the painting hasn't loaded (text alone).
+    if (an.art && Run.getArt) {
+      var pimg = Run.getArt(an.art);
+      if (pimg) {
+        var ph = H * 0.5, pw = pimg.width * (ph / pimg.height);
+        hud.globalAlpha = a * 0.6; hud.drawImage(pimg, W / 2 - pw / 2, H * 0.33, pw, ph); hud.globalAlpha = 1;
+      }
+    }
     hud.globalAlpha = a; hud.textAlign = 'center';
     hud.fillStyle = UI_GOLD; hud.font = '700 66px Consolas, monospace';
     drawSpaced(an.text, W / 2, H * 0.30, 10 + (1 - a) * 30);

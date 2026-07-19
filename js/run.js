@@ -421,7 +421,14 @@
     var eqGods = [];
     if (st.attackGod) eqGods.push(st.attackGod);
     if (st.specialGod && st.specialGod !== st.attackGod) eqGods.push(st.specialGod);
-    for (var ei = 0; ei < eqGods.length; ei++) { if (st.ultimateGod !== eqGods[ei]) push(tUltimate(eqGods[ei], !!st.ultimateGod), 4); }
+    for (var ei = 0; ei < eqGods.length; ei++) {
+      var ug = eqGods[ei];
+      // #2 fix: ALLFATHER'S EYE carves runes only off Odin's ATTACK-stream (kind-15) bolts, so
+      // offering it while Odin sits purely in SPECIAL delivers a fraction of its advertised effect.
+      // Gate the Odin ultimate to an Odin ATTACK build; other ults work from either slot.
+      if (ug === 'odin' && st.attackGod !== 'odin') continue;
+      if (st.ultimateGod !== ug) push(tUltimate(ug, !!st.ultimateGod), 4);
+    }
     // DUO boons (gated on the exact attack+special pair, one-shot). Some duos
     // additionally require a god in a SPECIFIC slot (their hook keys off that
     // god's attack- or special-slot ability), declared via needSlot.
@@ -930,8 +937,43 @@
   // for god cards, or the charm's relic icon (floating in the upper band) for
   // charms. Near-black scrims keep the text zones legible. Returns true when art
   // was actually painted (so the caller can shadow its text for contrast).
+  // cover-fit a portrait inside an already-clipped (sub)rect at the given alpha.
+  function coverPortrait(ctx, img, rx, ry, rw, rh, alpha) {
+    var scale = Math.max(rw / img.width, rh / img.height);
+    var dw = img.width * scale, dh = img.height * scale;
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(img, rx + rw / 2 - dw / 2, ry + rh / 2 - dh / 2, dw, dh);
+    ctx.globalAlpha = 1;
+  }
+  // shared near-black scrims (overall dim + top/bottom text gradients) painted over card art.
+  function cardArtScrims(ctx, x, y, w, h) {
+    ctx.fillStyle = 'rgba(5,8,11,0.34)'; ctx.fillRect(x, y, w, h);            // overall dim
+    var gt = ctx.createLinearGradient(0, y, 0, y + h * 0.46);                  // top: kind tag + name + epithet
+    gt.addColorStop(0, 'rgba(5,8,11,0.9)'); gt.addColorStop(1, 'rgba(5,8,11,0)');
+    ctx.fillStyle = gt; ctx.fillRect(x, y, w, h * 0.46);
+    var gb = ctx.createLinearGradient(0, y + h * 0.46, 0, y + h);              // bottom: desc + price
+    gb.addColorStop(0, 'rgba(5,8,11,0)'); gb.addColorStop(1, 'rgba(5,8,11,0.95)');
+    ctx.fillStyle = gb; ctx.fillRect(x, y + h * 0.46, w, h * 0.54);
+  }
   function drawCardArt(ctx, x, y, w, h, b) {
-    if (b.duo) return false;
+    // 5c: DUO cards composite BOTH gods' portraits (split down the middle), not a blank panel.
+    if (b.duo) {
+      var d = DUOS[b.id];
+      if (!d || !d.gods) return false;
+      var i1 = getArt(GOD_PORTRAIT[d.gods[0]]), i2 = getArt(GOD_PORTRAIT[d.gods[1]]);
+      if (!i1 && !i2) return false;
+      ctx.save();
+      roundRect(ctx, x + 4, y + 4, w - 8, h - 8, 15); ctx.clip();
+      if (i1) { ctx.save(); ctx.beginPath(); ctx.rect(x, y, w / 2, h); ctx.clip(); coverPortrait(ctx, i1, x, y, w / 2, h, 0.85); ctx.restore(); }
+      if (i2) { ctx.save(); ctx.beginPath(); ctx.rect(x + w / 2, y, w / 2, h); ctx.clip(); coverPortrait(ctx, i2, x + w / 2, y, w / 2, h, 0.85); ctx.restore(); }
+      // gold seam glow down the split
+      var seam = ctx.createLinearGradient(x + w / 2 - 12, 0, x + w / 2 + 12, 0);
+      seam.addColorStop(0, 'rgba(5,8,11,0)'); seam.addColorStop(0.5, 'rgba(255,210,120,0.35)'); seam.addColorStop(1, 'rgba(5,8,11,0)');
+      ctx.fillStyle = seam; ctx.fillRect(x + w / 2 - 12, y, 24, h);
+      cardArtScrims(ctx, x, y, w, h);
+      ctx.restore();
+      return true;
+    }
     var isCharm = b.kind === 'charm';
     var slug = isCharm ? GOD_RELIC[b.god] : (b.god ? GOD_PORTRAIT[b.god] : null);
     var img = getArt(slug);
@@ -942,20 +984,14 @@
       var s = Math.min(w * 0.6, h * 0.4);
       ctx.globalAlpha = 0.92;
       ctx.drawImage(img, x + w / 2 - s / 2, y + h * 0.30, s, s);
+      ctx.globalAlpha = 1;
     } else {
-      var scale = Math.max(w / img.width, h / img.height);
-      var dw = img.width * scale, dh = img.height * scale;
-      ctx.globalAlpha = 0.85;
-      ctx.drawImage(img, x + w / 2 - dw / 2, y + h / 2 - dh / 2, dw, dh);
+      coverPortrait(ctx, img, x, y, w, h, 0.85);
     }
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = 'rgba(5,8,11,0.34)'; ctx.fillRect(x, y, w, h);            // overall dim
-    var gt = ctx.createLinearGradient(0, y, 0, y + h * 0.46);                  // top: kind tag + name + epithet
-    gt.addColorStop(0, 'rgba(5,8,11,0.9)'); gt.addColorStop(1, 'rgba(5,8,11,0)');
-    ctx.fillStyle = gt; ctx.fillRect(x, y, w, h * 0.46);
-    var gb = ctx.createLinearGradient(0, y + h * 0.46, 0, y + h);              // bottom: desc + price
-    gb.addColorStop(0, 'rgba(5,8,11,0)'); gb.addColorStop(1, 'rgba(5,8,11,0.95)');
-    ctx.fillStyle = gb; ctx.fillRect(x, y + h * 0.46, w, h * 0.54);
+    cardArtScrims(ctx, x, y, w, h);
+    // 5b: pantheon emblem corner stamp (art/gen emblems 2-6) on god boon cards.
+    var emb = (b.god && GODS[b.god]) ? getArt(PANTHEON_EMBLEM[GODS[b.god].pantheon]) : null;
+    if (emb) { var es = Math.min(w, h) * 0.22; ctx.globalAlpha = 0.9; ctx.drawImage(emb, x + w - es - 12, y + 12, es, es); ctx.globalAlpha = 1; }
     ctx.restore();
     return true;
   }
