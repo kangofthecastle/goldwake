@@ -1,0 +1,540 @@
+# HUBRIS — Boon Doctrine
+
+The god-kit standard. DANMAKU.md governs how the game *shoots*; ART.md governs how
+it *looks*; this governs what your **boons** are and how a transform must feel. The
+failure mode this document kills: a god "transform" that is a hidden stat-rider on
+the same cyan blobs — no visible change, no new sound, dead against the add-less
+bosses. A boon is a **new weapon**, read in one frame by eye and by ear, or it does
+not ship.
+
+Binding on `js/game.js` (kit effects, status), `js/run.js` (`GODS`, cards, `STARLINE`),
+`js/sfx.js` (voices), `js/gl.js` (procedural draw). No new painted assets — every
+visual here is engine-procedural from the existing atlas.
+
+## 1. The Boon Laws
+
+1. **Every transform is immediately visible.** The moment a god is equipped the
+   *projectile itself* changes shape/motion/color — not a number. If a paused frame
+   can't tell the transform is on, it isn't done.
+2. **Every transform is audible.** Each god's fire has its own **material voice**
+   (§6); its special is that same material grown up. Ramps, tiers and heists get a
+   distinct event cue. The ear names the projectile at a 200-bullet crest.
+3. **No pure stat-riders.** A card that only multiplies a number is a SCALING card and
+   is labelled such. A *transform* changes the verb. Star levels grow the **signature**,
+   never the base stream (§7 honest-split).
+4. **Statuses are shape-first.** Read by **where** a glyph sits and **what** shape it is,
+   never by hue alone (§4). Motion is a tell (stun freezes, terror shivers).
+5. **Every kit is boss-viable.** TALOS/AMMIT/MIDAS spawn zero adds. Every attack and
+   special has a defined, strong lone-boss behaviour — usually its peak (§8).
+6. **Owned entities read as yours (§5).** Cyan heart, nose-up; they expire on kit-swap.
+
+---
+
+## 2. Per-god kit sheets
+
+Per god: **ATK**/**SP** (mechanic·numbers · *visual* · voice) · **★** (honest-split) · **CARD**
+(DESC / ▸HOW / ★-LINE) · **BOSS** · **RE-ANCHORS**. Colors are **combat** projectile colors
+(cyan/white player law where a god has no rework record). Eight kits were reworked (artemis, ares,
+odin, loki, quetz, ra, the three specials, faction) — verbatim; the other seven keep current
+mechanics, brought up to the Laws.
+
+### OLYMPUS
+
+**ZEUS** — chain lightning · storm
+- **ATK STORMCALL** (unchanged): streams arc chain-lightning to a 2nd foe within 120px. *Bronze
+  crackle jumps.* Voice ELECTRIC (saw + 80Hz ring-mod + hp-noise crackle ~50ms).
+- **SP SKYFALL** (REWORKED, specials rec): **instant, no projectile.** Column x = nearest foe within
+  140px of `player.x` else `player.x`. Foes with `|x−colX|<55` take `LANCE_DMG*2.4*spDmg*specialR`;
+  non-boss → `stunT=max(,0.4)`. Then `chainLightning(primary, LANCE_DMG*0.5…, isStorm)` — inherits +2
+  jumps, boss-collapse (unspent forks pile onto origin ×0.5), all zeus mods. *~14 stacked CORE segments
+  full-height on colX, ±18px x-jitter/frame, white core in `0.6,0.85,1` haze; forks via arcFx; `flashAll`
+  + `addShake(6)`; no lance capsule; clears ~0.22s.* Voice ZEUS CRACK (6ms hp noise + 40Hz sub + saw
+  900→180Hz raked, tanh sat).
+- **★** atk→chain dmg/hops · sp→SKYFALL strike dmg.
+- **CARD SP**: "SKYFALL — a bolt cracks straight down your lane and forks to nearby foes; struck foes are
+  Stunned." / ▸ "Instant strike on your column; forks jump to neighbours." / "★★★ ×2.25 strike damage"
+- **BOSS** whole column + collapsed forks on the lone body = strong single-target. zeusFork/Chain/Crit ride it unchanged.
+
+**POSEIDON** — knockback+impact · tidal wall
+- **ATK** (unchanged): shots knock foes back, spring-damped displacement (lurch, wall-slams, pile-ups).
+  **To-code**: add a 2-frame impact hold + KINETIC water-slap per landed shot so the shove is *felt*.
+  *Sea-teal round + displacement ripple.* Voice KINETIC + 1.2k water-whoosh.
+- **SP TIDAL WALL** (unchanged): wall sweeps up eating enemy bullets to gold. *Teal wall, each eaten bullet
+  → coin.* Voice KINETIC slam + rising water.
+- **CARD ATK**: "Shots slam foes back — walls, tines, pile-ups." / ▸ "Displacement scales with hits; shove
+  into terrain." / "★★★ ×2.25 impact damage"
+- **★/BOSS** atk→knockback dmg · sp→wall dmg & eat-count. Wall eats the dense volley to gold; shove = displacement-lite (heavier body).
+
+**ARTEMIS** — THE QUARRY · THE LOOSED ARROW (REWORKED, artemis rec)
+- **ATK THE HUNT/QUARRY**: 3 (focus 4) arrow-needles — **kind 9**, faction 0, pierce 1, radius 12, speed
+  `SHOT_SPEED`, oriented to velocity, gently homing to the **Quarry** via Jade block (`homing, turn=2.2` —
+  weak on purpose; the ramp is the skill). Quarry = last foe your fire struck. Each hit on the SAME Quarry
+  `+12%` dmg, cap 8 = `+96%`; stacks hold 3s (refresh on hit); a DIFFERENT foe reassigns + hard-resets to 0.
+  State `G.quarry`, `G.huntStacks`. *Silver-white body + moon-blue rim; a tightening chevron bracket on the
+  Quarry cinches with stacks.* Voice BOW thwip + ramp pizzicato (+semitone/stack) + slack-string reset.
+- **SP THE LOOSED ARROW** (specials rec is authority; grafted with attack rec's Quarry-slam): kind 4, radius
+  14, scale ~64, `vy=-2600` (fastest), `homing, turn=5.0, pierce 999, forceCrit=1` (always **precise** ×2.5),
+  `markHit=1`. Target: marked → lowest-HP → boss → up; only re-aims if nothing in a ~40px forward cone. On hit
+  `markEnemy` (+25% taken) **and slams every pierced foe to full Quarry (8)**. *Acid-green CORE needle +
+  white head + 2 fletches, vapor trail, visible bank.* Voice ARTEMIS THWIP (triangle 220→60Hz/30ms + 4kHz
+  fletch, ~80ms, dry).
+- **CRIT RETIRED → PRECISION** (§3): delete all RNG crit rolls (`artemisCritChance`, `G.critBonus` roll,
+  `huntersEye` always-crit). Keep `damageEnemy`'s crit path, rename read `precise` ×2.5, driven **only** by
+  weak-point overlap or `forceCrit`; keeps gold pop + spark + APOTHEOSIS/HUBRIS feed.
+- **★** atk→arrow dmg (ramp base) · sp→LOOSED ARROW dmg.
+- **CARD ATK**: "Streams become silver homing arrows that lock the last foe hit as your QUARRY." / ▸ "Every
+  hit on the same Quarry ramps +12% (max +96%); a new target resets it." / "★★★ ×2.25 arrow damage"
+- **BOSS** arrows converge on the lone body, ramp climbs uncontested — Artemis's peak.
+- **RE-ANCHORS** SILVER FLETCHING→**PRECISION** (+precise dmg, +15% node size); huntersEye→Marked foes always
+  expose a node; deathSentence→max-Quarry hit executes <40%; godsOfWar→crescents precise vs Terrified.
+  Mods: artemisCrit→QUARRY REACH (+2 cap, +0.6 turn); artemisMulti→DEEPER HUNT (0.12→0.18/stack);
+  artemisRefund→6+ stacks refund 0.1 charge; artemisSpread→max-Quarry kill flings 4 stacks to nearest.
+  Optional mod **THE QUIVER**: special banks up to 3 arrows, dump as seeking crits.
+
+**APHRODITE** — Charm · HEARTSEEKER (special REWORKED, specials rec)
+- **ATK CHARM** (unchanged): shots charm foes to your side. *Pink shot; charmed hull recolors cyan + rising
+  hearts (§4).* Voice CHARM (soft sine chime + minor-3rd gliss, **no noise**).
+- **SP HEARTSEEKER**: kind 5, `vy=−900`, `weave=1, homing, turn=3.0, pierce 0`, seeks nearest un-charmed foe.
+  Non-boss → `charmEnemy`. **Boss** → `weakStacks` (0..3, +8% taken ea, `weakT=6`; mult `1.10+0.08*stacks`)
+  **and** sweeps enemy bullets within 220px to gold. Recast stacks Weaken. *Two GLOW lobes + CORE point =
+  heart, magenta, SHARD petals along a weave; boss-hit bullets spiral in → gold.* Voice APHRODITE CHIME-SWELL
+  (sine 523/784Hz, 200ms attack, vibrato, light reverb).
+- **★** atk→charm shot dmg & duration · sp→charmMissile dmg (`*specialR` — **bug fix** §7) + duration +40% @★★★.
+- **CARD SP**: "HEARTSEEKER — a slow heart weaves to the nearest foe." / ▸ "Charms a minion, or Weakens a boss
+  (+8%/heart ×3) and melts its bullets to gold." / "★★★ ×2.25 charm damage & +40% duration"
+- **BOSS** Weaken-stack + bullet-lull-to-gold is the primary read (no minion).
+
+**ARES** — WAR-HEAT (proximity) · Phobos & Deimos (attack REWORKED, ares rec)
+- **ATK WAR-HEAT**: meter `frenzyF` (0..1) → `G.frenzy.stacks=round(frenzyF*10)` (all existing consumers keep
+  working). Each step `dist=nearestEnemy(player)` (boss body valid). Bands CLOSE=260/FAR=440px. CLOSE `+0.25/s`;
+  beyond FAR (0.4s grace) `−0.18/s`; between = hold. **Proximity alone builds** — no trigger-hold. `frenzyRate()`
+  rewritten +6%→**+3%/stack**. Three hard tiers off stacks, payoff in `fireStreams`:
+
+  | Tier | stacks | shape | spread | scale | radius | pierce | color |
+  |---|---|---|---|---|---|---|---|
+  | CALM | 0–3 | needles | 0.30 (0.16 focus) | 44 | 14 | 0 | ember `0.70,0.20,0.15` |
+  | HEATED | 4–7 | short blades, converge | ×0.8 | ×1.5 | ×1.35 | 1 | arterial `1.0,0.15,0.12` |
+  | FRENZY | 8–10 | braided spear-bundle | ×0.33 | ×1.9 ctr | ×1.6 | 3 | white core `1.0,0.55,0.35` |
+
+  FRENZY adds **one WAR-SCYTHE**/volley: extra shot kind 6, `crescent`, RED serrated `0.78,0.12,0.12`, radius 34,
+  pierce 3, travels ~520px (reach so wall/lattice phases can't strand melee). `prevTier` upward cross → 1-frame
+  red muzzle bloom + kindle SFX; backing out re-splays the fan (cooling read).
+- **SP PHOBOS & DEIMOS** (unchanged): two dread-wraiths dive-bomb, sow **Terror**. Owned-entity law (§5): dread-red
+  body, cyan heart, nose-up. Voice FLUTTER dive + terror shudder.
+- **VOICE (bespoke, overrides FLUTTER)**: WAR-DRUM bed 70Hz thud every `(0.9−0.5*frenzyF)s` (tempo rises — heat is
+  audible before visible); shot growl layered (CALM clean → HEATED saw ~110Hz → FRENZY ~80Hz + hiss, 3 blips merge
+  to one thrown-weapon hit); tier-up timpani + noise whoosh 400→3k; tier-down douse downsweep.
+- **★** atk→War-Heat shot & scythe dmg · sp→wraith strike dmg.
+- **CARD ATK**: "BLOODLUST — fight at the muzzle; a spear's length from a foe stokes War-Heat, back off and it cools." /
+  ▸ "HEATED: blades thicken & converge. FRENZY: a boss-splitting spear + war-scythe." / "★★★ ×2.25 War-Heat damage"
+- **BOSS** the war-drum beats hardest in the boss's face — old dead-air becomes the peak. aresDecay halves FAR-drain
+  for wall phases; bloodAndFire skips drain while anything burns; addFrenzy redefined `+0.10` (terror-kill duos = gravy).
+
+### KEMET (Heliopolis / Duat)
+
+**RA** — THE LENS solar beam · Solar Flare (attack REWORKED, ra rec)
+- **ATK SOLAR LENS**: replace smooth ramp with 4 stepped tiers on continuous held-time on ONE target, same formula
+  `tick=BEAM_DPS*mult*atkDmg*dt`:
+
+  | Tier | hold | mult |
+  |---|---|---|
+  | KINDLE | 0.00–0.60s | ×1.0 |
+  | FLARE | 0.60–1.30s | ×1.5 |
+  | SOLAR | 1.30–2.00s | ×2.0 |
+  | CORONA | ≥2.00s | ×2.5 |
+
+  State `G.ra.hold`, `graceT=0.30`. No/switched target bleeds ONE tier per 0.30s (a dying-then-replaced column
+  enemy or adjacent flick inside 0.30s is free). **BOSS LOCK**: boss target → `hold` monotonic, never decays; CORONA
+  reachable/held (Ra's boss signature). raRamp charm scales thresholds ×0.556, caps ×2.875. APOTHEOSIS forces CORONA.
+  *Primary VARIANT A tightening-lance (render A/B/C §11): 3 STREAK rays muzzle→knot, spread tightens ±10px KINDLE →
+  ±2px CORONA (one hard line); knot CORE 30→8px; stage-up RING 26→70px + 6 SPARKs (hard CLICK/rung); 1–4 gold RING
+  notch-glyphs ride the beam (occlusion-proof count); bronze→amber→white-gold, CORONA + rotating corona flare.*
+- **SP SOLAR FLARE** (unchanged): ignites all with **Burn**. Voice white-noise flash swell ~0.5s.
+- **VOICE BEAM**: live 3-osc (one/stream) converging detune ±(18−16*frac)c to unison as tier climbs (you *hear* it
+  focus); lowpass 600→2500Hz; stage-up ramps root +4 semitones + bell ping; stage-drop warn blip. One oscillator, no per-shot.
+- **★** atk→beam DPS (all tiers) · sp→Solar Flare burn dmg.
+- **CARD ATK**: "SOLAR LENS — hold fire to fuse three streams into one beam." / ▸ "Burn the SAME foe to focus tighter
+  through 4 heat stages, up to ×2.5; count the notches." / "★★★ ×2.25 beam DPS"
+- **BOSS** boss-lock trivially holds CORONA — Ra scales hardest vs TALOS/AMMIT/MIDAS.
+
+**ANUBIS** — Weigher of Hearts · Judgment of Duat
+- **ATK** (unchanged): +25% dmg below half HP; **executes** non-bosses <25% for gold. **To-code**: execute fires a
+  scales-tip ring + sub gong-ping. *Amber shot darkens over low-HP foes.* Voice BELL, darker + sub gong-ping <50%.
+- **SP JUDGMENT OF DUAT** (unchanged): instant strike on every foe for a share of missing HP.
+- **★** atk→below-half bonus · sp→judgment share.
+- **CARD ATK**: "+25% damage below half; executes weak non-bosses for gold." / ▸ "Auto — passive on hit; execute <25%." / "★★★ ×2.25 below-half bonus"
+- **BOSS** execute→flat below-half bonus (execute-immune); phase's final blow drops an apotheosis shard + pays +50% segment cancel-gold (§8).
+
+### ASGARD
+
+**LOKI** — PILFER · Shadow-Twin (attack REWORKED, loki rec; **CONFUSE IS DEAD** — ruling 1)
+- **CONFUSE REMOVED game-wide.** Delete the on-hit confuse roll, the AIMX/AIMY aim-reflection (→ plain target), the
+  +15% vs-confused rider. Rename freed `confuseT/confuseBudget` → `trickStacks/trickBudget`. Loki's boss self-harm now
+  lives **inside Pilfer's boss budget**, not a confuse mechanic.
+- **ATK PILFER**: every landed shot +1 **MISCHIEF** to that foe (cap 3, decay 2.5s). At 3 → **PILFERED**: grab the 8
+  live enemy bullets nearest the foe within 240px, **biased to bullets already >80px from any emitter** (never whiffs /
+  never a panic-clear). Each: `friendly=true`, `srcId=foe`, tint `0.55,1.0,0.35`, reverse 180°, gentle homing (`~2.2 rad/s`)
+  to nearest OTHER live enemy. Damage rides existing `flipDmg=2.0*attackR` (no rider). Reset stacks, 1.2s per-foe cooldown.
+  *On-foe green TRISKELE of 1/2/3 kunai (stack = shape). On Pilfer: green RING implodes 0.15s, 8 bullets freeze 1 frame +
+  white pop, re-tint green, snap 180° with knotwork streaks + home; thin green thread foe→bullets.* Voice reverse-pickpocket
+  LIFT (reversed-envelope bandpass pink-noise → bright click on flip; detuned triangle twin-shimmer 880→1320Hz; per-dagger
+  metallic clink). ELECTRIC+warble is the base shot; LIFT is the Pilfer event.
+- **SP SHADOW-TWIN** (unchanged): decoy draws all aimed fire, soaks streams; **never attacks** (the one sanctioned
+  no-damage special). Owned-entity law (§5): green body, cyan heart, nose-up.
+- **★** atk→pilfered-dagger dmg (via flipDmg) · sp→twin soak HP/duration.
+- **CARD ATK**: "PILFER — your hits pickpocket a foe (3 marks); on the third, snatch the 8 nearest enemy bullets." /
+  ▸ "They flip green, spin 180°, and hunt their own kind." / "★★★ ×2.25 dagger damage"
+- **BOSS** stacks build on the lone boss from your hits; stolen bullets home back onto it, capped **0.5% maxhp/cast** via
+  `trickBudget/consumeBossFlip` — bleeds its own wall, can't be looted to death.
+- **RE-ANCHORS** lokiVaunt→"pilfered daggers also charge APOTHEOSIS" (already true, addGauge(0.6)); lokiChance→**PICKPOCKET**
+  (Pilfer on 2nd stack, steal 12). DOPPELGANGER deferred (OPEN CALLS).
+
+**ODIN** — ÓÐR the War-Fury · Gungnir (attack REWORKED, odin rec; ravens → charm)
+- **ATK ÓÐR**: fuel `G.player.odrStreak` (int, cap 40). A landed ÓÐr shot sets `odrSince=0` and (debounced +1/0.05s) grows;
+  `odrSince>0.4` grace then bleeds −1/0.1s (full T2→T0 ≈2.4s whiffing). Tier by streak (odinFury softens to 5/16):
+
+  | Tier | streak | shot | n | dmg | pierce | cadence | ~DPS |
+  |---|---|---|---|---|---|---|---|
+  | T0 | <8 | rune-bolt | 1 | 1.3× | 0 | 0.075 | ~17 (below default — the downgrade) |
+  | T1 | 8–24 | rune-trident | 3 | 1.25× ea | 1 | 0.075 | ~50 |
+  | T2 | >24 | RUNE-LANCE | 1 fat | 4.6× | 3 | 0.10 | ~46 raw (`markHit=true`) |
+
+  → T2 in ~1.8s held fire on a boss; evasive popcorn keeps T0/T1 (skill gate). *Metamorphosis in steel-blue `0.8,0.85,0.92`
+  + gold `1,0.85,0.4`: T0 thin pale streak; T1 three prongs each capped with a spinning STAR rune; T2 prongs SNAP inward on
+  a RING implosion → one STREAK core + NEEDLE spine + GLOW wake + runic GRING halo. Tier-flash: 1-frame STAR+RING sigil at
+  ship (gold up / steel-blue down).* Voice T0 dry 'tok' 820→520Hz; T1 tok + hollow fifth; T2 detuned-saw drone + metallic
+  'shhk'/lance; tier-up sweep 300→900Hz; tier-down drone-cut + descending thud.
+- **SP GUNGNIR** (unchanged): never-miss piercing spear.
+- **★** atk→all-tier ÓÐr dmg · sp→Gungnir dmg.
+- **CARD ATK**: "ÓÐR — your fire feeds on itself: bolt → three-prong trident → the roaring RUNE-LANCE that pierces and
+  Marks." / ▸ "Keep landing hits to climb; whiff and the fury bleeds down." / "★★★ ×2.25 ÓÐr damage"
+- **BOSS** park at T2 and dump; T2 Mark feeds Gungnir / THE ALLSEEING.
+- **RE-ANCHORS** **HUGINN & MUNINN** charm (charmOdin) — lift `updateRavens/drawRavens` out of the attack path, gate on
+  `G.charms.charmOdin` so ravens fly with **any** attack. Dive 9→12, interval 1.7→1.4s, scale `atkDmg`, Mark-on-dive
+  (`markT 6`). **MEMORY**: +1 dive dmg/8 kills (cap +18); past 30 kills interval→1.0s + fast pairs. *Near-black birds, cyan
+  heart (§5), gold RING halo thickens with kills.* Mods odinRaven/RavenMark → **odinFury** (climbs on fewer hits, bleeds
+  slower) + **odinSunder** (RUNE-LANCE pierces all, sheds a rune-shard/pierce). Duos wildHunt→lance ×2 to Terrified, feeds
+  frenzy; theAllseeing→lance & Gungnir +40% to Marked. (Retired 'shop rerolls half' perk — OPEN CALLS.)
+
+**THOR** — Mjölnir · Giant's Bane
+- **ATK MJÖLNIR** (unchanged): returning kinetic hammer, spring-damped displacement (lurch, wall-slams). *Slate hammer arcs
+  out and returns; hulls lurch.* Voice KINETIC + **doubleHit** (throw + return).
+- **SP GIANT'S BANE** (unchanged): colossal crush — pure force, never lightning. *Huge slate slab-slam + heavy displacement.*
+  Voice KINETIC deep slam-faller.
+- **★** atk→hammer dmg · sp→crush dmg.
+- **CARD ATK**: "A kinetic hammer flies out and returns, slamming foes aside." / ▸ "Hold — hammer loops out and back; displaces on hit." / "★★★ ×2.25 hammer damage"
+- **BOSS** crush lands full as heavy displacement-lite + bonus damage.
+
+**HEIMDALL** — Bifröst Prism · Gjallarhorn
+- **ATK BIFRÖST** (unchanged): every 4th volley refracts into a piercing rainbow fan. **To-code**: 4th shot must read — a
+  prism flash + the triad. *Dawn-gold streams; every 4th splits to a rainbow pierce fan.* Voice BELL, **4th shot = stacked
+  fifth+octave triad**.
+- **SP GJALLARHORN** (unchanged): horn blast wounds + **Marks** every foe + shoves the whole field (`timeScale/slowT`).
+  *Expanding shockwave, field shoved out.*
+- **★** atk→refract-fan dmg · sp→horn dmg & Mark potency.
+- **CARD ATK**: "Every 4th volley refracts into a piercing rainbow fan." / ▸ "Auto — count to four; the fourth pierces all." / "★★★ ×2.25 refract damage"
+- **BOSS** horn Marks the lone boss (+40% taken) + shoves its wall; per-foe value collapses onto it.
+
+### CELESTIAL COURT
+
+**WUKONG** — hair-clones · Ruyi Jingu Bang
+- **ATK 72 CHANGES** (unchanged): kills spawn hair-clones copying your fire. Owned-entity law (§5): gold body `1,0.8,0.35`,
+  cyan heart, nose-up, fire in the **player's gun voice at −12dB**; cap 3. Voice KINETIC wooden knock (+grain while clone live).
+- **SP STAFF PILLAR** (unchanged): Ruyi Jingu Bang pillar that **Stuns**; extends `hazards`. *Gold pillar slams down; stunned foes freeze.*
+- **★** atk→clone fire dmg · sp→pillar dmg.
+- **CARD ATK**: "Kills may spawn a gold hair-clone that echoes your fire (cap 3, cyan-hearted)." / ▸ "Kill foes to summon; swap gods and clones recall." / "★★★ ×2.25 clone damage"
+- **BOSS** first hit summons a clone; every tithe unit refreshes oldest clone +1.5s (cap 7s); each segment-clear rolls a fresh clone (§8).
+
+**GUAN YU** — cleaving crescents · Crescent Moon Sweep
+- **ATK CRESCENT BLADES** (unchanged; **honest-pierce** §9): cleaving crescents gain power per foe pierced (existing
+  `*attackR`; resets on a clean miss). Assumes §9 dedup — one bite/foe/pass. **To-code**: bright per-pierce brighten step +
+  a shing that pitch-drops per pierce. *Jade `3be089` crescent, brightening a step/foe.* Voice BLADE (shing ~2.5k, **−80c/pierce**).
+- **SP CRESCENT MOON SWEEP** (unchanged): one colossal blade sweeps the field upward, hurling foes aside. Voice BLADE 0.5s downsweep 2.5k→600.
+- **★** atk→crescent dmg (crescent REPLACES the base stream = the signature) · sp→sweep dmg.
+- **CARD ATK**: "Shots become crescent blades that cleave." / ▸ "Hold fire down a lane; blades pierce every foe, brightening per hit." / "★★★ ×2.25 crescent damage"
+- **BOSS** crescents pierce + stack-brighten on the lone body; sweep hurls + heavy single-target hit.
+
+**JADE EMPEROR** — homing edicts · Heaven's Verdict
+- **ATK IMPERIAL EDICTS** (unchanged): homing edicts that **Stun**. *Violet `c99aff` seal-talismans home + burst; stunned
+  foes freeze + CROWN stars (§4).* Voice BELL (inharmonic partial stack, 1ms strike, ~250ms ring).
+- **SP HEAVEN'S VERDICT** (unchanged): homing edicts, one per foe, each Stuns; strongest foe gets a double-size edict.
+- **★** atk→edict dmg · sp→Verdict edict dmg.
+- **CARD ATK**: "Attacks fire homing imperial edicts that Stun." / ▸ "Auto — each shot seeks a foe and freezes it." / "★★★ ×2.25 edict damage"
+- **BOSS** Stun→bonus dmg (immune); per-foe Verdict collapses every edict onto the lone boss.
+
+### FIFTH SUN
+
+**QUETZALCOATL** — CONSTRICTOR (weave stays the attack) · Sky Serpent (REWORKED, quetz rec; ruling 2)
+- **ATK CONSTRICTOR**, three parts: (1) **honest pierce-dedup** (§9): per-shot `s.hitList` cleared in `allocShot`; in
+  `collideShots` skip `if s.hitList.indexOf(e)>=0`, push after hit; `maxHits=pierce+1` caps distinct enemies (deletes ~55
+  fabricated DPS; base weave dmg UNCHANGED 1.05×SHOT_DMG). (2) **THE COIL**: `e.coilQ` (0..6), `e.coilT`. On a quetz hit
+  `coilQ=min(6,+1); coilT=0.9`; applied dmg ×`(1+0.10*coilQ)` (max ×1.60); full uncoil 0.9s after last bite; ~6 bites
+  (~1–1.5s) to max; resets on target-swap. (3) **clarity**: lock braid `s.phase=i*(TAU/3)` (delete `Math.random()*6.28`) →
+  clean repeatable triple-helix. *Three lime streams `0.4/1.0/0.7` at 120° offsets, plaiting with knot sparks (VFX-only, 0
+  dmg). COIL renders on the target: `coilQ` thin lime rings tightening (`radius*1.6`@1 → `*1.0`@6), jade→hot-white; CONSTRICT
+  pulse-ring snaps in at max.* Voice SERPENT breathy "fwip" (triangle ~180Hz + 2–3k breath); COIL quantized rising whistle
+  0.9k→2.4k/6 stacks; max = hiss + 90Hz crush; uncoil downward slide.
+- **SP SKY SERPENT** (unchanged): eats bullets into your **apotheosis gauge**; extends `hazards`.
+- **★** atk→weave & coil-multiplied dmg · sp→serpent eat-rate / gauge feed.
+- **CARD ATK**: "Your three streams braid into a plumed helix — wider coverage, pierces 1." / ▸ "Hold the braid on ONE body
+  to COIL it +10%/bite up to +60%; look away and it uncoils." / "★★★ ×2.25 weave damage"
+- **BOSS** COIL is built for the lone boss — hold aim, rings cinch to +60%. Serpent eats the wall to gauge.
+- **RE-ANCHORS** PLUMED PIERCE mod → +1 pierce.
+
+---
+
+## 3. PRECISION weak-point system (systemic crit)
+
+RNG crit is retired game-wide (artemis rec). Crit is reborn as **PRECISION** — a systemic, aim-earned, god-agnostic weak
+point any shot can strike.
+
+- **Where**: authored into existing `patterns.js` **spellcard beats only** on the 3 bosses + elites — no per-trash work.
+- **Cadence**: a telegraphed beat exposes a **pulsing node** — ~0.4s pre-flash telegraph, node open ~2s.
+- **Payoff**: any faction-0 shot overlapping the node reads **`precise` ×2.5** + bonus gold + the gold pop / spark /
+  APOTHEOSIS + HUBRIS feed (old crit machinery, repointed dice→overlap). Shape: a diamond-shard node (not a hue).
+- **Reach-ins**: SILVER FLETCHING → +precise dmg & +15% node size; huntersEye → Marked foes always expose a node;
+  `forceCrit` (Artemis LOOSED ARROW) always lands precise.
+- This is where the crit-starved add-less boss fights get crit back — owned by no god.
+
+---
+
+## 4. Status shape-language
+
+Read **WHERE** (zone) before **WHAT** (shape); hue never carries a status alone. Four disjoint zones around the enemy
+(offsets in `e.scale`), drawn in the status-tell block from existing atlas cells; four+ tells coexist with no layout
+manager. **Confuse removed** (ruling 1); roster = 7.
+
+| Status | Zone | Shape / motion | Color | Effect |
+|---|---|---|---|---|
+| MARKED | FRAME (4 corners) | 4 static amber L-brackets, snap inward on re-apply | amber `0.95,0.75,0.2` | +25/+40% taken |
+| WEAK | FRAME (lower only) | asymmetric sagging brackets + falling SHARD flakes | grey-violet `0.6,0.5,0.65` | +8%/stack, boss substitute |
+| BURN | UNDERFOOT | 3 rising SHARD flame ticks, yellow-core→red-tip, 14Hz | `1,0.85,0.3`→`1,0.3,0.05` | DoT 22/s |
+| STUN | CROWN + BODY | 3 SPARK stars overhead **+ body FREEZES** (fire-bob halts) | cyan-white `0.7,0.95,1` | frozen |
+| CHARMED | CROWN + BODY | rising pink hearts + **body recolors player cyan**; suppresses hostile tells | hot-pink `1,0.3,0.55` | fights for you |
+| TERROR | BODY | 30Hz jitter, sinks + leans away, dark contracting vignette | `0.25,0.02,0.05` | flee, ×1.20 taken |
+| SHAKEN | BODY (boss) | half-amp jitter + 2 flickering STREAK cracks, no vignette | — | ×1.10 taken (terror's boss-variant) |
+
+- **Same-zone collision** → fixed priority (stun>charm in CROWN; marked>weak in FRAME); loser demotes to a 6px CORE pip
+  upper-right. Disjoint zones = marked+burning+stunned+terrified all render at once.
+- **Loki's MISCHIEF** is a stack-mark, not a status: green TRISKELE (§2 Loki), 1/2/3 kunai.
+- Each glyph gets a faint dark backing GLOW (opaque-survives-bloom, ART.md). Per-status apply-sting from the synth (§6);
+  the two BODY-verb states (stun/terror) carry the loudest audio contrast.
+- **Freed by confuse's death**: `confuseT/confuseBudget` → `trickStacks/trickBudget` (Loki Pilfer boss budget); the green
+  confuse ring and the purple mirror-chevron brand are both deleted.
+
+---
+
+## 5. Faction & owned-entity language
+
+**Law: CYAN HEART, NOSE UP.** Every player-summoned entity keeps its GOD body color and gains one unfakeable engine marker.
+
+| | Owned entity | Hostile mimic (Apostate) |
+|---|---|---|
+| Heart | player-cyan CORE gem `0.7,0.95,1` (the player's own hitbox render), 3Hz breath | RED `1,0.2,0.3`, harsh 12Hz flicker |
+| Orientation | nose-UP (rot 0; ±0.25rad bank on strafe; dive states aim at target) | nose-DOWN (rot π, diving at you) |
+| Body | keeps god hue (Wukong gold, Loki green, Ares dread-red, Odin slate) | player hull + warm-magenta `1,0.2,0.45` |
+| Extra | cyan engine trail | red threat chevron (NEEDLE) overhead |
+
+- Route owned entities through `drawOwned()` tagged `{owned, ownerKit, life}`; mimics through `drawMimic()`. Fixes the
+  confirmed collisions (Apostate clones vs Wukong orange, Apostate decoy vs Loki green, wraiths reading as enemies).
+- **EXPIRY (universal, ruling 4c)**: `expireOwnedOnSwap()` fires on attack- OR special-god change → ALL owned entities
+  RECALL (0.4s fly-up ~300px to player, GLOW implodes to the gem, pool-released). Kills the 7s orphan-clone lie; ravens'
+  abrupt `length=0` clear also routes through recall.
+- **Deception (sanctioned only)**: Apostate CLONES spawn instantly fake (red heart, nose-down). The Apostate DECOY wears
+  the FULL friendly costume 0.6s, then CURDLES (heart cyan→red over 0.15s, nose swings down, chevron fades in) — a fair
+  learnable tell (taste flag in OPEN CALLS).
+- **Firing voice**: owned entities fire the player's gun voice at −12dB; mimics fire the enemy timbre. Sounds: summon =
+  rising triangle 660→990Hz; recall = reversed 880→440Hz; mimic spawn = same rhythm inverted/dirtied (detuned square
+  ~300Hz + chuff); decoy curdle = 880→622Hz tritone + ring-mod buzz.
+
+---
+
+## 6. Sound system
+
+**Axis = the material you SEE.** 9 voices → 15 gods; pantheon adds only a register-pitch mult + a special-only reverb tint.
+A god's shot and special are the **same material at two scales** (shot tiny/dry, special louder/longer/reverb-sent). No
+melodic motifs on shots (mush at 35/s vs the ~2.6k lowpassed score). Code: 9 builder fns + one 15-row VOICE table + one
+5-row PANTHEON table + a per-material minInterval/round-robin table. Wire `G.attackGod`→`SFX.shot()`, `G.specialGod`→`SFX.special()`.
+
+| # | Material | Synthesis | Gods (hook) |
+|---|---|---|---|
+| 1 | ELECTRIC | saw + 80Hz ring-mod + hp-noise crackle ~50ms; SP crackle train | Zeus; Loki (+18c S&H warble) |
+| 2 | KINETIC | sine sub 160→38Hz + lowpassed noise slap + 2ms click | Thor (doubleHit); Poseidon (+1.2k water); Wukong (wooden knock, +grain/clone) |
+| 3 | BLADE | bandpassed metallic shing ~2.5k, −80c/pierce; SP 0.5s downsweep | Guan Yu |
+| 4 | BEAM | sustained sine+saw thru resonant lowpass, rising while held | Ra (§2) |
+| 5 | BELL | inharmonic 1/2.4/3.9× stack, ~250ms ring | Jade Emperor; Anubis (dark + gong-ping <50%); Heimdall (4th-shot triad) |
+| 6 | SERPENT | detuned dual-osc ±8c, continuous portamento + breath ~3k | Quetzalcoatl (ruling 2: serpent-on-shot correct) |
+| 7 | BOW | plucked transient: 12ms pitch-flick + fast decay + arrow-zip noise | Artemis; Odin (double grain 40ms) |
+| 8 | CHARM | soft sine chime + minor-3rd gliss + 5Hz tremolo, **no noise** | Aphrodite |
+| 9 | FLUTTER | amp-gated flutter noise + low flap tone + peck tick | Ares (bespoke war-drum/growl overrides — §2) |
+
+- **PANTHEON** register×/rev-send: OLYMPUS ×1.10/0.06 · ASGARD ×0.85/0.04 · KEMET ×1.00/0.10 · COURT ×1.08/0.14 · FIFTH
+  ×0.92/0.08. reg multiplies base f0; rev applies to **specials only**.
+- **Mix law (verbatim from sfx.js)**: 28ms shot gate; RR pitch `[0,−50c,−90c]` ±4%; shots DRY; shot peak clamped
+  0.045–0.055; specials live-synth thru `hub(revSend)/sat()`, 60ms de-dupe. Per-material minInterval overrides for slow
+  voices: KINETIC & BLADE = 50ms; BEAM exempt (Ra = one sustained oscillator, no per-shot).
+- **COMMUNION STINGS** (5, on set-bonus only): OLYMPUS bronze major-arpeggio · ASGARD low forge/horn drone · KEMET
+  filter-sweep-up 400→3k · COURT temple gong · FIFTH wind portamento.
+- Reworked gods carry authoritative bespoke event cues in their kit sheet (Ares war-drum, Odin tiers, Loki lift, Ra beam
+  ladder, Quetz coil) layered over the base material.
+
+---
+
+## 7. Cards & stars
+
+**THREE-LINE CONTRACT** (universal, fits the ~180px gap): `[RARITY] / NAME + ★-track / ·REALM· / epithet / DESC / ▸HOW
+(≤12 words) / ★-LINE`. DESC = the one-liner; ▸HOW = activation-or-stack fragment (drop the zone if none); ★-LINE =
+concrete scaled quantity at current tier. SCALING/GENERIC cards render DESC + ▸HOW only (**no ★-line**). Only `levelA/levelS`
+draw the full 5-node rail.
+
+**HONEST-SPLIT star rule** (one sentence, all 15): *"attack star → your attack SIGNATURE; special star → your special
+SIGNATURE. The base 3-stream is a fixed baseline you grow with ATTACK POWER."* Ladder unchanged **[1.0, 1.5, 2.25, 2.9,
+3.5]** — no economy retune (base torrent stays on its own `atkDmg` curve; signatures were tuned against `attackR`).
+
+- **Per-star SIGNATURE bloom**: +8% size / brighter core each tier on the **signature only** — every level-up is visible
+  without authoring 15 stepped secondaries.
+- **Three code fixes** (close invisible-level-up holes; the base stream is intentionally star-flat, NOT a hole):
+  (1) ravens dmg `*= G.attackR`; (2) charmMissile dmg `*= G.specialR` + route charm duration through specialR; (3) confirm
+  base stream at `game.js:1830` stays unscaled by attackR, Guan crescent keeps its `*attackR` (crescent REPLACES the stream).
+- **STARLINE table** beside `GODS{}`: per god×slot `{qtyLabel, base, secondary}`. `starLine()` prints `★★★  ×2.25 <qtyLabel>
+  & <secondary>` from `LADDER[tierOf(cur)]`. `tLevel()` prints now→next.
+
+**Generic-upgrade copy:**
+- **ATTACK POWER** (SCALING): DESC "+15% attack damage." ▸ "Stacks — buffs your base stream, not signatures."
+- **APEX** (GENERIC, rewritten): DESC "APEX — your APOTHEOSIS multiplier climbs one step." ▸ "Cap ×5 → ×6 (max ×8); +0.25
+  each kill while golden." **Never** "HUBRIS ceiling" (collides with the ×1.0–2.0 HUBRIS skill meter) and **never** "×2→×3"
+  (wrong numbers). `vcap` raises `G.up.multCap` (default 5, hard-cap 8) which caps `G.mult` the APOTHEOSIS score multiplier.
+- **LEVEL-UP** (`levelA/levelS`): epithet "LEVEL UP"; DESC "ODIN ATTACK ★★☆☆☆ → ★★★☆☆"; ★-LINE "×1.5 → ×2.25 ÓÐr damage";
+  **rail** `1.0 · 1.5 · [2.25] · 2.9 · 3.5`.
+
+---
+
+## 8. Boss summons & entity viability
+
+Two independent layers; neither is load-bearing alone (satisfies "bosses should summon, but that must NOT be the only fix").
+
+**LAYER 1 — PER-KIT BOSS-MODE REROUTE (the real fix; works with zero adds).** One accumulator `e.dmgTithe += dmg` in
+`damageEnemy`; unit = `maxhp*0.025` (rank-independent, ~40 ticks/fight; NAIL/weak-point damage counts). Each unit crossed
+fires **continuous** kit events; the existing `bossEnterPhase(transition=true)` (~5–6×/fight, already cancels to gold) fires
+**bursty** events.
+
+| Kit | Boss-mode |
+|---|---|
+| WUKONG | first hit summons a clone; each tithe unit refreshes oldest clone +1.5s (cap 7s); segment-clear rolls a fresh clone |
+| ZEUS FIELD (mod) | `spawnZapField` beneath the boss each tithe unit |
+| ARES | +1 frenzy/segment-clear; frenzy decays 50% slower in any boss fight (build across the setlist) |
+| ANUBIS | phase's final blow pays +50% segment cancel-gold + drops an apotheosis shard (execute→segment) |
+| UNIVERSAL fallback | a phase-segment counts as ONE reward-kill for any un-wired kill-fed kit — fires its raw on-kill path once at 1× (Jade Verdict window, Odin raven dive target…) |
+
+**LAYER 2 — FICTION-GATED RETINUE (additive economy, NOT the mechanism).** `killEnemy(reward=true)` already wires every kit
+for free. Shared spec: HP dies to ~0.3s of default fire; SHIP_POP tinted to boss palette; mirrored swoopHold from the boss
+body, hold ~0.8s, ONE unaimed geometry beat, exit/die. **HARD CAPS: max 3 concurrent, 4s refractory, phase-gated; summons
+carry NO boss HP** (can't wall or milk the segment floor). Materialize = RING implode + GLOW pop in boss hue + ~0.2s
+spawn-tether. Reads as an ENTITY (dark body, health shimmer), never a bullet; loot-gold never worn by a threat (ART.md).
+
+| Boss / phase | Retinue |
+|---|---|
+| **TALOS V — THE NAIL** (load-bearing) | **RIVETS**: 2 orbit the immune body r180, each an 8-ring/1.5s, respawn 4s — the ONLY thing feeding kill/damage-fed kits through the ~44s immune finale |
+| TALOS II — Hurled Stones (flavor, cuttable) | **BRONZE SPLINTERS**: 20% of boulder-bursts calve 1 splinter (diveBrake, 5-pellet fan; cap 3) |
+| **AMMIT II — Forty-Two Confessions** (grafted offload) | **THE ASSESSORS**: two counter-rotating jackal emitters (orbitPoint r~110) each fire **21** (=42); kill one → ring collapses to a lopsided 21 with a drifting gap, respawn 5s; killed-side shots gild to coins; MAG vs ROSE arcs, umbilical to boss |
+| AMMIT IV — The Scales Tip | **UNWEIGHED HEARTS**: 1–2 heavy slow soul-hearts rise from the bottom; popping one drops the next heart-arcWall count by 2 |
+| **MIDAS II — The Tribute** | **TRIBUTE BEARERS**: 2–3 amber bearers; killing one drops 3 real gold AND subtracts its vacuumed share from `e.hoard` (kill to STARVE the king); warm-amber body, never loot-gold |
+| MIDAS III — The Gilded Court | **GILDED COURTIERS**: 2 nobles orbitPoint r200, single wheel-spokes, respawn 5s |
+
+- Sound: one shared retinue MATERIALIZE cue (detuned triangle-pair, minor-third glide, pitched per boss bronze/shade/court);
+  retinue death = popcorn pop a third above sector popcorn. Segment-clear layers each fired kit's one-shot over the phase
+  gong. THE ASSESSORS earn one bespoke voice (square muzzle chirp vs AMMIT's sine body; death = pitch-bent zap + coin shimmer).
+
+---
+
+## 9. Engine mechanics (settled, ruling 4)
+
+- **(a) PIERCE DEDUP.** Per-shot recent-hit memory: `s.hitList` (reuse array, `length=0` in `allocShot`; in `collideShots`
+  skip `if s.hitList.indexOf(e)>=0`, push after hit). Pierce budget `maxHits=pierce+1` stays the per-shot lifetime cap on
+  DISTINCT enemies. Kills the frame-rehit exploit (~55 fabricated DPS). Apply to the TALOS nail branch too. **Quetz/Guan Yu
+  balance assumes this honest version.**
+- **(b) AUTO-FIRE toggle.** Settings/pause option, persisted in `goldwake_meta`, fires as if Z held. **Default OFF.**
+- **(c) KIT-SWAP HYGIENE.** Swapping attack/special god expires that kit's live entities (clones, ravens, hazards, decoy,
+  wraiths) **immediately** via `expireOwnedOnSwap()` (§5). Universal rule.
+
+---
+
+## 10. Implementation order
+
+**Pass 1 — Foundations (engine + faction + status).** §9 (pierce-dedup, auto-fire, kit-swap hygiene); §5 `drawOwned/drawMimic`
++ `expireOwnedOnSwap` recall; §4 the 4-zone status system + confuse deletion + field renames + weak/charm color split.
+Cross-cutting; unblocks everything.
+
+**Pass 2 — Kit reworks.** The 8 reworked kits: Artemis QUARRY + §3 PRECISION, Ares War-Heat, Odin ÓÐR + Huginn&Muninn charm,
+Loki PILFER, the three differentiated specials, Quetz CONSTRICTOR + COIL. Then bring the 7 unchanged kits up to code
+(Poseidon/Guan Yu feedback, Heimdall 4th-shot tell, Anubis execute tell…).
+
+**Pass 3 — Sound.** §6 material-voice table + 9 builders + pantheon table + mix law; per-god bespoke event cues; Communion
+stings; status apply-stings.
+
+**Pass 4 — Cards & boss-adds.** §7 three-line template + STARLINE + the 3 star code-fixes + APEX/generic copy; §8 damage-tithe
+reroute + universal fallback + retinues + Assessors.
+
+---
+
+## 11. OPEN CALLS
+
+Implementation proceeds on the default; `[VARIANT]` calls get variant renders for Warren to pick; `[CONFIRM]` = taste
+ratification, default proceeds; `[SCOPE]` = content-work confirm.
+
+- **Artemis** — [VARIANT] arrow accent (default silver-white body + moon-blue rim; a warmer read bends the cyan/white
+  player-fire law). · [VARIANT] Quarry indicator (default tightening chevron vs orbiting shard). · [SCOPE] weak-point
+  authoring into TALOS/AMMIT/MIDAS + elite spellcards (default acceptable; fallback = generic Marksmanship tier).
+- **Ares** — [VARIANT] war-scythe serration (must read distinct from Guan Yu's green crescent; 2–3 edge treatments). ·
+  [CONFIRM] proximity source over graze (default proximity; graze stays HUBRIS's). · [CONFIRM] bands 260/440 +
+  fire-not-required (default; watch corner-hug cheese). · [CONFIRM] war-drum mix.
+- **Odin** — [CONFIRM] ÓÐr T2 shake (default light kick every 2nd lance-shot). · [VARIANT] tier-flash color (default gold
+  up / steel-blue down). · [CONFIRM] raven scaling = continuous MEMORY (default). · [CONFIRM] drop 'shop rerolls half' (default drop).
+- **Loki** — [VARIANT] stolen-bullet feel (default flip + reverse + gentle homing; pure-reverse-outward is cleaner on dense
+  walls). · [SCOPE] DOPPELGANGER green-boss capstone (default DEFERRED — not built this pass).
+- **Specials** — [VARIANT] the three silhouettes (Zeus column height, Artemis needle proportions, Aphrodite heart geometry).
+  · [CONFIRM] Zeus 140px aim-lock vs pure-lane (playtest). · [CONFIRM] THE QUIVER ships now as a mod (default now).
+- **Status** — [CONFIRM] keep SHAKEN as terror's boss-variant (default keep). · [CONFIRM] charm recolor to player-cyan
+  (default acceptable — cyan = faction law). · [VARIANT] BURN placement (default UNDERFOOT vs shoulders) + WEAK color (default grey-violet).
+- **Sound** — [CONFIRM] Loki = ELECTRIC + warble (default) vs a bespoke 10th glitch material. · [CONFIRM] Communion stings
+  assume Pantheon Communion ships (default include).
+- **Cards** — [CONFIRM] ratify HONEST-SPLIT: leveling ATTACK star grows the god SIGNATURE, NOT the base 3-stream (default
+  yes; the alternative forces a full ladder retune + enemy-HP pass). · [VARIANT] signature-bloom +8%/star (eyeball at 5
+  stars on a 200-bullet screen). · [CONFIRM] APEX exposes raw numbers ×5→×6 (default yes).
+- **Boss summons** — [CONFIRM] AMMIT Assessors REPLACE her 42-ring (default replace vs additive-on-top). · [CONFIRM] Tribute
+  Bearers alter the finale math — smaller hoard = smaller jackpot (default bless). · [VARIANT] shared materialize FX +
+  Tribute Bearer amber-body-vs-gold-spill. · [CONFIRM] TALOS Bronze Splinters keep or lean-drop (default keep; Rivets non-negotiable).
+- **Quetz** — [VARIANT] max-coil ring jade→hot-WHITE (default) vs jade→GOLD (Apotheosis-palette tie).
+- **Ra** — [VARIANT] beam width A tightening-lance (recommended default) / B swelling-furnace / C countable-dial. · [CONFIRM]
+  notches always-on (default) vs occluded-only. · [CONFIRM] audio detune-collapse + per-stage bell (default) vs chord vs
+  both. · [CONFIRM] boss-never-cools (default yes — deliberately makes Ra strongest vs bosses).
+- **Faction** — [CONFIRM] Apostate decoy 0.6s curdle (default keep; else instant-red). · [VARIANT] Wukong clone hue gold vs
+  amber. · [VARIANT] Ares wraith treatment (cyan-heart-only vs +cyan trail).
+
+**Closed by orchestrator rulings (were flagged, now settled):** confuse/Loki (ruling 1 — confuse dead, Pilfer replaces,
+purple mirror-chevron tell dropped) · Quetz role (ruling 2 — CONSTRICTOR/attack, serpent voice on shot correct).
+
+**Conflicts resolved beyond the rulings:** (1) Artemis **special** — attack rec's KILLING ARROW vs specials rec's THE LOOSED
+ARROW: the dedicated specials record is authority → **THE LOOSED ARROW**, grafted with "slam pierced foes to full Quarry."
+(2) **MARKED tell** — specials rec proposed green chevrons, status rec proposed amber L-brackets: the dedicated status record
+is authority → **amber L-brackets** globally (the specials rec itself flagged this open).
+
+---
+
+## 12. Art manifest delta (art/PROMPTS.md)
+
+Every decision record self-certifies `artImpact: unchanged` — all kit visuals are procedural. Checking the four portraits
+whose *kit identity* changed against what the prompts actually depict:
+
+| Prompt | Depicts | Verdict |
+|---|---|---|
+| **#9 ARTEMIS** | silver bow + glowing marking-arrow nocked | **UNCHANGED** — bow + arrow are still the props of THE HUNT / THE LOOSED ARROW; mechanic changed, depiction didn't |
+| **#11 ARES** | flanked by Phobos & Deimos wraiths + notched spear | **UNCHANGED** — wraiths = the still-current special; the spear covers the new War-Heat spear-bundle/scythe |
+| **#15 LOKI** | shadow-twin decoy peeling off; venom-green accent | **UNCHANGED** — decoy = the still-current special; PILFER depicts no god-prop; green accent still matches |
+| **#16 ODIN** | leveling Gungnir + Huginn & Muninn circling | **UNCHANGED** — Gungnir = the still-current special; ravens migrate attack→charm but stay an Odin motif; the rune-lance is spear-adjacent |
+
+**Digest: all 32 prompts are SAFE TO GEN unchanged.** No portrait needs an edit and no new painted asset is required — the
+reworks live entirely in procedural combat art, sound, and card text. Two procedural-only notes (not PROMPTS.md edits):
+Odin's HUGINN & MUNINN is now a **charm**, so it consumes one slot in the existing charm-relic icon template batch (#30, ×15)
+rather than a bespoke asset; the Apostate mimic costume (§5) is procedural retint/orientation on existing SHIP hulls, not a
+portrait change (#25 stays as-is).
