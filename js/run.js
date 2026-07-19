@@ -166,6 +166,7 @@
     guanyu: [['guanWide', 'crescents wider; +1 pierce', 'attack'], ['guanOath', 'Peach-Garden Oath: +30% attack damage while Focused', 'attack'], ['guanWake', 'the sweep leaves a burning arc', 'special'], ['guanSpoils', 'foes slain by the sweep pay +50% gold', 'special']],
     jade: [['jadeOften', 'edicts issue twice as often', 'attack'], ['jadeStun', 'Stunned foes take +25% damage', 'any'], ['jadeWrath', 'the Verdict volley fires a second wave at 50%', 'special'], ['jadeTribute', 'Weakened foes pay +30% gold on death', 'any']]
   };
+  Run.MODS = MODS;
   // mods that are one-shot (skip once owned); zeusChain / artemisCrit stack
   var BOOL_MODS = { zeusCrit: 1, zeusFork: 1, zeusField: 1, poseidonBig: 1, poseidonDrag: 1, poseidonSplash: 1, poseidonForce: 1,
     artemisRefund: 1, artemisSpread: 1, artemisMulti: 1, aphroLong: 1, aphroExplode: 1, aphroTaunt: 1, aphroFast: 1,

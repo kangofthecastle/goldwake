@@ -182,7 +182,7 @@
       },
       // ARES WAR-HEAT: frenzyF (0..1) is the real proximity meter; stacks = round(frenzyF*10)
       // is kept in lockstep so every existing consumer (HUD pips, frenzyRate, mods) keeps working.
-      frenzy: { stacks: 0, decayT: 0, frenzyF: 0, graceT: 0, prevTier: 0, bloom: 0 },
+      frenzy: { stacks: 0, decayT: 0, frenzyF: 0, boost: 0, pinT: 0, graceT: 0, prevTier: 0, bloom: 0 },
       thorBuff: 0,
       hammers: [],
       // ARTEMIS THE HUNT — the Hunted brand lives here (a pointer + ramp), not per-enemy,
@@ -192,7 +192,7 @@
       // seamT = telegraph clock, y = band altitude, life = band remaining once solid.
       bifrost: { t: 0, seamT: 0, y: 0, life: 0, active: false },
       // god entities
-      ra: { active: false, target: null, ramp: 0, hold: 0, graceT: 0, tier: 0, tx: 0, ty0: 0, ty1: 0 },
+      ra: { active: false, target: null, targetSeq: 0, ramp: 0, hold: 0, graceT: 0, tier: 0, tx: 0, ty0: 0, ty1: 0 },
       decoy: { active: false, x: 0, y: 0, timer: 0, absorb: 0 },
       ravens: [], ravenKills: 0,
       gungnir: { active: false, x: 0, y: 0, timer: 0, tx: 0, ty: 0, ang: 0, visited: [] },
@@ -720,7 +720,7 @@
         break;
       case 'ares':          // terror nova + frenzy jumps to max (terrify → Shaken on bosses)
         each(function (e) { terrify(e, p.x, p.y); });
-        G.frenzy.stacks = 10; G.frenzy.decayT = G.mods.aresDecay ? 3.0 : 1.5;
+        G.frenzy.pinT = G.mods.aresDecay ? 3.0 : 1.5;   // pin max War-Heat for the apotheosis window (updateFrenzy honors pinT)
         break;
       case 'ra':            // ignite all + beam surges to full ramp for 4s
         each(function (e) { applyBurn(e, 20 * R, 3.0); });
@@ -1229,13 +1229,19 @@
     var THR = [0, 0.60 * tscale, 1.30 * tscale, 2.00 * tscale];
     var MUL = [1.0, 1.5, 2.0, rr ? 2.875 : 2.5];
     var boss = target && target.boss;
-    if (target && target === G.ra.target) { G.ra.hold += dt; G.ra.graceT = 0.30; }
-    else if (target) { G.ra.target = target; G.ra.hold = Math.max(0, G.ra.hold - THR[1]); G.ra.graceT = 0.30; }   // switch: bleed a tier
-    else {
-      // no target: BOSS LOCK holds hold monotonic only while a boss is the target;
-      // otherwise the grace window, then bleed ~one tier per 0.30s.
+    // seq-guarded held target: a reused pool slot is NOT the same held target, and a
+    // dead held target is cleared in killEnemy (hold zeroed there — no post-boss boss-lock).
+    var held = G.ra.target, heldValid = held && held.active && !held.dying && held.seq === G.ra.targetSeq;
+    if (target) {
+      if (heldValid && target === held) { G.ra.hold += dt; G.ra.graceT = 0.30; }   // same target: ramp
+      else if (!heldValid) { G.ra.target = target; G.ra.targetSeq = target.seq; G.ra.hold += dt; G.ra.graceT = 0.30; }   // held gone: adopt fresh
+      else if (G.ra.graceT > 0) { G.ra.graceT -= dt; G.ra.hold += dt; }   // a different front foe within grace: keep ramping the held target (no per-frame collapse)
+      else { G.ra.target = target; G.ra.targetSeq = target.seq; G.ra.hold = Math.max(0, G.ra.hold - THR[1]); G.ra.graceT = 0.30; }   // grace lapsed: commit switch, bleed ONE tier once
+    } else {
+      // no target in column: BOSS LOCK holds hold monotonic only while a live boss is
+      // still the held target; otherwise the grace window, then bleed ~one tier per 0.30s.
       if (G.ra.graceT > 0) G.ra.graceT -= dt;
-      else if (!(G.ra.target && G.ra.target.boss)) G.ra.hold = Math.max(0, G.ra.hold - dt * 2.2);
+      else if (!(heldValid && held.boss)) G.ra.hold = Math.max(0, G.ra.hold - dt * 2.2);
     }
     if (boss) G.ra.graceT = 0.30;   // boss target never decays (Ra's boss signature)
     var tier = G.ra.hold >= THR[3] ? 3 : G.ra.hold >= THR[2] ? 2 : G.ra.hold >= THR[1] ? 1 : 0;
@@ -1592,10 +1598,14 @@
   // ARES WAR-HEAT — proximity builds the meter. addFrenzy (kill/segment gravy) now
   // nudges the continuous meter up rather than adding a whole discrete stack.
   function addFrenzy() {
-    G.frenzy.frenzyF = Math.min(1, G.frenzy.frenzyF + 0.10);   // redefined +0.10 (terror-kill duos = gravy)
+    // cross-kit gravy (GODS OF WAR / WILD HUNT terror-kills, Ares kills) grants a
+    // TEMPORARY stack boost that decays on its own timer, independent of attack god —
+    // so it feeds duos whose attack god isn't Ares (updateFrenzy no longer hard-zeroes it).
+    G.frenzy.boost = Math.min(1, G.frenzy.boost + 0.10);   // +0.10 boost meter (decays in updateFrenzy)
     syncFrenzyStacks();
   }
-  function syncFrenzyStacks() { G.frenzy.stacks = Math.round(G.frenzy.frenzyF * 10); }
+  // effective meter = proximity frenzyF + cross-kit boost, clamped to 1; stacks drive all consumers.
+  function syncFrenzyStacks() { G.frenzy.stacks = Math.round(Math.min(1, G.frenzy.frenzyF + G.frenzy.boost) * 10); }
   function anyBurning() {
     var found = false;
     Engine.enemies.forEach(function (e) { if (e.burnT > 0) found = true; });
@@ -1607,8 +1617,19 @@
   var WARHEAT_CLOSE = 260, WARHEAT_FAR = 440;
   function updateFrenzy(dt) {
     if (G.frenzy.bloom > 0) G.frenzy.bloom -= dt;
+    // cross-kit boost (addFrenzy) decays on its own timer regardless of attack god,
+    // so GODS OF WAR / WILD HUNT terror-kills keep feeding frenzy under Guan Yu etc.
+    if (G.frenzy.boost > 0) G.frenzy.boost = Math.max(0, G.frenzy.boost - 0.20 * dt);
     if (G.attackGod !== 'ares') {
-      if (G.frenzy.frenzyF !== 0 || G.frenzy.stacks !== 0) { G.frenzy.frenzyF = 0; G.frenzy.stacks = 0; }
+      // proximity meter is Ares-only: zero frenzyF, but leave the boost (synced below) alone.
+      if (G.frenzy.frenzyF !== 0) G.frenzy.frenzyF = 0;
+      G.frenzy.pinT = 0;
+      syncFrenzyStacks();
+      return;
+    }
+    if (G.frenzy.pinT > 0) {   // APOTHEOSIS: pin max War-Heat for the apotheosis window
+      G.frenzy.pinT -= dt; G.frenzy.frenzyF = 1; syncFrenzyStacks();
+      if (G.mods.aresCharge) addCharge(SP_RECHARGE * G.stats.spRecharge * dt);
       return;
     }
     var ne = nearestEnemy(G.player.x, G.player.y);
@@ -1911,7 +1932,7 @@
     // Ra replaces projectile fire with a continuous solar beam
     if (G.attackGod === 'ra') {
       if (wantFire()) raBeam(dt);
-      else { G.ra.active = false; G.ra.target = null; G.ra.ramp = 0; G.ra.hold = 0; }
+      else { G.ra.active = false; G.ra.target = null; G.ra.targetSeq = 0; G.ra.ramp = 0; G.ra.hold = 0; }
     } else {
       p.fireT -= dt;
       if (wantFire() && p.fireT <= 0) {
@@ -2133,6 +2154,9 @@
         // ARTEMIS arrows steer ONLY toward the branded Hunted; with none branded
         // they fly dead straight (huntHome, no fallback) — the "straight until branded" law.
         var t = s.huntHome ? huntFoe() : s.loosed ? loosedTarget() : nearestEnemy(s.x, s.y);
+        // LOOSED ARROW only re-aims at a target roughly AHEAD (forward cone) — it
+        // pierces through, never U-turns back onto a foe it already passed.
+        if (t && s.loosed) { var fdx = aimTargetX(t) - s.x, fdy = aimTargetY(t) - s.y; if (fdx * s.vx + fdy * s.vy <= 0) t = null; }
         if (t) {
           var desired = Math.atan2(aimTargetY(t) - s.y, aimTargetX(t) - s.x);   // seek the nail, not the immune body
           var cur = Math.atan2(s.vy, s.vx);
@@ -2371,7 +2395,7 @@
   function updateStatus(e, dt) {
     // marked / weak decay
     if (e.markT > 0) { e.markT -= dt; if (e.markT <= 0) e.marked = false; }
-    if (e.weakT > 0) { e.weakT -= dt; if (e.weakT <= 0) e.weak = false; }
+    if (e.weakT > 0) { e.weakT -= dt; if (e.weakT <= 0) { e.weak = false; e.weakStacks = 0; } }   // lapsed Weaken drops its stacks (no stale-stack re-hit bonus)
     // Burn (DoT); Ra 'spread' handled in killEnemy on death
     if (e.burnT > 0) {
       e.burnT -= dt; e.hp -= e.burnDps * dt; clampBossHp(e);   // burn respects the spellcard floor too
@@ -2397,8 +2421,13 @@
       else if (e.nodeState === 2 && e.nodeT <= 0) { e.nodeState = 0; }
     }
     if (e.nodeHit > 0) e.nodeHit -= dt;
-    // HUNTER'S EYE re-anchor — Marked foes always expose a node (kept re-armed).
-    if (G.duos.huntersEye && e.marked && e.nodeState === 0) openNode(e, 0, -e.scale * 0.2);
+    // HUNTER'S EYE re-anchor — Marked foes ALWAYS expose an open node, force-opened
+    // (no telegraph delay) and CENTERED on the hull so Artemis's body-homing kind-9
+    // arrows reliably clip it (an offset node the arrows steer past would defeat the duo).
+    if (G.duos.huntersEye && e.marked) {
+      if (e.nodeState !== 2) { e.nodeState = 2; e.nodeDX = 0; e.nodeDY = 0; e.nodeT = 2.0; e.nodeX = e.x; e.nodeY = e.y; }
+      else if (e.nodeT < 0.5) { e.nodeDX = 0; e.nodeDY = 0; e.nodeT = 2.0; }   // keep it open + centered while Marked
+    }
     // §3 PRECISION cadence for ELITES (bosses author nodes on spellcard beats instead):
     // a telegraphed node opens ~every 3.4s so crit lives on the add-less/elite fights.
     if (e.elite && !e.boss) { if (e.nodeCd > 0) e.nodeCd -= dt; else if (e.nodeState === 0) { openNode(e, (Math.random() - 0.5) * e.scale * 0.4, -e.scale * 0.15); e.nodeCd = 3.4; } }
@@ -3538,6 +3567,9 @@
   function killEnemy(e, reward) {
     if (e.dying) return;
     e.dying = true;
+    // Ra LENS: a dead held target releases the beam lock — hold resets so the next
+    // foe ramps from scratch (no post-boss-kill CORONA on a fresh mook).
+    if (G.ra.target === e) { G.ra.target = null; G.ra.targetSeq = 0; G.ra.hold = 0; G.ra.graceT = 0; }
     // formation accounting: a rewarded kill credits the squadron (once, deduped);
     // a reward=false release (path exit / despawn) marks it escaped (no wipe) —
     // unless the member was already credited (e.g. charmed, then flew off).
@@ -3622,11 +3654,11 @@
       if (b.friendly) {
         // PILFER — gentle-home (2.2 rad/s) to the nearest OTHER live enemy.
         var htgt = null, hbd = 1e18;
-        Engine.enemies.forEach(function (e) { if (e.dying || e.charmed || e._i === b.srcId) return; var dx = e.x - b.x, dy = e.y - b.y, d = dx * dx + dy * dy; if (d < hbd) { hbd = d; htgt = e; } });
+        Engine.enemies.forEach(function (e) { if (e.dying || e.charmed || (e._i === b.srcId && e.seq === b.srcSeq)) return; var dx = e.x - b.x, dy = e.y - b.y, d = dx * dx + dy * dy; if (d < hbd) { hbd = d; htgt = e; } });
         if (htgt) { var des = Math.atan2(htgt.y - b.y, htgt.x - b.x), dd = des - b.dir; while (dd > Math.PI) dd -= TAU; while (dd < -Math.PI) dd += TAU; var mx = 2.2 * dt; if (dd > mx) dd = mx; if (dd < -mx) dd = -mx; b.dir += dd; }
         var hitF = false;
         Engine.enemies.forEach(function (e) {
-          if (hitF || e.dying || e.charmed || e._i === b.srcId) return;
+          if (hitF || e.dying || e.charmed || (e._i === b.srcId && e.seq === b.srcSeq)) return;
           var tx = e.nailActive ? e.nailX : e.x, ty = e.nailActive ? e.nailY : e.y, tr = e.nailActive ? e.nailR : e.radius;
           if (Engine.hit(b.x, b.y, b.radius, tx, ty, tr)) {
             var fd = flipDmg;
@@ -3829,19 +3861,21 @@
       if (b.friendly) return;
       var dx = b.x - foe.x, dy = b.y - foe.y, d = Math.sqrt(dx * dx + dy * dy);
       if (d > 240) return;
-      var emit = 1e9;
-      Engine.enemies.forEach(function (e) { if (e.dying) return; var ex = b.x - e.x, ey = b.y - e.y, ed = ex * ex + ey * ey; if (ed < emit) emit = ed; });
-      var score = d + (emit < 80 * 80 ? 300 : 0);   // penalise bullets still hugging an emitter
+      // the score only needs whether ANY live emitter is within 80px — early-exit the
+      // scan the instant one is found (avoids a full O(enemies) sweep per candidate bullet).
+      var hugging = false, eit = Engine.enemies.items;
+      for (var ei = 0; ei < eit.length; ei++) { var e = eit[ei]; if (!e.active || e.dying) continue; var ex = b.x - e.x, ey = b.y - e.y; if (ex * ex + ey * ey < 80 * 80) { hugging = true; break; } }
+      var score = d + (hugging ? 300 : 0);   // penalise bullets still hugging an emitter
       cand.push({ b: b, s: score });
     });
     cand.sort(function (a, b) { return a.s - b.s; });
     var n = Math.min(count, cand.length);
     // boss self-harm budget: a single cast can bleed a boss for at most 0.5% maxhp.
     var boss = G.boss;
-    if (boss && !boss.dying) boss.trickBudget = (boss.trickBudget || 0) + boss.maxhp * 0.005;
+    if (boss && !boss.dying) boss.trickBudget = Math.min(boss.maxhp * 0.005, (boss.trickBudget || 0) + boss.maxhp * 0.005);   // clamp: unspent budget never exceeds ONE cast's cap (delayed daggers can't dump multiple casts)
     for (var i = 0; i < n; i++) {
       var b = cand[i].b;
-      b.friendly = true; b.srcId = foe._i;
+      b.friendly = true; b.srcId = foe._i; b.srcSeq = foe.seq;   // stamp seq: a reused pool slot is NOT the source foe (mismatch => no exclusion)
       b.r = 0.55; b.g = 1.0; b.b = 0.35;
       b.dir += Math.PI;                              // reverse 180°
       b.flash = 0.15;
@@ -4003,17 +4037,15 @@
     // drop one player-faction shot at (x,y) heading up — lets the harness fire at
     // the nail vs the body and confirm the routing (body=0, nail drains) via collideShots.
     testShot: function (x, y, dmg) {
-      var s = Engine.shots.alloc(); if (!s) return;
+      var s = allocShot(); if (!s) return;   // allocShot resets ALL per-shot flags (huntHome/loosed/refracted/weave/turn/phase/…) so a recycled slot can't leak state into the verify surface
       s.x = x; s.y = y; s.vx = 0; s.vy = -1200; s.radius = 12; s.damage = dmg || 1000; s.faction = 0;
-      s.pierce = 0; s.kind = 0; s.crescent = false; s.cloneShot = false; s.markHit = false; s.forceCrit = 0; s.homing = false; s.big = false; s.age = 0; s.life = 2.5;
-      resetShotHits(s);
+      s.pierce = 0; s.kind = 0; s.big = false; s.age = 0; s.life = 2.5; s.grazed = false;
     },
     // §9a verify: fire a piercing shot (pierce n, weak dmg) at (x,y) going up.
     testPierceShot: function (x, y, dmg, pierce) {
-      var s = Engine.shots.alloc(); if (!s) return;
+      var s = allocShot(); if (!s) return;   // route through allocShot (same full reset as testShot)
       s.x = x; s.y = y; s.vx = 0; s.vy = -1200; s.radius = 14; s.damage = dmg || 5; s.faction = 0;
-      s.pierce = pierce == null ? 4 : pierce; s.kind = 0; s.crescent = false; s.cloneShot = false; s.markHit = false; s.forceCrit = 0; s.homing = false; s.big = false; s.age = 0; s.life = 2.5;
-      resetShotHits(s);
+      s.pierce = pierce == null ? 4 : pierce; s.kind = 0; s.big = false; s.age = 0; s.life = 2.5; s.grazed = false;
     },
     shotCount: function () { return Engine.shots.count(); },
     setAutoFire: function (v) { Run.meta.autoFire = !!v; },
@@ -4081,11 +4113,24 @@
     fireNow: function (focus) { fireShots(!!focus); },
     specialNow: function () { doSpecial(true); },
     huntInfo: function () { var h = G.hunt; return { foeSeq: h.foe ? h.foeSeq : 0, foeIdx: (h.foe ? h.foe._i : -1), stacks: h.stacks, swap: h.swap }; },
-    frenzyInfo: function () { return { f: G.frenzy.frenzyF, stacks: G.frenzy.stacks, prevTier: G.frenzy.prevTier }; },
+    frenzyInfo: function () { return { f: G.frenzy.frenzyF, boost: G.frenzy.boost, pinT: G.frenzy.pinT, stacks: G.frenzy.stacks, prevTier: G.frenzy.prevTier }; },
     setFrenzy: function (f) { G.frenzy.frenzyF = f; G.frenzy.stacks = Math.round(f * 10); },
-    enemyKit: function (i) { var e = Engine.enemies.items[i]; if (!e || !e.active) return null; return { runes: e.runes, runeHits: e.runeHits, coilQ: e.coilQ, coilT: e.coilT, mischief: e.mischief, nodeState: e.nodeState, marked: e.marked, weakStacks: e.weakStacks || 0, hp: e.hp, maxhp: e.maxhp }; },
+    addFrenzy: function () { addFrenzy(); },   // cross-kit gravy hook (GODS OF WAR / WILD HUNT feed)
+    enemyKit: function (i) { var e = Engine.enemies.items[i]; if (!e || !e.active) return null; return { runes: e.runes, runeHits: e.runeHits, coilQ: e.coilQ, coilT: e.coilT, mischief: e.mischief, nodeState: e.nodeState, nodeDX: e.nodeDX, nodeDY: e.nodeDY, marked: e.marked, weak: e.weak, weakStacks: e.weakStacks || 0, trickBudget: e.trickBudget || 0, hp: e.hp, maxhp: e.maxhp }; },
+    // set per-enemy kit state directly (verify only): runes/coilQ/mischief/weakStacks.
+    setKitState: function (i, o) { var e = Engine.enemies.items[i]; if (!e || !e.active) return; if (o.runes != null) e.runes = o.runes; if (o.runeHits != null) e.runeHits = o.runeHits; if (o.coilQ != null) { e.coilQ = o.coilQ; e.coilT = 0.9; } if (o.mischief != null) { e.mischief = o.mischief; e.mischiefT = 2.5; } if (o.weakStacks != null) e.weakStacks = o.weakStacks; },
+    // run one PILFER cast off enemy i (adds one cast's trickBudget to the boss, clamped).
+    pilferFoe: function (i) { var e = Engine.enemies.items[i]; if (e && e.active) lokiPilfer(e, 8); },
+    // place enemy i precisely (verify only) — lets the harness build deterministic Ra columns.
+    setEnemyPos: function (i, x, y) { var e = Engine.enemies.items[i]; if (e && e.active) { e.x = x; e.y = y; e.vx = 0; e.vy = 0; } },
+    // read a shot slot's per-shot flags (verify only) — proves testShot leaks no stale state.
+    shotAt: function (i) { var s = Engine.shots.items[i]; if (!s || !s.active) return null; return { kind: s.kind, homing: !!s.homing, weave: s.weave, turn: s.turn, phase: s.phase, huntHome: !!s.huntHome, loosed: !!s.loosed, refracted: !!s.refracted }; },
     openNode: function (i) { var e = Engine.enemies.items[i]; if (e && e.active) openNode(e, 0, -e.scale * 0.2); },
     forceNodeOpen: function (i) { var e = Engine.enemies.items[i]; if (e && e.active) { e.nodeState = 2; e.nodeT = 2.0; e.nodeDX = 0; e.nodeDY = 0; e.nodeX = e.x; e.nodeY = e.y; } },
+    setCoil: function (i, q) { var e = Engine.enemies.items[i]; if (e && e.active) { e.coilQ = q; e.coilT = 0.9; } },
+    // one raw coil hit at the current coil level → returns the applied multiplier.
+    oneCoilHit: function (i) { var e = Engine.enemies.items[i]; if (!e || !e.active) return 0; return quetzCoilHit(e, 1000) / 1000; },
+    pinBoss: function (x, y) { var b = G.boss; if (b) { b.x = x; b.y = y; b.pathSegs = null; b.onUpdate = null; } },
     bifrostInfo: function () { var b = G.bifrost; return { t: b.t, seamT: b.seamT, active: b.active, life: b.life, y: b.y }; },
     setBifrostBand: function (y) { var b = G.bifrost; b.active = true; b.life = 4.0; b.seamT = 0; b.y = y == null ? (G.player.y - 300) : y; },
     ravenKills: function () { return G.ravenKills; },
@@ -4247,18 +4292,24 @@
     if (slot === 'attack') {
       for (i = 0; i < G.clones.length; i++) { c = G.clones[i]; recallFx(c.x, c.y); }
       G.clones.length = 0;
-      for (i = 0; i < G.ravens.length; i++) { c = G.ravens[i]; recallFx(c.x, c.y); }
-      G.ravens.length = 0;
+      // NOTE: ravens are NOT recalled here — they belong to the RAVEN QUILL charm
+      // (G.charms.charmOdin), not the attack slot, so an attack-god swap must not touch them.
       // Thor's in-flight Mjölnir hammers are ENTITIES, not fire-and-forget shots —
       // an unrecalled hammer orphan-flies and keeps smashing after the god is gone.
       // Recall like every other owned entity (implosion pop + immediate release).
       for (i = 0; i < G.hammers.length; i++) { c = G.hammers[i]; recallFx(c.x, c.y); }
       G.hammers.length = 0;
-      G.ra.active = false; G.ra.target = null; G.ra.ramp = 0; G.ra.hold = 0;   // stale beam can't paint post-swap
+      G.ra.active = false; G.ra.target = null; G.ra.targetSeq = 0; G.ra.ramp = 0; G.ra.hold = 0;   // stale beam can't paint post-swap
       expireKitHazards('zap');                                  // zeusField attack-mod hazard
       // §9 hygiene — attack-kit state clears on swap: Artemis brand, WAR-HEAT, BIFRÖST band.
       clearHunt();
-      G.frenzy.frenzyF = 0; G.frenzy.stacks = 0; G.frenzy.prevTier = 0;
+      G.frenzy.frenzyF = 0; G.frenzy.boost = 0; G.frenzy.pinT = 0; G.frenzy.stacks = 0; G.frenzy.prevTier = 0;
+      // per-enemy player-brand state is keyed to the OLD attack god (this runs BEFORE
+      // G.attackGod changes): clear it across ALL live enemies so it can't linger/redraw
+      // (or be re-inherited on an Odin->X->Odin round-trip) under an unrelated kit.
+      if (G.attackGod === 'odin') Engine.enemies.forEach(function (e) { e.runes = 0; e.runeHits = 0; });
+      else if (G.attackGod === 'quetz') Engine.enemies.forEach(function (e) { e.coilQ = 0; e.coilT = 0; });
+      else if (G.attackGod === 'loki') Engine.enemies.forEach(function (e) { e.mischief = 0; e.mischiefT = 0; e.pilferCd = 0; });
       G.bifrost.active = false; G.bifrost.seamT = 0; G.bifrost.life = 0; G.bifrost.t = 0;
     } else {
       if (G.decoy.active) { recallFx(G.decoy.x, G.decoy.y); G.decoy.active = false; }
@@ -4749,7 +4800,7 @@
       }
     }
     // ODIN — carved runes: small gold glyphs filling a band arced over the hull.
-    if (e.runes > 0) {
+    if (e.runes > 0 && G.attackGod === 'odin') {
       var ignite = e.runes >= 9, gy = e.y - s * 0.75, span = s * 1.0;
       for (var ri = 0; ri < e.runes; ri++) {
         var rf = e.runes > 1 ? (ri / (e.runes - 1) - 0.5) : 0;
@@ -4759,7 +4810,7 @@
       if (ignite) { var ip = 0.6 + 0.4 * Math.sin(t * 12); GL.draw(GL.SPR.GLOW, e.x, gy, span * 1.3, s * 0.4, 0, 1, 0.85, 0.4, 0.4 * ip); }
     }
     // QUETZ — coil rings tightening jade → hot-white; a CONSTRICT pulse-ring at max.
-    if (e.coilQ > 0) {
+    if (e.coilQ > 0 && G.attackGod === 'quetz') {
       var cf = e.coilQ / 6, cr = e.radius * (1.6 - 0.6 * cf);
       var cr2 = cf, r2 = 0.4 + 0.6 * cr2, g2 = 1.0, b2 = 0.5 + 0.5 * cr2;   // jade → hot-white
       GL.draw(GL.SPR.RING, e.x, e.y, cr * 2, cr * 2, t * 2, r2, g2, b2, 0.8);
@@ -4774,7 +4825,7 @@
       if (open) GL.draw(GL.SPR.RING, e.nodeX, e.nodeY, nr * 2.4, nr * 2.4, -t * 2, col[0], col[1], col[2], 0.5);
     }
     // LOKI — MISCHIEF triskele: 1/2/3 green kunai over the hull (stack = shape).
-    if (e.mischief > 0 && !e.dying) {
+    if (e.mischief > 0 && !e.dying && G.attackGod === 'loki') {
       for (var mi = 0; mi < e.mischief; mi++) {
         var ma = t * 2 + mi * (TAU / 3), mx = e.x + Math.cos(ma) * s * 0.3, my = e.y - s * 0.55 + Math.sin(ma) * s * 0.12;
         GL.draw(GL.SPR.KUNAI, mx, my, s * 0.16, s * 0.28, ma, 0.55, 1.0, 0.35, 0.9);

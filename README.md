@@ -153,25 +153,36 @@ boon in a slot *transforms* the mechanic itself; later cards only scale it.
 **Fifteen** transform gods across four pantheons, each with an attack transform, a
 special transform, and two mod cards:
 
-- **OLYMPUS** — **ZEUS** (chain lightning / storm bolt), **POSEIDON** (knockback +
-  impact / tidal wall that eats bullets into gold), **ARTEMIS** (+18% crit, ×3 /
-  Marking arrow), **APHRODITE** (**Charm** foes to your side / charm missile),
-  **ARES** (**Bloodlust** — kills stack frenzy fire-rate / **Phobos & Deimos** dread-
-  wraiths that **dive-bomb** foes, sowing **Terror** with every strike).
-- **HELIOPOLIS** — **RA** (attack fuses into a ramping **solar beam** / Solar Flare
-  ignites all with **Burn**).
+- **OLYMPUS** — **ZEUS** (chain lightning / **SKYFALL** — an instant lightning column
+  down your lane that **Stuns** and forks to neighbours), **POSEIDON** (knockback +
+  impact / tidal wall that eats bullets into gold), **ARTEMIS** (**THE HUNT** — silver
+  arrows brand the first foe as your **Hunted** and home to it; hits ramp +12% (cap
+  +96%), a Hunted kill splinters shards and chains the brand to the next prey / **THE
+  LOOSED ARROW** — a piercing, always-**precise** needle that Marks all it strikes, the
+  first becoming your Hunted at full ramp), **APHRODITE** (**Charm** foes / **HEARTSEEKER**
+  — a slow weaving heart that charms a minion or **Weakens** a boss and melts its bullets
+  to gold), **ARES** (**WAR-HEAT** — fighting at the muzzle stokes a proximity meter that
+  escalates your metal: javelins → xiphos leaf-blades → a doru bundle + whirling **labrys** /
+  **Phobos & Deimos** dread-wraiths that **dive-bomb** foes, sowing **Terror**). Crit is
+  retired game-wide → **PRECISION**: telegraphed **weak-point nodes** on boss/elite beats
+  that any aimed shot can strike for ×2.5.
+- **HELIOPOLIS** — **RA** (**SOLAR LENS** — hold fire on ONE foe to focus the beam through
+  4 heat stages up to ×2.5; bosses never cool / Solar Flare ignites all with **Burn**).
 - **DUAT** — **ANUBIS** (**Weigher of Hearts** — +25% damage below half health,
   **executes** non-bosses below 25% for bonus gold / **Judgment of Duat** — an
   instant strike on every foe for a share of its missing health).
-- **ASGARD** — **LOKI** (attack transform in rework — a plain shot for now /
-  Shadow-Twin decoy that draws all aimed fire and
-  soaks bullet streams — by design the twin never attacks: pure deception, the
-  one sanctioned exception to the every-special-deals-damage rule), **ODIN**
-  (orbiting ravens / **Gungnir** the never-miss piercing spear), **THOR**
-  (**Mjölnir** returning kinetic hammer / **Giant's Bane** colossal crush — pure
-  force, never lightning), **HEIMDALL** (**Bifröst Prism** — every 4th volley
-  refracts into a piercing rainbow fan / **Gjallarhorn** — a horn blast that
-  wounds and **Marks** every foe and shoves the whole bullet field away).
+- **ASGARD** — **LOKI** (**PILFER** — your hits pickpocket a foe (3 marks); on the third,
+  snatch the 8 nearest enemy bullets — they flip green, spin 180° and hunt their own kind /
+  Shadow-Twin decoy that draws all aimed fire and soaks streams — the twin never attacks:
+  the one sanctioned no-damage special), **ODIN** (**NINE NIGHTS** — one heavy rune-bolt;
+  every 4th hit carves a permanent **rune** into that foe, each +15% against it forever; the
+  ninth seals its doom (gold bolts that Mark) / **Gungnir** the never-miss piercing spear;
+  **Huginn & Muninn** migrate to the RAVEN QUILL charm — ravens that dive with any attack),
+  **THOR** (**Mjölnir** returning kinetic hammer / **Giant's Bane** colossal crush), **HEIMDALL**
+  (**THE BIFRÖST** — on a 6s beat a rainbow bridge forms above you (a dawn-seam warns first);
+  shots crossing it refract into **five rays**, foes touching it are **Marked**, focus narrows
+  the spectrum / **Gjallarhorn** — a horn blast that wounds and Marks every foe and shoves the
+  bullet field away).
 - **CELESTIAL COURT** — **WUKONG** (kills spawn **hair-clones** that copy your fire /
   Ruyi Jingu Bang staff pillar that can **Stun**), **GUAN YU** (shots become cleaving
   **crescent blades** that gain power per foe pierced / **Crescent Moon Sweep** — one
@@ -179,8 +190,9 @@ special transform, and two mod cards:
   (attacks issue homing imperial **edicts** that **Stun** / **Heaven's Verdict** — a
   volley of homing edicts, one per foe, Stunning each; the strongest takes a
   double-size edict).
-- **FIFTH SUN** — **QUETZALCOATL** (serpentine +pierce shots / Sky Serpent that eats
-  bullets into your **apotheosis gauge**).
+- **FIFTH SUN** — **QUETZALCOATL** (**CONSTRICTOR** — three streams braid into a plumed
+  helix (pierces 1); hold the braid on ONE body to **COIL** it +10%/bite up to +60%, look
+  away and it uncoils / Sky Serpent that eats bullets into your **apotheosis gauge**).
 **Charms** (passive, one per god) — collected through the run in drafts and shops,
 each **CHARM** is tied to a god but **needs no god slot**: it's how the fifteen gods you
 *didn't* pick still touch your run. Each is acquirable once (e.g. EAGLE FEATHER +damage
@@ -249,12 +261,14 @@ tags — each hangs one namespace on `window`.
 | `js/engine.js` | `window.Engine` | Fixed-timestep loop (60 Hz, dt clamped), keyboard input, preallocated **object pools** (4096 bullets / 256 shots / 128 enemies / 2048 particles / 512 gold), circle collision. |
 | `js/patterns.js` | `window.Patterns` | Danmaku emitter toolkit — legacy (aimed / fan / ring / spiral / whip / flower / spray) plus the **authored-geometry verbs** (`ringGap`, `pulse`, `arcWall`, `snake`, `crossfire`, `wheel`, `rain`, `burstAimed`), six bullet **families** (orb / ring / kunai / shard / pellet / star) with **size + speed tiers** (`o.fam` / `o.tier`), and global affix scalars (`setGlobal` for DENSE VEIL etc.). |
 | `js/run.js` | `window.Run` | **Roguelite structure**: seeded PRNG (mulberry32) + run generation, sector affixes, the **god-boon** draft + shop card UI and composition rules, the god metadata (`Run.GODS`), title / end screens, the localStorage meta layer, and the run-flow state machine. Drives Game; no combat sim. |
-| `js/game.js` | `window.Game` | **Combat / stage layer**: player, the **SPECIAL** weapon + charge meter, enemies, bosses, bullets, the **god-boon effects + enemy status system** (chain/knockback/crit/charm/burn/stun), Apotheosis, scoring, FX, the wave pool, hazards, and all in-combat HUD. Exposes the `Game.*` API that `run.js` calls (incl. `applyBoon`). |
+| `js/game.js` | `window.Game` | **Combat / stage layer**: player, the **SPECIAL** weapon + charge meter, enemies, bosses, bullets, the **god-boon effects + enemy status system** (chain/knockback/precision/charm/burn/stun + kit meters: Hunt/War-Heat/runes/coil/Bifröst), Apotheosis, scoring, FX, the wave pool, hazards, and all in-combat HUD. Exposes the `Game.*` API that `run.js` calls (incl. `applyBoon`). |
 
 **Status-effect architecture.** Enemies carry status fields
 (`charmMeter/charmed/charmT`, `marked/weak`, `burnT`, `stunT`, `terrorT/shakenT`).
-Attack hits route through `hitEnemy → damageEnemy(e, dmg, crit)` (which applies
-Marked/Weak/crit multipliers) then `applyAttackGod` (which stacks the status).
+Attack hits route through `hitEnemy → damageEnemy(e, dmg, precise)` (which applies
+Marked/Weak/**precise** ×2.5 multipliers — precise is earned only via a **weak-point
+node** overlap or `forceCrit`, no RNG) then `applyAttackGod` (which stacks the status
+or advances a kit meter: Hunt brand, Odin runes, Quetz coil, Loki mischief).
 `updateStatus` ticks burn and charm/mark/weak timers each frame. **Charmed
 foes** skip their `onUpdate` (no enemy fire), are excluded from all enemy→player
 collision and from being targeted by shots/hazards, run `updateCharmed` (seek the
