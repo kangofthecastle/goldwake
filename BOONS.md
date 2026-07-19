@@ -169,18 +169,32 @@ armory, Odin NINE NIGHTS, Heimdall THE BIFRÖST.
   through 4 heat stages, up to ×2.5; count the notches." / "★★★ ×2.25 beam DPS"
 - **BOSS** boss-lock trivially holds CORONA — Ra scales hardest vs TALOS/AMMIT/MIDAS.
 
-**ANUBIS** — Weigher of Hearts · Judgment of Duat — **OWNER-FLAGGED FOR FULL REWORK (2026-07-19)**: "attack
-and special are things that feel like they should just be extra boons, rather than attacks" — both are
-invisible math riders, failing Boon Law #1. Ruling: the current effects DEMOTE to Anubis mods; new visible
-ATK/SP transforms to be designed (pitch pending owner ratification — leading candidates: THE WEIGHING
-per-foe scales-tip → visible verdict/execute event as the attack; GATE OF DUAT sand-vortex pull as the
-special). Until ratified, the sheet below is the LEGACY kit, kept only so Pass 3/4 wiring has a target.
-- **ATK (legacy)**: +25% dmg below half HP; **executes** non-bosses <25% for gold. *Amber shot darkens over
-  low-HP foes.* Voice BELL, darker + sub gong-ping <50%. → demotes to mod(s) on rework.
-- **SP JUDGMENT OF DUAT (legacy)**: instant strike on every foe for a share of missing HP. → demotes/absorbs
-  into the new special on rework.
-- **★** atk→below-half bonus · sp→judgment share.
-- **BOSS** execute→flat below-half bonus (execute-immune); phase's final blow drops an apotheosis shard + pays +50% segment cancel-gold (§8).
+**ANUBIS** — THE WEIGHING · GATE OF DUAT (REWORKED, owner-ratified 2026-07-19; old attack+special ruled
+"things that feel like they should just be extra boons" — invisible math riders demoted to mods)
+- **ATK THE WEIGHING**: amber ankh-tipped bolts. Every foe hit accrues `e.scaleW` (+dmg dealt per hit);
+  glyph = small gold **scales that visibly tip** with weight (angle ∝ `scaleW/threshold`, threshold =
+  `maxhp*K` — trash tips in 2–3 hits, elites take commitment; a stack-mark like Loki's MISCHIEF, not a §4
+  status). At tip → **THE VERDICT**: non-boss is **devoured** (jackal-shadow snap FX, execute, +50% bonus
+  gold); boss/elite takes a judgment burst (`maxhp*0.02`, floor vs LANCE_DMG scaling) + **Weak** 2 stacks;
+  scales reset and re-arm (repeatable on bosses). *Amber bolt; gold scales glyph; verdict = snap silhouette
+  + scales-tip ring.* Voice BELL darker; verdict = sub gong + tip-ring. Overlap note: per-enemy accumulator
+  like Odin's runes, but Odin studies ONE target forever — Anubis serially sentences everything he touches.
+- **SP GATE OF DUAT**: a sand-vortex gate tears open at the bottom of the field (~2.5s). Every WOUNDED foe
+  (hp < max) is **dragged** toward it (displacement pull — the mirror of Poseidon's push; bosses immovable)
+  and takes a share of missing HP over the duration (absorbs old Judgment of Duat's identity); non-bosses
+  that die at the gate pay bonus gold. *Sand vortex + soul-wisps streaming down.* Voice BELL + low sand-roar.
+- **MODS (the demoted legacy effects)**: **HEAVY HEART** — foes below half HP tip 2× faster (the old +25%
+  below-half, reborn); **FEAST OF THE FAITHFUL** — verdict/gate kill gold +50%.
+- **★** atk→verdict burst dmg & tip-rate · sp→gate missing-HP share & pull strength.
+- **CARD ATK**: "THE WEIGHING — your hits load the scales on every foe; when they tip, the Verdict devours
+  the weak for gold." / ▸ "Bosses take a judgment burst and Weaken instead; scales re-arm." / "★★★ ×2.25 verdict damage"
+- **CARD SP**: "GATE OF DUAT — a gate of sand opens below; the wounded are dragged toward judgment." /
+  ▸ "Missing-HP damage; kills at the gate pay bonus gold." / "★★★ ×2.25 gate damage"
+- **BOSS** repeatable verdicts ≈ a rhythm of judgment bursts + Weak; gate pays its missing-HP share hardest
+  late-phase. Phase's final blow keeps §8: apotheosis shard + 50% segment cancel-gold.
+- **RE-ANCHORS** deathSentence duo → "precise hits and max-ramp Artemis hits load double weight; a Hunted
+  kill tips the next scales instantly"; eternalDevotion unchanged (verdict-devoured rise as charmed ghosts);
+  HEART SCARAB charm unchanged.
 
 ### ASGARD
 
