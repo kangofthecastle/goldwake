@@ -120,6 +120,7 @@
   function makeState(opts) {
     opts = opts || {};
     Engine.clearAllPools();
+    boltsClear();
     timers.length = 0;
     Patterns.setGlobal(1, 1);
     goldCombo = 0; goldComboT = 0;
@@ -504,25 +505,177 @@
     p.r = col[0]; p.g = col[1]; p.b = col[2]; p.a = 1;
     p.spr = GL.SPR.GLOW; p.rot = 0; p.angVel = 0; p.kind = K_FLASH;
   }
-  // jagged additive polyline via a trail of bright dots (chain lightning)
-  function arcFx(x1, y1, x2, y2, col) {
-    var seg = 6, px = x1, py = y1;
-    for (var i = 1; i <= seg; i++) {
-      var t = i / seg;
-      var jx = (Math.random() - 0.5) * 40, jy = (Math.random() - 0.5) * 40;
-      var nx = x1 + (x2 - x1) * t + (i < seg ? jx : 0);
-      var ny = y1 + (y2 - y1) * t + (i < seg ? jy : 0);
-      var steps = 3;
-      for (var k = 0; k < steps; k++) {
-        var p = Engine.particles.alloc(); if (!p) return;
-        var f = k / steps;
-        p.x = px + (nx - px) * f; p.y = py + (ny - py) * f;
-        p.vx = 0; p.vy = 0; p.age = 0; p.life = 0.12;
-        p.size = 20; p.grow = -30; p.drag = 1;
-        p.r = col[0]; p.g = col[1]; p.b = col[2]; p.a = 1;
-        p.spr = GL.SPR.CORE; p.rot = 0; p.angVel = 0; p.kind = K_FLASH;
+  // ---------------------------------------------------------------------
+  // LIGHTNING — one shared bolt renderer for EVERY lightning user (Zeus chain
+  // + SKYFALL forks, IMPERIAL JUDGEMENT cloud bolts, jadeMirror banked bolts,
+  // duo arcs, HAVOC clone chains, OLYMPIAN STORM). Recursive midpoint-
+  // displacement paths (never a uniform zigzag) with fading side-branches, a
+  // two-pass draw (wide soft haze under a thin white-hot core), impact/origin
+  // flashes, and a ~90-140ms flicker of 2-3 re-strikes that re-randomise the
+  // path. Fully pooled — fixed Float32 buffers, no per-frame allocation. Three
+  // owner-pickable styles behind GL.setLightningStyle('A'|'B'|'C'). Kept UNDER
+  // the enemy-bullet bodies (drawn in render Pass A) and capped so player FX
+  // never obscures danmaku (DANMAKU.md readability law).
+  // ---------------------------------------------------------------------
+  var BOLT_MAX = 40;         // simultaneous bolts (readability cap)
+  var BOLT_PTS = 40;         // max points per leg (<=5 subdivisions -> 33)
+  var BOLT_BRPTS = 12;       // max points per side-branch
+  var BOLT_SEG_CAP = 640;    // hard per-frame drawn-segment cap (readability)
+  var _bScrA = new Float32Array(BOLT_PTS * 2);   // midpoint-displacement scratch
+  var _bScrB = new Float32Array(BOLT_PTS * 2);
+  var bolts = [];
+  (function initBolts() {
+    for (var i = 0; i < BOLT_MAX; i++) {
+      bolts.push({
+        active: false, legN: 1, bank: false, sheet: false,
+        ax: 0, ay: 0, jx: 0, jy: 0, bx: 0, by: 0,
+        r: 0.7, g: 0.9, b: 1, r1: 1, g1: 0.85, b1: 0.4,
+        coreW: 7, hazeW: 22, rough: 0.22, levels: 4, branches: 0, impact: 1,
+        delay: 0, t: 0, age0: 0, strikeDur: 0.033, strikesLeft: 2, alpha: 1,
+        L1n: 0, L1: new Float32Array(BOLT_PTS * 2),
+        L2n: 0, L2: new Float32Array(BOLT_PTS * 2),
+        brN: [0, 0], brPts: [new Float32Array(BOLT_BRPTS * 2), new Float32Array(BOLT_BRPTS * 2)],
+        minX: 0, maxX: 0, minY: 0, maxY: 0
+      });
+    }
+  })();
+  // Recursive midpoint displacement A->B into dst (interleaved x,y). Displacement
+  // is proportional to each segment's own length (so it halves as segments halve)
+  // scaled by `rough`, decreasing naturally per subdivision level. Returns #points.
+  function genPath(dst, ax, ay, bx, by, levels, rough) {
+    var src = _bScrA, tmp = _bScrB, sw;
+    src[0] = ax; src[1] = ay; src[2] = bx; src[3] = by;
+    var n = 2, cap = dst.length >> 1;
+    for (var lv = 0; lv < levels; lv++) {
+      if (n * 2 - 1 > cap) break;
+      var m = 0;
+      for (var i = 0; i < n - 1; i++) {
+        var x0 = src[i * 2], y0 = src[i * 2 + 1], x1 = src[i * 2 + 2], y1 = src[i * 2 + 3];
+        tmp[m * 2] = x0; tmp[m * 2 + 1] = y0; m++;
+        var dx = x1 - x0, dy = y1 - y0, len = Math.sqrt(dx * dx + dy * dy) || 1;
+        var d = (Math.random() - 0.5) * len * rough;
+        tmp[m * 2] = (x0 + x1) * 0.5 - dy / len * d;
+        tmp[m * 2 + 1] = (y0 + y1) * 0.5 + dx / len * d;
+        m++;
       }
-      px = nx; py = ny;
+      tmp[m * 2] = src[(n - 1) * 2]; tmp[m * 2 + 1] = src[(n - 1) * 2 + 1]; m++;
+      n = m; sw = src; src = tmp; tmp = sw;
+    }
+    var lim = n * 2;
+    for (var k = 0; k < lim; k++) dst[k] = src[k];
+    return n;
+  }
+  // (re-)randomise a bolt's whole path: both legs + side-branches + bounding box.
+  function boltGen(b) {
+    b.L1n = genPath(b.L1, b.ax, b.ay, b.legN === 2 ? b.jx : b.bx, b.legN === 2 ? b.jy : b.by, b.levels, b.rough);
+    b.L2n = b.legN === 2 ? genPath(b.L2, b.jx, b.jy, b.bx, b.by, b.levels, b.rough) : 0;
+    // side-branches fork off interior points of the TARGET leg, fading faster
+    var tl = b.legN === 2 ? b.L2 : b.L1, tn = b.legN === 2 ? b.L2n : b.L1n;
+    b.brN[0] = 0; b.brN[1] = 0;
+    for (var k = 0; k < b.branches && tn > 3; k++) {
+      var idx = 1 + ((Math.random() * (tn - 2)) | 0);
+      var px = tl[idx * 2], py = tl[idx * 2 + 1];
+      var pdx = tl[idx * 2 + 2] - tl[idx * 2 - 2], pdy = tl[idx * 2 + 3] - tl[idx * 2 - 1];
+      var ang = Math.atan2(pdy, pdx) + (Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 0.7);
+      var blen = 40 + Math.random() * 70;
+      b.brN[k] = genPath(b.brPts[k], px, py, px + Math.cos(ang) * blen, py + Math.sin(ang) * blen, 3, b.rough * 1.1);
+    }
+    // bounding column (variant-C sheet + readability box)
+    var mnx = 1e9, mxx = -1e9, mny = 1e9, mxy = -1e9, i, x, y;
+    for (i = 0; i < b.L1n; i++) { x = b.L1[i * 2]; y = b.L1[i * 2 + 1]; if (x < mnx) mnx = x; if (x > mxx) mxx = x; if (y < mny) mny = y; if (y > mxy) mxy = y; }
+    for (i = 0; i < b.L2n; i++) { x = b.L2[i * 2]; y = b.L2[i * 2 + 1]; if (x < mnx) mnx = x; if (x > mxx) mxx = x; if (y < mny) mny = y; if (y > mxy) mxy = y; }
+    b.minX = mnx; b.maxX = mxx; b.minY = mny; b.maxY = mxy;
+  }
+  function applyBoltStyle(b, opts) {
+    var st = GL.lightningStyle, big = opts && opts.big;
+    if (st === 'B' || st === 'C') { b.levels = 5; b.rough = 0.34; b.coreW = 10; b.hazeW = 30; b.branches = 2; b.strikesLeft = 3; b.impact = 1.4; b.sheet = (st === 'C'); }
+    else { b.levels = 4; b.rough = 0.22; b.coreW = 7; b.hazeW = 22; b.branches = 0; b.strikesLeft = 2; b.impact = 1.0; b.sheet = false; }
+    if (big) { if (b.branches < 1) b.branches = 1; b.impact *= 1.3; b.coreW += 2; b.sheet = b.sheet || (st === 'C'); }
+    b.strikeDur = (0.10 + (big ? 0.03 : 0)) / (b.strikesLeft + 1);   // ~90-140ms total across strikes
+  }
+  // Spawn a single-leg bolt A->B tinted `col`. opts: {big, delay}. Pooled.
+  function boltSpawn(ax, ay, bx, by, col, opts) {
+    var b = null;
+    for (var i = 0; i < BOLT_MAX; i++) if (!bolts[i].active) { b = bolts[i]; break; }
+    if (!b) return null;
+    b.active = true; b.legN = 1; b.bank = false;
+    b.ax = ax; b.ay = ay; b.bx = bx; b.by = by;
+    b.r = col[0]; b.g = col[1]; b.b = col[2]; b.r1 = b.r; b.g1 = b.g; b.b1 = b.b;
+    applyBoltStyle(b, opts);
+    b.delay = (opts && opts.delay) || 0; b.t = 0; b.age0 = 0; b.alpha = 1;
+    if (!b.delay) boltGen(b);
+    return b;
+  }
+  // Two-leg banked bolt (jadeMirror): origin->bank->target with a bank-flash at
+  // the join; leg1 and leg2 carry their own tints.
+  function boltBanked(ax, ay, jx, jy, bx, by, col1, col2) {
+    var b = boltSpawn(ax, ay, bx, by, col2, 0);
+    if (!b) return null;
+    b.legN = 2; b.bank = true; b.jx = jx; b.jy = jy;
+    b.r1 = col1[0]; b.g1 = col1[1]; b.b1 = col1[2];
+    boltGen(b);
+    return b;
+  }
+  // Legacy entry point — every existing caller (chain lightning, SKYFALL forks,
+  // duo arcs, HAVOC, boss telegraphs, hazards) routes through the bolt system.
+  function arcFx(x1, y1, x2, y2, col) { boltSpawn(x1, y1, x2, y2, col, 0); }
+  function updateBolts(dt) {
+    for (var i = 0; i < BOLT_MAX; i++) {
+      var b = bolts[i]; if (!b.active) continue;
+      if (b.delay > 0) { b.delay -= dt; if (b.delay <= 0) boltGen(b); else continue; }
+      b.t += dt; b.age0 += dt;
+      if (b.t >= b.strikeDur) {
+        if (b.strikesLeft > 0) { b.strikesLeft--; b.t = 0; b.alpha *= 0.7; boltGen(b); }   // re-strike: fresh path, decayed alpha
+        else b.active = false;
+      }
+    }
+  }
+  function boltsClear() { for (var i = 0; i < BOLT_MAX; i++) bolts[i].active = false; }
+  // two-pass leg draw: wide soft haze under a thin white-hot core. Returns #segs.
+  function drawBoltLeg(b, arr, n, env, r, g, bb) {
+    if (n < 2) return 0;
+    var cw = b.coreW, hw = b.hazeW;
+    var wr = r * 0.35 + 0.65, wg = g * 0.35 + 0.65, wb = bb * 0.35 + 0.65;   // white-hot core
+    var segs = 0;
+    for (var i = 0; i < n - 1; i++) {
+      var x0 = arr[i * 2], y0 = arr[i * 2 + 1], x1 = arr[i * 2 + 2], y1 = arr[i * 2 + 3];
+      var dx = x1 - x0, dy = y1 - y0, len = Math.sqrt(dx * dx + dy * dy); if (len < 0.5) continue;
+      var mx = (x0 + x1) * 0.5, my = (y0 + y1) * 0.5, rot = Math.atan2(-dx, dy);   // STREAK long axis (local +y) -> segment dir
+      GL.draw(GL.SPR.STREAK, mx, my, hw, len * 1.2, rot, r, g, bb, 0.15 * env);         // soft coloured haze
+      GL.draw(GL.SPR.STREAK, mx, my, cw, len * 1.05, rot, wr, wg, wb, 0.92 * env);      // thin white-hot core
+      segs++;
+    }
+    return segs;
+  }
+  function drawBoltEnds(b, env) {
+    var im = b.impact;
+    GL.draw(GL.SPR.GLOW, b.bx, b.by, 62 * im, 62 * im, 0, b.r, b.g, b.b, 0.32 * env);   // impact haze
+    GL.draw(GL.SPR.RING, b.bx, b.by, 48 * im, 48 * im, 0, b.r, b.g, b.b, 0.5 * env);    // impact ring pop
+    GL.draw(GL.SPR.SPARK, b.bx, b.by, 40 * im, 40 * im, b.age0 * 8, 1, 1, 1, 0.5 * env);
+    GL.draw(GL.SPR.CORE, b.bx, b.by, 15, 15, 0, 1, 1, 1, 0.9 * env);                    // white-hot impact
+    GL.draw(GL.SPR.GLOW, b.ax, b.ay, 30, 30, 0, b.r1, b.g1, b.b1, 0.28 * env);          // origin muzzle glint
+    GL.draw(GL.SPR.CORE, b.ax, b.ay, 11, 11, 0, b.r1, b.g1, b.b1, 0.6 * env);
+    if (b.bank) {                                                                        // mirror bank-flash at the join
+      GL.draw(GL.SPR.GLOW, b.jx, b.jy, 82, 82, 0, b.r1, b.g1, b.b1, 0.42 * env);
+      GL.draw(GL.SPR.RING, b.jx, b.jy, 62, 62, b.age0 * 6, b.r1, b.g1, b.b1, 0.6 * env);
+      GL.draw(GL.SPR.CORE, b.jx, b.jy, 20, 20, 0, 1, 0.95, 0.8, 0.85 * env);
+    }
+  }
+  function drawBolts() {
+    var drawn = 0;
+    for (var i = 0; i < BOLT_MAX; i++) {
+      var b = bolts[i]; if (!b.active || b.delay > 0) continue;
+      var f = 1 - b.t / b.strikeDur; if (f < 0) f = 0;
+      var env = b.alpha * (0.35 + 0.65 * f * f);   // per-strike flicker envelope
+      if (b.sheet && b.age0 < 0.06) {              // variant C: fast column glow-sheet (~60ms)
+        var sa = (1 - b.age0 / 0.06) * 0.15 * b.alpha;
+        GL.draw(GL.SPR.GLOW, (b.minX + b.maxX) * 0.5, (b.minY + b.maxY) * 0.5, (b.maxX - b.minX) + 96, (b.maxY - b.minY) + 44, 0, b.r, b.g, b.b, sa);
+      }
+      drawn += drawBoltLeg(b, b.L1, b.L1n, env, b.r1, b.g1, b.b1);
+      if (b.legN === 2) drawn += drawBoltLeg(b, b.L2, b.L2n, env, b.r, b.g, b.b);
+      for (var k = 0; k < b.branches; k++) if (b.brN[k] > 1) drawn += drawBoltLeg(b, b.brPts[k], b.brN[k], env * 0.6, b.r, b.g, b.b);
+      drawBoltEnds(b, env);
+      if (drawn > BOLT_SEG_CAP) break;
     }
   }
   function addShake(mag) { if (mag > G.shakeMag) G.shakeMag = Math.min(mag, JUICE.shakeMax); }
@@ -1759,9 +1912,10 @@
         var dmg = LANCE_DMG * 1.2 * G.stats.spDmg * G.specialR;
         if (G.mods.jadeMirror) {   // the zhaoyaojing hangs between the clouds; the bolt banks off it
           var mx = (G.jclouds[0].x + G.jclouds[1].x) / 2, my = (G.jclouds[0].y + G.jclouds[1].y) / 2 + 46;
-          arcFx(cloud.x, cloud.y, mx, my, [1, 0.85, 0.4]); arcFx(mx, my, target.x, target.y, [0.6, 0.85, 1]);
+          // banked bolt: cloud->mirror (gold leg) banks off the zhaoyaojing to the target (violet-white leg)
+          boltBanked(cloud.x, cloud.y, mx, my, target.x, target.y, [1, 0.85, 0.4], [0.62, 0.5, 0.95]);
           flash(mx, my, [1, 0.9, 0.5], 70, 0.18);
-        } else arcFx(cloud.x, cloud.y, target.x, target.y, [0.6, 0.85, 1]);
+        } else arcFx(cloud.x, cloud.y, target.x, target.y, [0.62, 0.5, 0.95]);   // JUDGEMENT: darker violet-white (bolts pitched -4 semitones)
         damageEnemy(target, dmg, false);              // the AIMED foe always eats the bolt (a surrounded boss no longer gets skipped)
         chainLightning(target, dmg, true);            // full Zeus-style chain to OTHERS is the bonus (inherits +2 storm jumps)
         if (!target.boss && !target.dying) { target.stunT = Math.max(target.stunT, 0.4); flash(target.x, target.y, [0.7, 0.95, 1], 60, 0.2); }
@@ -2069,7 +2223,13 @@
     switch (g) {
       case 'zeus':      // OLYMPIAN STORM — THE one instant nuke: every live foe struck at once.
         announce('OLYMPIAN STORM', '', 1.2);
-        eachFoe(function (e) { arcFx(p.x, p.y, e.x, e.y, [0.7, 0.9, 1]); damageEnemy(e, LANCE_DMG * 4 * D, false); if (!e.boss && !e.dying) e.stunT = Math.max(e.stunT, 1.2); });
+        var _sk = 0;
+        eachFoe(function (e) {
+          // a bolt drops from the top edge onto every foe, staggered 1-2 frames for weight
+          boltSpawn(e.x + (Math.random() - 0.5) * 44, -24, e.x, e.y, [0.7, 0.9, 1], { big: true, delay: _sk * 0.028 });
+          damageEnemy(e, LANCE_DMG * 4 * D, false); if (!e.boss && !e.dying) e.stunT = Math.max(e.stunT, 1.2);
+          _sk++;
+        });
         G.flashAll = Math.max(G.flashAll, 0.4); addShake(12);
         ringShock(p.x, p.y, [0.7, 0.85, 1], 90, 5200, 0.6);
         break;
@@ -4654,6 +4814,10 @@
     // JADE edict close-up: spawn a hovering edict at (x,y) for a style screenshot (faction 1 = inert)
     spawnEdict: function (x, y, sc) { var s = allocShot(); if (!s) return; s.x = x; s.y = y; s.vx = 0; s.vy = -1; s.radius = 18; s.scale = sc || 44; s.damage = 0; s.age = 0; s.life = 30; s.r = 0.79; s.g = 0.6; s.b = 1.0; s.pierce = 0; s.homing = false; s.turn = 0; s.kind = 7; s.faction = 1; s.big = false; },
     setEdictStyle: function (st) { GL.setEdictStyle(st); },
+    // LIGHTNING treatment switch — sets the live flag AND persists in goldwake_meta.
+    setLightningStyle: function (st) { GL.setLightningStyle(st); Run.meta.lightningStyle = GL.lightningStyle; Run.saveMeta(); },
+    lightningStyle: function () { return GL.lightningStyle; },
+    boltCount: function () { var n = 0; for (var i = 0; i < BOLT_MAX; i++) if (bolts[i].active) n++; return n; },
     ravenKills: function () { return G.ravenKills; },
     setRavenKills: function (n) { G.ravenKills = n; },
     friendlyBulletCount: function () { var n = 0; Engine.bullets.forEach(function (b) { if (b.friendly) n++; }); return n; },
@@ -4722,6 +4886,7 @@
     // frozen across the draft (updateCombat is skipped) and resume onto the next wave's spawns.
     if (G.jclouds.length) { for (var jc = 0; jc < G.jclouds.length; jc++) recallFx(G.jclouds[jc].x, G.jclouds[jc].y); G.jclouds.length = 0; }
     G.judge.active = false; G.judge.boltT = 0;
+    boltsClear();   // drop live lightning so a bolt mid-flicker can't resume onto the next wave
     if (G.duat.active) { recallFx(G.duat.x, G.duat.y); G.duat.active = false; }
     G.bfreeze = 0; G.bfMandate = false;
     if (G.bifrost.active || G.bifrost.seamT > 0) { G.bifrost.active = false; G.bifrost.seamT = 0; G.bifrost.life = 0; }
@@ -4769,6 +4934,7 @@
     updateBullets(edt);
     updateGold(dt);
     updateParticles(dt);
+    updateBolts(dt);            // shared lightning bolt renderer (flicker + re-strikes)
     updateVaunt(dt);
     // DIVINE INTERVENTION two-beat staging: flush the held freeze beat → gild to gold.
     if (G.bfreeze > 0) { G.bfreeze -= dt; if (G.bfreeze <= 0) { G.bfreeze = 0; cancelBulletsToGold(G.bfMidas, G.bfMandate); G.bfMandate = false; ringShock(G.player.x, G.player.y, [1, 0.85, 0.35], 60, 3200, 0.6); } }
@@ -5230,7 +5396,7 @@
       drawBifrost();          // HEIMDALL rainbow bridge / dawn-seam telegraph (drawn hazard)
       drawDuat();             // ANUBIS GATE OF DUAT sand-vortex (drawn hazard)
       drawSkyfall();          // ZEUS SKYFALL transient column
-      drawGold(); drawEnemies(); drawShots(); drawParticles(); drawBulletHalos();
+      drawGold(); drawEnemies(); drawShots(); drawParticles(); drawBolts(); drawBulletHalos();
       // PASS B — enemy-bullet opaque bodies (premultiplied-over). The bullet
       // shader recolours each cell so the baked white cores survive the family
       // tint; restore the default sprite shader immediately after.

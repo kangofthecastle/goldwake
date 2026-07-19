@@ -73,7 +73,7 @@
   // ---------------------------------------------------------------------
   // peakHubris = best HUBRIS multiplier ever reached (additive field; legacy blobs
   // without it fall back to 1.0). Key stays 'goldwake_meta' — never rename.
-  Run.meta = { hi: 0, bestSector: 0, careerGold: 0, killedWarden: false, completedRun: false, peakHubris: 1, autoFire: false };
+  Run.meta = { hi: 0, bestSector: 0, careerGold: 0, killedWarden: false, completedRun: false, peakHubris: 1, autoFire: false, lightningStyle: 'A' };
   Run.loadMeta = function () {
     try {
       var raw = localStorage.getItem('goldwake_meta');
@@ -83,8 +83,10 @@
         Run.meta.killedWarden = !!m.killedWarden; Run.meta.completedRun = !!m.completedRun;
         Run.meta.peakHubris = +m.peakHubris || 1;   // additive: legacy blob -> 1.0
         Run.meta.autoFire = !!m.autoFire;            // §9b auto-fire toggle (default OFF)
+        Run.meta.lightningStyle = (m.lightningStyle === 'B' || m.lightningStyle === 'C') ? m.lightningStyle : 'A';
       }
     } catch (e) {}
+    if (window.GL) GL.setLightningStyle(Run.meta.lightningStyle);   // apply persisted bolt treatment
   };
   // HUBRIS multiplier from a peak step index — read the Game-side table so there's
   // a single source of truth; fall back to the linear form for a legacy/absent table.

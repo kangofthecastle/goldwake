@@ -25,6 +25,14 @@
   GL.edictStyle = 'A';
   GL.setEdictStyle = function (s) { GL.edictStyle = (s === 'B' || s === 'C') ? s : 'A'; };
 
+  // LIGHTNING treatment (owner-pickable; the shared bolt renderer in game.js reads
+  // this each spawn). Persisted in goldwake_meta (see run.js), applied on load.
+  //   'A' CLEAN — single elegant bolt, no branches, thin core, 2 re-strikes.
+  //   'B' STORM — thicker core, 2 branches, harder displacement, 3 re-strikes.
+  //   'C' SHEET — B plus a fast vertical glow-sheet flash along the bolt column.
+  GL.lightningStyle = 'A';
+  GL.setLightningStyle = function (s) { GL.lightningStyle = (s === 'B' || s === 'C') ? s : 'A'; };
+
   // Sprite ids -> atlas region index.
   GL.SPR = {
     GLOW: 0,        // soft radial glow disc
