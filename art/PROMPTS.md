@@ -17,14 +17,33 @@ Sections: 1 title keyart · 2 pantheon emblems (5) · 3 god card portraits (15) 
 8 combat sprites (1 player ship + 1 enemy template × 18 subjects) ·
 9 signature player-side sprites (2 templates × 14 subjects).
 
-## Batch run (one agentic Codex session)
+## Batch run (one agentic Codex session, subagent-orchestrated)
 
-To generate the whole manifest in one session, work through every fenced block
-top to bottom — **one image request per block**, and for the four templated
-batches (#30, #32, #33, #34) one image request **per table row**, with that
-row's values substituted into the `{PLACEHOLDERS}` before generating. Do not
-combine blocks or rows into a single request. Total: 29 direct blocks + 47
-template rows = 76 images.
+To generate the whole manifest in one session: the top-level session acts as
+**coordinator only** — it does not generate images itself. Spin up **one `sol`
+subagent per batch, on high reasoning effort, all batches in parallel**:
+
+| Batch | Scope | Images |
+| --- | --- | --- |
+| A | §1 title + §2 emblems | 6 |
+| B | §3 god portraits | 15 |
+| C | §4 boss portraits | 4 |
+| D | §5 backdrops + §6 shop | 4 |
+| E | §7 relic icon template ×15 rows | 15 |
+| F | §8 player ship + enemy template ×18 rows | 19 |
+| G | §9 projectile template ×9 rows | 9 |
+| H | §9 owned-entity template ×5 rows | 5 |
+
+Each subagent works its batch **sequentially**: one image request per fenced
+block, and for templated batches one request **per table row** with that row's
+values substituted into the `{PLACEHOLDERS}` before generating. Never combine
+blocks or rows into a single request. Total: 29 direct blocks + 47 template
+rows = **76 images**.
+
+The coordinator then: verifies the count per batch, enforces the filename and
+destination convention below, spot-checks grounds (anything on a white or
+light ground goes back to its subagent for a re-gen), and runs the embed step
+once at the end.
 
 Output convention:
 - **Filename**: `<prompt#>[-<row#>]-<slug>.png`, e.g. `16-odin.png`,
