@@ -169,12 +169,17 @@ armory, Odin NINE NIGHTS, Heimdall THE BIFRÖST.
   through 4 heat stages, up to ×2.5; count the notches." / "★★★ ×2.25 beam DPS"
 - **BOSS** boss-lock trivially holds CORONA — Ra scales hardest vs TALOS/AMMIT/MIDAS.
 
-**ANUBIS** — Weigher of Hearts · Judgment of Duat
-- **ATK** (unchanged): +25% dmg below half HP; **executes** non-bosses <25% for gold. **To-code**: execute fires a
-  scales-tip ring + sub gong-ping. *Amber shot darkens over low-HP foes.* Voice BELL, darker + sub gong-ping <50%.
-- **SP JUDGMENT OF DUAT** (unchanged): instant strike on every foe for a share of missing HP.
+**ANUBIS** — Weigher of Hearts · Judgment of Duat — **OWNER-FLAGGED FOR FULL REWORK (2026-07-19)**: "attack
+and special are things that feel like they should just be extra boons, rather than attacks" — both are
+invisible math riders, failing Boon Law #1. Ruling: the current effects DEMOTE to Anubis mods; new visible
+ATK/SP transforms to be designed (pitch pending owner ratification — leading candidates: THE WEIGHING
+per-foe scales-tip → visible verdict/execute event as the attack; GATE OF DUAT sand-vortex pull as the
+special). Until ratified, the sheet below is the LEGACY kit, kept only so Pass 3/4 wiring has a target.
+- **ATK (legacy)**: +25% dmg below half HP; **executes** non-bosses <25% for gold. *Amber shot darkens over
+  low-HP foes.* Voice BELL, darker + sub gong-ping <50%. → demotes to mod(s) on rework.
+- **SP JUDGMENT OF DUAT (legacy)**: instant strike on every foe for a share of missing HP. → demotes/absorbs
+  into the new special on rework.
 - **★** atk→below-half bonus · sp→judgment share.
-- **CARD ATK**: "+25% damage below half; executes weak non-bosses for gold." / ▸ "Auto — passive on hit; execute <25%." / "★★★ ×2.25 below-half bonus"
 - **BOSS** execute→flat below-half bonus (execute-immune); phase's final blow drops an apotheosis shard + pays +50% segment cancel-gold (§8).
 
 ### ASGARD
@@ -451,7 +456,15 @@ SIGNATURE. The base 3-stream is a fixed baseline you grow with ATTACK POWER."* L
    transforms themselves: a star level on their transform, a god-tied mod, or that god's charm.
 Duos are a reward for committing to a pairing, not a first-draft lottery. To-code: the duo offer path in
 `run.js` (~323) gains an `investedIn(pair)` check (stars above base on the pair's slots + `G.mods` keyed to
-either god + `G.charms.charm<God>`). Applies to all 26 duos. Duo descs also need a re-anchor sweep — HUNTER'S
+either god + `G.charms.charm<God>`). Applies to all 26 duos.
+
+**OFFER PATHING (owner 2026-07-19, binding on every current & future card type).** A god's FIRST offered
+boon must be a slot transform — attack, special, or ultimate. Until that god holds one of your slots, every
+other boon of theirs (mods, duo participation, star levels) is **locked out** of the pool. Already mostly
+enforced (`modEligible` run.js:293 requires the equipped slot; duos gate on the pair; levels on the slot) —
+this rule makes it doctrine: extend the same gate to the ULTIMATE slot when it ships, and any new god-tied
+card type gates the same way by default. **EXEMPT: charms** — the relic family is deliberately ungated
+(once-per-god-per-run, own weight mass) and stays outside upgrade pathing. Duo descs also need a re-anchor sweep — HUNTER'S
 EYE / DEATH SENTENCE still say "crit" (→ PRECISION wording), WILD HUNT still assumes ravens-as-attack
 (→ doom-bolts ×2 vs Terrified per §2 Odin), TWO THRONES / PEACH BANQUET reference the retired Heaven's
 Verdict (→ re-point to IMPERIAL JUDGEMENT in the Jade amendment build).
