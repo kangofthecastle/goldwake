@@ -859,6 +859,7 @@
     // beat via cancelBulletsToGold — identical gold/cancel math). The burst already grants
     // invuln, so the frozen bullets can't damage the player during the beat.
     G.bfreeze = 0.3; G.bfMidas = midasFight();
+    if (SFX.freezeShimmer) SFX.freezeShimmer();   // Pass4: DIVINE INTERVENTION held-freeze shimmer beat
     Engine.bullets.forEach(function (b) { if (!b.friendly) { b.slowT = 0.3; b.timeScale = 0; } });
     ringShock(G.player.x, G.player.y, [1, 0.85, 0.35], 60, 3200, 0.6);
     ringShock(G.player.x, G.player.y, [0.4, 0.95, 1], 40, 2400, 0.45);
@@ -1163,9 +1164,11 @@
       if (e.dying || e.charmed) return;
       if (Math.abs(e.x - colX) < 55) { damageEnemy(e, d, false); if (!e.boss && !e.dying) e.stunT = Math.max(e.stunT, 0.4); if (!primary) primary = e; }
     });
+    if (primary && SFX.status) SFX.status('stun');   // Pass4: SKYFALL stun sting (once per cast, the canonical stun beat)
     if (primary) chainLightning(primary, LANCE_DMG * 0.5 * G.stats.spDmg * G.specialR, true);   // inherits +2 jumps, boss collapse, all zeus mods
     G.skyfall.x = colX; G.skyfall.t = 0.22;
     G.flashAll = Math.max(G.flashAll, 0.2); addShake(6);
+    if (SFX.zeusCrack) SFX.zeusCrack();   // Pass4: SKYFALL column crack
     for (var i = 0; i < 6; i++) flash(colX + (Math.random() - 0.5) * 36, 100 + i * 300, [0.7, 0.85, 1], 90, 0.18);
   }
   // ARTEMIS THE LOOSED ARROW — fastest moon-silver needle; pierces everything (999),
@@ -1679,7 +1682,7 @@
     else GL.draw(GL.SPR.NEEDLE, g.x, g.y, 42, 190, ang, 1, 0.95, 0.6, 1);
     GL.draw(GL.SPR.CORE, g.x, g.y, 26, 26, 0, 1, 1, 0.9, 0.9);
   }
-  function markEnemy(e) { e.marked = true; e.markT = G.mods.odinMark ? 10 : 6; }
+  function markEnemy(e) { if (!e.marked && SFX.status) SFX.status('mark'); e.marked = true; e.markT = G.mods.odinMark ? 10 : 6; }   // Pass4: mark sting on the unmarked→marked edge only (bifrost re-marks stay silent)
 
   // LOKI — decoy. By design the Shadow-Twin NEVER attacks (the one sanctioned
   // exception to the damage-floor rule): its boss value is soaking pattern
@@ -1730,6 +1733,7 @@
     for (var k = 0; k < offs.length; k++) { if (used.indexOf(offs[k]) < 0) { off = offs[k]; break; } }
     G.clones.push({ offset: off, x: G.player.x + off, y: G.player.y, timer: G.mods.wukongClones ? 7 : 4, fireT: 0 });
     flash(G.player.x + off, G.player.y, [1, 0.4, 0.2], 80, 0.2);
+    if (SFX.summon) SFX.summon();   // Pass4: owned-entity spawn cue (hair-clone)
   }
   function updateClones(dt) {
     var p = G.player;
@@ -1792,6 +1796,7 @@
   }
   function anubisVerdict(e) {
     if (e.dying) return;
+    if (SFX.verdictGong) SFX.verdictGong();               // Pass4: the scales tip — WEIGHING verdict gong
     e.scaleW = 0;                                         // reset + re-arm
     if (!e.boss && !e.elite) {                            // THE VERDICT: devour the weak
       flash(e.x, e.y, [0.14, 0.05, 0.11], 130, 0.32);    // jackal-shadow snap
@@ -1816,6 +1821,7 @@
     Engine.enemies.forEach(function (e) { e.duatDmg = 0; });
     G.flashAll = Math.max(G.flashAll, 0.2); addShake(5);
     ringShock(d.x, d.y, [0.85, 0.7, 0.3], 90, 3600, 0.5);
+    if (SFX.gateRoar) SFX.gateRoar();                     // Pass4: GATE OF DUAT tears open
   }
   function updateDuat(dt) {
     var d = G.duat; if (!d.active) return;
@@ -1857,6 +1863,7 @@
     G.decoy.active = true; G.decoy.x = G.player.x; G.decoy.y = G.player.y; G.decoy.absorb = 0;
     G.decoy.timer = 6 * (G.mods.lokiLong ? 1.5 : 1);
     flash(G.player.x, G.player.y, [0.4, 1, 0.5], 120, 0.25);
+    if (SFX.summon) SFX.summon();   // Pass4: owned-entity spawn cue (Shadow-Twin decoy)
   }
   function gungnirCast() {
     var g = G.gungnir; g.active = true; g.timer = G.mods.odinGungnir ? 6 : 4; g.x = G.player.x; g.y = G.player.y - 30; g.ang = -Math.PI / 2; g.visited = [];
@@ -1905,6 +1912,7 @@
     flash(W * 0.22, H * 0.16, [0.5, 0.4, 0.7], 160, 0.4);
     flash(W * 0.78, H * 0.16, [0.5, 0.4, 0.7], 160, 0.4);
     G.flashAll = Math.max(G.flashAll, 0.14); addShake(4);
+    if (SFX.stormRumble) SFX.stormRumble();   // Pass4: IMPERIAL JUDGEMENT storm-clouds gather
   }
   function randomLiveFoe() {
     var list = [];
@@ -1932,13 +1940,14 @@
           // banked bolt: cloud->mirror (gold leg) banks off the zhaoyaojing to the target (violet-white leg)
           boltBanked(cloud.x, cloud.y, mx, my, target.x, target.y, [1, 0.85, 0.4], [0.62, 0.5, 0.95]);
           flash(mx, my, [1, 0.9, 0.5], 70, 0.18);
+          if (SFX.mirrorTing) SFX.mirrorTing();   // Pass4: MIRROR REFLECTION bolt banks off the zhaoyaojing
         } else arcFx(cloud.x, cloud.y, target.x, target.y, [0.62, 0.5, 0.95]);   // JUDGEMENT: darker violet-white (bolts pitched -4 semitones)
         damageEnemy(target, dmg, false);              // the AIMED foe always eats the bolt (a surrounded boss no longer gets skipped)
         chainLightning(target, dmg, true);            // full Zeus-style chain to OTHERS is the bonus (inherits +2 storm jumps)
         if (!target.boss && !target.dying) { target.stunT = Math.max(target.stunT, 0.4); flash(target.x, target.y, [0.7, 0.95, 1], 60, 0.2); }
         if (G.duos.twoThrones && !target.dying) chainLightning(target, dmg * 0.4, false);   // TWO THRONES: extra chain crack
         G.verdictPeachT = 3;                          // PEACH BANQUET: kills within 3s of a bolt feed the gauge
-        addShake(2); SFX.boom && SFX.boom();
+        addShake(2); if (SFX.judgementCrack) SFX.judgementCrack(); else (SFX.boom && SFX.boom());   // Pass4: per-bolt judgement crack
       }
     }
   }
@@ -2039,6 +2048,7 @@
     if (e.dying || e.charmed) return;
     if (e.boss) { e.shakenT = Math.max(e.shakenT, 1.0); pushDisp(e, fromX, fromY, 90); return; }
     var dur = 2.5 * (G.mods.aresTerror ? 1.6 : 1);
+    if (e.terrorT <= 0 && SFX.status) SFX.status('terror');   // Pass4: terror sting on the calm→terrified edge
     if (e.terrorT < dur) e.terrorT = dur;
     e.impactDmg = e.maxhp * 0.2 + 30;
     pushDisp(e, fromX, fromY, 420);
@@ -2059,6 +2069,7 @@
     for (var i = 0; i < 2; i++) G.wraiths.push({ x: G.player.x + (i ? 70 : -70), y: G.player.y - 40, ang: i * Math.PI, dir: i === 0 ? 1 : -1, state: 0, target: null, targetSeq: 0, dives: 4, timer: 6, cd: 0.15 * i });
     ringShock(G.player.x, G.player.y, [0.7, 0.05, 0.1], 60, 2600, 0.5);
     addShake(5);
+    if (SFX.summon) SFX.summon();   // Pass4: owned-entity spawn cue (Phobos & Deimos)
   }
   function updateWraiths(dt) {
     var diveDmg = RAVEN_DMG * 3 * G.stats.spDmg * G.specialR;   // ≈ raven-dive ballpark ×3
@@ -2224,7 +2235,8 @@
   // ---------------------------------------------------------------------
   // shared ULT-CAST swell + a per-god §6 material accent, all SFX guarded (Pass-3 stubs).
   function sfxUlt(g) {
-    if (SFX.vaunt) SFX.vaunt();                                   // shared cast swell (reuse the burst swell)
+    if (SFX.ultCast) { SFX.ultCast(g); return; }                 // Pass4: §2.5 ult swell + per-god §6 material accent (bundled)
+    if (SFX.vaunt) SFX.vaunt();                                   // fallback: shared cast swell (reuse the burst swell)
     var accent = { zeus: SFX.crit, poseidon: SFX.thud, artemis: SFX.hit, aphrodite: SFX.powerup,
       ares: SFX.boom, ra: SFX.explosion, anubis: SFX.boom, loki: SFX.hit, odin: SFX.boom,
       thor: SFX.thud, heimdall: SFX.hit, wukong: SFX.thud, guanyu: SFX.boom, quetz: SFX.hit };
@@ -2318,6 +2330,7 @@
         announce("GIANT'S END", '', 1.4);
         G.ult.god = 'thor'; G.ult.t = 2.2; G.ult.x = p.x; G.ult.y = p.y - 24; G.ult.castT = p.y - 24; G.ult.ang = 0;
         addShake(6);
+        if (SFX.boomerang) SFX.boomerang();   // Pass4: colossal Mjölnir hurled up the lane
         break;
       case 'heimdall':  // DAWNBREAK — mode transform: every shot a spectrum lance, all foes continuously Marked.
         announce('DAWNBREAK', '', 1.4);
@@ -2838,8 +2851,9 @@
         lb.r = 0.78; lb.g = 0.12; lb.b = 0.12; lb.spin = 0;
       }
     }
-    // tier-cross upward → red muzzle bloom + kindle
-    if (tier > G.frenzy.prevTier) { flash(px, py - 30, [1, 0.3, 0.2], 130, 0.18); G.frenzy.bloom = 0.16; SFX.boom(); }
+    // tier-cross upward → red muzzle bloom + kindle; downward → a cooling tier-down cue
+    if (tier > G.frenzy.prevTier) { flash(px, py - 30, [1, 0.3, 0.2], 130, 0.18); G.frenzy.bloom = 0.16; if (SFX.tierUp) SFX.tierUp(); else SFX.boom(); }
+    else if (tier < G.frenzy.prevTier && SFX.tierDown) SFX.tierDown();
     G.frenzy.prevTier = tier;
   }
 
@@ -2855,18 +2869,18 @@
     if (bf.life > 0) {
       // solid VERTICAL band: Mark any foe whose hull overlaps the ~32px-wide lane.
       Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; if (Math.abs(e.x - bf.x) < 16 + e.radius) { markEnemy(e); if (!e.markShimmer) { e.markShimmer = 1; flash(e.x, e.y, [1, 0.95, 0.85], 60, 0.2); } } else e.markShimmer = 0; });
-      bf.life -= dt; if (bf.life <= 0) { bf.active = false; SFX.bell && SFX.bell(); }
+      bf.life -= dt; if (bf.life <= 0) { bf.active = false; if (SFX.bridgeFade) SFX.bridgeFade(); else (SFX.bell && SFX.bell()); }   // Pass4: descending bridge-fade pair
       return;
     }
     if (bf.seamT > 0) {   // telegraph rising bottom→top; x frozen at seam start (rising bell arpeggio, Pass 3)
       bf.seamT -= dt;
-      if (bf.seamT <= 0) { bf.active = true; bf.life = 4.0; SFX.hit && SFX.hit(); }
+      if (bf.seamT <= 0) { bf.active = true; bf.life = 4.0; if (SFX.seamArp) SFX.seamArp(); else (SFX.hit && SFX.hit()); }   // Pass4: band locks solid
       return;
     }
     // between bridges: count the cadence only while actually firing.
     if (wantFire()) {
       bf.t += dt;
-      if (bf.t >= 6.0) { bf.t = 0; bf.seamT = 0.5; bf.x = G.player.x; SFX.hit && SFX.hit(); }
+      if (bf.t >= 6.0) { bf.t = 0; bf.seamT = 0.5; bf.x = G.player.x; if (SFX.seamArp) SFX.seamArp(); else (SFX.hit && SFX.hit()); }   // Pass4: seam telegraph rises
     }
   }
   // HEIMDALL SPECTRUM LANCE — one prismatic bolt: ×1.6 dmg, pierce +2, no split.
@@ -2878,6 +2892,7 @@
     s.age = 0; s.life = 1.6; s.pierce = 2; s.kind = 18; s.faction = 0; s.big = false;
     var col = Patterns.hue(G.time * 0.5); s.r = col[0]; s.g = col[1]; s.b = col[2];
     flash(px, py - 30, [1, 0.95, 0.85], 90, 0.14);
+    if (SFX.refractShimmer) SFX.refractShimmer();   // Pass4: SPECTRUM LANCE prismatic shimmer
   }
 
   function updateShots(dt) {
@@ -2997,6 +3012,18 @@
     // TALOS nail immunity (body would take 0 damage). This was a real leak.
     e.isMidas = false; e.hoard = 0; e.hoardBank = 0; e.hoardCount = 0;
     e.nailActive = false; e.nailR = 0; e.nailX = 0; e.nailY = 0;
+    // §8 boss damage-tithe accumulator (a unit = maxhp*0.025) + per-kit boss-mode
+    // gates. MUST reset on pooled reuse or a recycled boss slot inherits a stale
+    // tithe / retinue schedule and double-summons on the next fight.
+    e.dmgTithe = 0; e.dmgTitheUnits = 0; e.wukongBossClone = false;
+    // §8 retinue: on a boss, the summon schedule (kind/target/respawn cd/hue); on an
+    // add, its link back to the summoning boss (seq guard) + role + vacuum share.
+    e.retinueKind = ''; e.retinueTarget = 0; e.retinueRespawn = 0; e.retinueCd = 0; e.retinueCol = null;
+    e.retinueSeq = 0; e.retinueRole = ''; e.retinueOff = 0; e.retVac = 0;
+    // reset-ALL-fields discipline (historic #1 bug class): the add's link back to its
+    // summoning boss (retLinkSeq), its stable orbit slot (retIdx), and the boss-side
+    // cached live-count (retinueLive, fix #7) MUST all clear on pooled reuse.
+    e.retLinkSeq = 0; e.retIdx = 0; e.retinueLive = 0;
     e.onDeath = null; e.onUpdate = null;
     // formation membership: stamped with the current wave's squadron id (0 = none,
     // e.g. boss waves) and counted once toward FORMATION WIPE tracking. formCounted
@@ -3116,11 +3143,14 @@
     if (G.duos.wildHunt && wasTerror && e.dying) addFrenzy();   // WILD HUNT: terror-slam kills feed frenzy
   }
 
-  function charmEnemy(e) {
+  function charmEnemy(e, durMul) {
     if (e.boss || e.charmed) return;
     creditForm(e);   // charming a squadron member counts as defeating it (fix #1)
     e.charmed = true; e.charmMeter = 0;
-    e.charmT = CHARM_TIME * (G.mods.aphroLong ? 1.6 : 1);
+    // §7 star fix #2: the HEARTSEEKER SPECIAL routes its charm DURATION through
+    // specialR (durMul = G.specialR at the special call site) so a special star is
+    // visible on the charm too; base-attack charms pass no durMul (star-flat torrent).
+    e.charmT = CHARM_TIME * (G.mods.aphroLong ? 1.6 : 1) * (durMul || 1);
     spark(e.x, e.y, [1, 0.5, 0.85], 10, 260, 28);
     flash(e.x, e.y, [1, 0.5, 0.85], 60, 0.2);
   }
@@ -3144,7 +3174,7 @@
     // charm meter slow decay
     if (!e.charmed && e.charmMeter > 0) e.charmMeter = Math.max(0, e.charmMeter - dt * 0.5);
     // QUETZ THE COIL — uncoil 0.9s after the last bite (whole coil releases at once).
-    if (e.coilT > 0) { e.coilT -= dt; if (e.coilT <= 0) e.coilQ = 0; }
+    if (e.coilT > 0) { e.coilT -= dt; if (e.coilT <= 0) { if (e.coilQ > 0 && SFX.uncoil) SFX.uncoil(); e.coilQ = 0; } }   // Pass4: whole coil releases with an uncoil cue
     // LOKI MISCHIEF — pickpocket stacks decay after 2.5s; per-foe pilfer cooldown.
     if (e.mischiefT > 0) { e.mischiefT -= dt; if (e.mischiefT <= 0) e.mischief = 0; }
     if (e.pilferCd > 0) e.pilferCd -= dt;
@@ -3788,11 +3818,18 @@
   function updateApostate(e, dt) {
     e.t += dt;
     if (e.y < 420) { e.y += 150 * dt; return; }
+    // §8 UNIVERSAL FALLBACK: THE APOSTATE runs its own loop (not the setlist engine), so
+    // it never armed a bespoke retinue nor accrued a tithe. On arrival, flag it arrived
+    // (opens the damage-tithe accumulator in damageEnemy) and arm a light ESCORT retinue —
+    // the generic swoop-in/one-beat/leave add — so every kill/damage-fed kit still feeds
+    // against a boss with no bespoke summons.
+    if (!e.arrived) { e.arrived = true; armRetinue(e, 'escort', 2, 6, [e.r, e.g, e.b]); }
+    maintainRetinue(e, dt);
     e.x = W / 2 + Math.sin(e.t * 0.5) * 260; e.rot = Math.PI;
     e.fireT -= dt;
     if (e.fireT <= 0) { e.fireT = 1.4; apostateFire(e, (Math.floor(e.t / 3) % 2 === 0) ? e.g1 : e.g2); }
   }
-  function apostateDeath(e) { G.boss = null; bigDeath(e, 80); announce('APOSTATE SILENCED', 'a boon is torn free', 2.4); Run.grantApostateDraft(); }
+  function apostateDeath(e) { expireRetinue(e); G.boss = null; bigDeath(e, 80); announce('APOSTATE SILENCED', 'a boon is torn free', 2.4); Run.grantApostateDraft(); }
   function apostateFire(e, god) {
     var px = AIMX(e), py = AIMY(e), aim = Patterns.aimAngle(e.x, e.y, px, py);
     switch (god) {
@@ -3898,7 +3935,7 @@
 
   // enter phase i: set the segment HP floor, movement and (on a transition) the
   // payday cancel + name card + sting, then breathe before the script activates.
-  function bossEnterPhase(e, phases, cfg, i, transition) {
+  function bossEnterPhase(e, phases, cfg, i, transition, cleared) {
     e.phase = i; e.phaseT = 0; e.s0 = 0; e.s1 = 0; e.s2 = 0; e.s3 = 0;
     var ph = phases[i];
     e.segFloorHp = e.maxhp * (1 - e.segBounds[i]);
@@ -3909,7 +3946,17 @@
     // recenter position — no horizontal snap-back on the next phase's tick.
     e.breathFloor = e.hp;
     e.script = null;                       // silent through the breath
-    if (ph.onEnter) ph.onEnter(e, cfg);    // phase hook (TALOS arms the nail here)
+    // §8: a real transition means the PRIOR segment was cleared — fire the bursty
+    // per-kit reward-kill BEFORE expiring the old retinue and re-arming. Retinues are
+    // phase-gated: the leaving phase's adds die (carry no HP, so no segment wall).
+    // fix #4: the per-kit segment-clear PAYOUT (Ares War-Heat, Wukong clone, Anubis
+    // gauge+coins, addCharge) fires ONLY on a real HP-depletion clear, never on a phase
+    // TIMEOUT — mirroring line 3991's PHASE SEIZED / HUBRIS withholding. Surviving to
+    // timeout can no longer farm the kit economy. The retinue expiry + cancel-to-gold
+    // below still run on either transition (structural cleanup, not a reward).
+    if (transition && cleared) bossSegmentClear(e);
+    expireRetinue(e); e.retinueKind = ''; e.retinueTarget = 0; e.retinueCd = 0;
+    if (ph.onEnter) ph.onEnter(e, cfg);    // phase hook (TALOS arms the nail / phase summons its retinue here)
     if (transition) {
       cancelBulletsToGold(e.isMidas); homeAllGold();   // full-field cancel to gold (CURSED vs MIDAS)
       ringShock(e.x, e.y, [1, 0.92, 0.45], 90, 3200, 0.75);
@@ -3945,12 +3992,18 @@
     }
     pathTick(e, dt, BOSS_PATH_OPT);
     scriptTick(e, dt);
+    maintainRetinue(e, dt);                // §8: respawn downed adds on the refractory (phase-gated)
     e.phaseT += dt;
     if (e.phase < phases.length - 1) {
       var timedOut = e.phaseT >= phases[e.phase].timeout;
       if (e.hp <= e.segFloorHp || timedOut) {
-        if (!timedOut) { skillEvent(e.x, e.y - 40, 'PHASE SEIZED', 30); G.tally.phases++; }   // homage: beaten on damage — grants a HUBRIS step
-        bossEnterPhase(e, phases, cfg, e.phase + 1, true);
+        // The cleared-vs-timeout distinction already lives here: `!timedOut` == a real
+        // HP-depletion clear. Thread that SAME flag (fix #4) into bossEnterPhase so the
+        // kit payout mirrors the PHASE SEIZED / HUBRIS grant exactly — both fire only on
+        // a genuine clear, neither on a survive-to-timeout.
+        var seized = !timedOut;
+        if (seized) { skillEvent(e.x, e.y - 40, 'PHASE SEIZED', 30); G.tally.phases++; }   // homage: beaten on damage — grants a HUBRIS step
+        bossEnterPhase(e, phases, cfg, e.phase + 1, true, seized);
       }
     }
   }
@@ -3965,6 +4018,192 @@
     e.segBounds = bossSegBounds(phases);
     G.boss = e;
     e.onUpdate = function (en, dt) { bossTick(en, dt, phases, cfg); };
+  }
+
+  // ==================================================================
+  // §8 — BOSS SUMMONS & DAMAGE-TITHE (two independent layers).
+  // ==================================================================
+
+  // LAYER 1 — per-kit boss-mode reroute. CONTINUOUS events (one per tithe unit).
+  // The BURSTY half (segment-clear) lives in bossSegmentClear below. Together they
+  // keep kill/damage-fed kits alive through the long immune/wall phases of a boss.
+  function bossTitheUnit(e) {
+    // WUKONG: the first hit summons a clone; each subsequent unit refreshes the
+    // oldest clone +1.5s (cap 7s) — a boss is enough sustained fire to hold clones.
+    if (G.attackGod === 'wukong') {
+      if (!e.wukongBossClone || G.clones.length === 0) { e.wukongBossClone = true; spawnClone(); }
+      else { var c = G.clones[0], cap = 7; c.timer = Math.min(cap, c.timer + 1.5); }
+    }
+    // ZEUS FIELD (mod): a static zap field wells up beneath the boss each unit.
+    if (G.mods.zeusField) spawnZapField(e.x + (Math.random() - 0.5) * 60, e.y + e.scale * 0.3);
+    // UNIVERSAL: the tithe unit is worth a fraction of a kill's special charge, so a
+    // long immune phase still trickles the shared on-kill economy for every kit.
+    addCharge(SP_KILL * 0.25);
+  }
+
+  // LAYER 1 — BURSTY: a phase-segment cleared reads as ONE reward-kill for the kit.
+  // Fires the raw on-kill path once at 1× for un-wired kill-fed kits; the named kits
+  // get their §8 bonus. Called from bossEnterPhase on every transition (~5-6×/fight).
+  function bossSegmentClear(e) {
+    // ARES: +1 War-Heat per segment-clear (frenzy also decays 50% slower in any boss
+    // fight — see updateFrenzy — so it BUILDS across the setlist).
+    if (G.attackGod === 'ares' || G.specialGod === 'ares') addFrenzy();
+    // WUKONG: a fresh clone rolls on the clear.
+    if (G.attackGod === 'wukong') { e.wukongBossClone = true; spawnClone(); }
+    // ANUBIS: the phase's final blow pays +50% segment cancel-gold (a bonus coin spray
+    // over the shared transition cancel) + drops an APOTHEOSIS shard into the gauge.
+    if (G.attackGod === 'anubis' || G.specialGod === 'anubis') {
+      addGauge(4);
+      if (Engine.gold.freeTop > 6) for (var _ag = 0; _ag < 6; _ag++) spawnGold(e.x, e.y, 1, 0.5 * 0.5, 0, 4);
+    }
+    // UNIVERSAL fallback: one reward-kill of the shared economy (charge) so a boss that
+    // summons NO adds still feeds Jade's bolt window, Odin's raven dives, Artemis' hunt,
+    // etc. once per segment.
+    addCharge(SP_KILL);
+  }
+
+  // LAYER 2 — FICTION-GATED RETINUE (additive economy, phase-gated summons).
+  // Shared: a pop-sized ENTITY tinted to the boss hue, tiny HP (~0.3s of default
+  // fire), linked to the summoning boss by seq. HARD CAPS: max 3 concurrent, spawns
+  // gated behind a per-boss refractory, and they carry NO boss HP (killEnemy(false)
+  // never wipes a segment). killEnemy(reward=true) wires every kill-fed kit for free.
+  var RETINUE_MAX = 3;
+  // Ground-truth scan (verify surface + resync). maintainRetinue uses the cached
+  // boss.retinueLive counter instead (fix #7 — no per-frame closure/scan).
+  function retinueCount(boss) {
+    var n = 0;
+    Engine.enemies.forEach(function (e) { if (!e.dying && e.retinueSeq === boss.seq) n++; });
+    return n;
+  }
+  // fix #3: assign a STABLE free orbit slot (lowest unused retIdx among live members),
+  // not the live count — so a respawn after one add dies can't reuse the survivor's
+  // index (which would collapse counter-rotating rings / stack bearers on one flank).
+  function freeRetSlot(boss) {
+    var used = 0;
+    Engine.enemies.forEach(function (e) { if (!e.dying && e.retinueSeq === boss.seq) used |= (1 << e.retIdx); });
+    for (var i = 0; i < RETINUE_MAX; i++) if (!(used & (1 << i))) return i;
+    return RETINUE_MAX - 1;   // unreachable: caller gates on retinueLive < RETINUE_MAX
+  }
+  function expireRetinue(boss) {
+    Engine.enemies.forEach(function (e) { if (!e.dying && e.retinueSeq === boss.seq) killEnemy(e, false); });
+  }
+  // Spawn ONE retinue add for `boss` in its current retinueKind, materializing at the
+  // boss body (RING implode + GLOW pop in the boss hue) then flying to station.
+  function spawnRetinueAdd(boss) {
+    if (!boss.retinueKind || boss.retinueLive >= RETINUE_MAX) return null;   // fix #7: cached count, no scan
+    var col = boss.retinueCol || [boss.r, boss.g, boss.b];
+    var idx = freeRetSlot(boss);    // fix #3: stable free slot 0/1/2, not the live count
+    var e = spawnLoose(function () { return newEnemy(1, boss.x, boss.y, 30, GL.SPR.SHIP_POP, 74, 30, col, 6, 900, false); });
+    if (!e) return null;
+    e.retinueSeq = boss.seq; e.retinueRole = boss.retinueKind; e.arch = boss.retinueKind;   // arch → authored sprite (assessor/tribute have art; rivet falls back to SHIP_POP)
+    e.retIdx = idx;                       // stable slot for this add's life (fix #3)
+    e.s0 = idx * Math.PI;                 // orbit phase / stagger
+    e.s3 = (idx % 2) ? -1 : 1;            // counter-rotation sign
+    e.retLinkSeq = boss.seq;
+    boss.retinueLive++;                   // fix #7: cached live-count (dec in killEnemy)
+    // materialize: RING implode toward the add + GLOW pop, ~0.2s spawn-tether flash.
+    ringShock(boss.x, boss.y, col, 90, -2400, 0.45);   // negative grow = collapsing ring (implode)
+    flash(boss.x, boss.y, col, 120, 0.32); spark(boss.x, boss.y, col, 8, 300, 26);
+    if (SFX.summon) SFX.summon();
+    if (boss.retinueKind === 'rivet') {
+      // RIVETS (TALOS THE NAIL): orbit the immune body r180, an 8-ring/1.5s. The ONLY
+      // kill/damage feed through the immune finale — so they persist & respawn.
+      e.retFire = 1.5;
+      e.onUpdate = function (r, dt) {
+        var b = G.boss;
+        if (!b || b.seq !== r.retLinkSeq) { r.y += 130 * dt; if (r.y > H + 90) killEnemy(r, false); return; }
+        r.s0 += dt * 1.4 * r.s3;
+        r.x = b.x + Math.cos(r.s0) * 180; r.y = b.y + Math.sin(r.s0) * 180;
+        r.retFire -= dt;
+        if (r.retFire <= 0) { r.retFire = 1.5; P.ring(r.x, r.y, 8, rankSpd(P.SPD.slow), { fam: P.FAM.ORB, tier: 'S', color: col }); }
+      };
+    } else if (boss.retinueKind === 'assessor') {
+      // THE ASSESSORS (AMMIT FORTY-TWO CONFESSIONS): two counter-rotating jackal
+      // emitters (orbitPoint r~110) each firing 21 (=42 together). Killed side gilds
+      // to coins; the survivor keeps its lopsided 21 with a drifting gap.
+      e.retFire = 0.6 + idx * 0.95;
+      e.onUpdate = function (r, dt) {
+        var b = G.boss;
+        if (!b || b.seq !== r.retLinkSeq) { r.y += 130 * dt; if (r.y > H + 90) killEnemy(r, false); return; }
+        r.s0 += dt * 1.1 * r.s3;
+        r.x = b.x + Math.cos(r.s0) * 110; r.y = b.y + 40 + Math.sin(r.s0) * 110;
+        r.retFire -= dt;
+        if (r.retFire <= 0) { r.retFire = 1.9; P.ringGap(r.x, r.y, 21, rankSpd(P.SPD.slow), { gaps: 1, gapWidth: 3.0, offset: r.s0, fam: P.FAM.ORB, tier: 'S', color: col }); }
+      };
+      e.onDeath = function (r, reward) {   // killed-side shots gild to coins (kill to lighten the Confessions)
+        // fix #1: only a genuine player kill gilds coins; a forced despawn (phase
+        // transition / boss-death fly-off, reward=false) spends only the death puff.
+        if (reward && Engine.gold.freeTop > 3) for (var k = 0; k < 4; k++) spawnGold(r.x, r.y, 1, 0.5);
+        spark(r.x, r.y, [1, 0.85, 0.4], 10, 320, 26);
+      };
+    } else if (boss.retinueKind === 'tribute') {
+      // TRIBUTE BEARERS (MIDAS THE TRIBUTE): amber bearers that vacuum a share into
+      // the hoard; killing one drops 3 REAL gold AND starves the king (subtracts its
+      // vacuumed share from e.hoard). Warm-amber body, never loot-gold.
+      e.retinueOff = (idx === 0 ? -220 : idx === 1 ? 220 : 0);
+      e.onUpdate = function (r, dt) {
+        var b = G.boss;
+        if (!b || b.seq !== r.retLinkSeq) { r.y += 130 * dt; if (r.y > H + 90) killEnemy(r, false); return; }
+        r.t += dt;
+        var tx = b.x + r.retinueOff, ty = b.y + 210 + Math.sin(r.t * 2) * 14;
+        r.x += (tx - r.x) * Math.min(1, dt * 3); r.y += (ty - r.y) * Math.min(1, dt * 3);
+        if (b.isMidas) { var v = 26 * dt; r.retVac += v; b.hoard += v; }   // vacuum a share into the hoard
+      };
+      e.onDeath = function (r, reward) {
+        // fix #1 + hoard decision: BOTH the 3-gold loot AND the STARVE (hoard reclaim)
+        // are KILL rewards per §8 ("killing one drops 3 real gold AND subtracts its
+        // vacuumed share ... kill to STARVE the king"). On a NON-rewarded despawn (phase
+        // transition to MIDAS III, or the boss-death fly-off) neither fires: the bearer's
+        // vacuumed tribute STAYS in the hoard and pays out in the finale jackpot (§8
+        // onDeath erupts the whole hoard), so gold is conserved — nothing vanishes. Were
+        // we to reclaim on a non-kill despawn, that vacuumed gold would be subtracted from
+        // the hoard yet (loot now gated) never re-spawned = silently deleted; leaving it
+        // banked in the hoard is both conserving and true to the "starve = kill" fiction.
+        if (reward) {
+          spawnGold(r.x, r.y, 3, 1.0);                                     // 3 real gold
+          // fix #5: seq-guard the GLOBAL G.boss read (mirror the onUpdate guard) so a
+          // stale bearer dying while a DIFFERENT isMidas king is live can't starve the
+          // wrong hoard.
+          var b = G.boss;
+          if (b && b.seq === r.retLinkSeq && b.isMidas) b.hoard = Math.max(0, b.hoard - r.retVac);
+        }
+        spark(r.x, r.y, [1, 0.75, 0.3], 12, 320, 26);
+      };
+    } else {
+      // UNIVERSAL FALLBACK 'escort' — any boss WITHOUT a bespoke retinue (THE APOSTATE,
+      // future bosses): the shared retinue shape — swoop in from the boss body, hold a
+      // beat, ONE unaimed geometry beat, then exit/die. Respawned on the refractory by
+      // maintainRetinue so a boss with no bespoke summons still feeds kill/damage kits.
+      var sideX = (idx % 2) ? W * 0.72 : W * 0.28;
+      P_swoopHold(e, boss.x, clampX(sideX, 200), 470, sideX < W / 2 ? W + 160 : -160);
+      setScript(e, [
+        { t: 0.2, fn: function (r) { r.poseT = 0.3; muzzle(r, col); } },
+        { t: 0.9, fn: function (r) { P.ring(r.x, r.y, 12, rankSpd(P.SPD.slow), { fam: P.FAM.ORB, tier: 'S', color: col, offset: r.s0 }); } }
+      ], 3.0, 0);
+      e.onUpdate = pathEnemyUpdate;   // path 'exit' seg → killEnemy(false); no boss HP, never walls a segment
+    }
+    return e;
+  }
+  // Fill to target instantly (the phase-enter materialize burst).
+  function fillRetinue(boss) {
+    var guard = 0;
+    while (boss.retinueLive < boss.retinueTarget && guard++ < RETINUE_MAX) spawnRetinueAdd(boss);   // fix #7: cached count
+    boss.retinueCd = boss.retinueRespawn;
+  }
+  // Per-frame: respawn a downed add once the refractory elapses (phase-gated). fix #7:
+  // reads the cached boss.retinueLive — no per-frame closure alloc / enemy full-scan.
+  function maintainRetinue(boss, dt) {
+    if (!boss.retinueKind) return;
+    if (boss.retinueCd > 0) boss.retinueCd -= dt;
+    if (boss.retinueLive < boss.retinueTarget && boss.retinueCd <= 0) {
+      spawnRetinueAdd(boss); boss.retinueCd = boss.retinueRespawn;
+    }
+  }
+  // A phase declares its retinue via onEnter (see the boss setlists). This arms the
+  // schedule and materializes the opening pair.
+  function armRetinue(boss, kind, target, respawn, col) {
+    boss.retinueKind = kind; boss.retinueTarget = target; boss.retinueRespawn = respawn; boss.retinueCol = col;
+    fillRetinue(boss);
   }
 
   // -------- bosses --------
@@ -4039,7 +4278,7 @@
       // pool = this segment's HP) takes damage. onEnter arms the nail; kill it and
       // he dies through the normal warden path with an ichor spray (see onDeath).
       { name: 'THE NAIL', hp: 0.24, timeout: 44, path: bp_rails, loop: 3.0,
-        onEnter: function (e) { e.nailActive = true; e.nailR = 30; e.nailX = e.x; e.nailY = e.y + e.scale * 0.44; },
+        onEnter: function (e) { e.nailActive = true; e.nailR = 30; e.nailX = e.x; e.nailY = e.y + e.scale * 0.44; armRetinue(e, 'rivet', 2, 4, HOT); },   // §8: 2 RIVETS feed kill/damage kits through the immune finale
         script: [
         pose(BRZ, 0.36),
         { t: 0.3, fn: function (e) { e.s0 += 0.5; P.pulse(e.x, e.y, { rings: 3, count: 18, speed: rankSpd(P.SPD.slow), speedStep: 60, offset: e.s0, colorA: BRZ, colorB: HOT }); openNode(e, 0, -e.scale * 0.2); } },   // §3 weak-point beat (THE NAIL)
@@ -4085,7 +4324,9 @@
       ] },
       // II THE FORTY-TWO CONFESSIONS — judgment rings of LITERALLY 42 bullets each,
       // counter-rotating at stepped speeds so their interleave drifts the safe gaps.
-      { name: 'THE FORTY-TWO CONFESSIONS', hp: 0.15, timeout: 32, path: bp_holdCenter, loop: 2.6, script: [
+      { name: 'THE FORTY-TWO CONFESSIONS', hp: 0.15, timeout: 32, path: bp_holdCenter, loop: 2.6,
+        onEnter: function (e) { armRetinue(e, 'assessor', 2, 5, MAG); },   // §8: THE ASSESSORS — two counter-rotating 21-emitters (=42)
+        script: [
         pose(MAG),
         { t: 0.5, fn: function (e) { e.s0 += 0.14; P.ring(e.x, e.y, 42, rankSpd(P.SPD.slow), { fam: P.FAM.ORB, tier: 'M', color: MAG, offset: e.s0 }); } },
         { t: 1.5, fn: function (e) { e.poseT = 0.4; muzzle(e, ROSE); } },
@@ -4157,7 +4398,9 @@
         { t: 1.7, fn: function (e) { e.s0 += 0.4; P.ringGap(e.x, e.y, 34, rankSpd(P.SPD.mid), { gaps: 2, gapWidth: 4.2, offset: e.s0 + 0.4, fam: P.FAM.ORB, tier: 'S', color: AMB, gild: true }); } }
       ] },
       // II THE TRIBUTE — rising walls (edict arcWalls) + gold rain, two speeds.
-      { name: 'THE TRIBUTE', hp: 0.15, timeout: 32, path: bp_pendulum, loop: 2.6, script: [
+      { name: 'THE TRIBUTE', hp: 0.15, timeout: 32, path: bp_pendulum, loop: 2.6,
+        onEnter: function (e) { armRetinue(e, 'tribute', 2, 5, AMB); },   // §8: TRIBUTE BEARERS — kill to starve the hoard
+        script: [
         pose(AMB),
         { t: 0.4, fn: function (e) { e.s1++; P.arcWall(e.x, e.y, DOWN, 1.8, 26, rankSpd(P.SPD.slow), { laneAt: (e.s1 % 2 ? -0.26 : 0.26), laneWidth: 5.2, fam: P.FAM.PELLET, tier: 'M', color: AMB }); } },
         { t: 1.0, fn: function (e) { e.s0 += 0.7; P.rain(36, { speed: rankSpd(P.SPD.mid), waves: 4, phase: -e.s0, gapThresh: 0.02, fam: P.FAM.PELLET, tier: 'S', color: ROSE }); } }
@@ -4291,8 +4534,22 @@
     // overlap or forceCrit. ×2.5 (+critBonus from SILVER FLETCHING re-anchor).
     if (isCrit) dmg *= (2.5 + G.critBonus);
     if (G.communion === 'KEMET' && hasStatus(e)) dmg *= 1.1;   // Rite of Two Suns
+    var _hpPre = e.hp;                       // snapshot BEFORE the subtraction (fix #2)
     e.hp -= dmg;
     clampBossHp(e);                         // spellcard floor: discard overkill on non-final phases / during breath
+    // §8 LAYER 1 — DAMAGE-TITHE. Accrue the POST-CLAMP EFFECTIVE damage only (fix #2):
+    // hp actually removed = _hpPre - e.hp. This discards overkill clampBossHp threw away
+    // on a non-final phase AND is exactly 0 during the immune transition breath (hp is
+    // held at breathFloor), so one massive crit can cross at most the clamped units — the
+    // ~40-unit/fight budget can no longer be busted by a single overkill hit.
+    if (e.boss && e.arrived) {
+      var _eff = _hpPre - e.hp;
+      if (_eff > 0) {
+        e.dmgTithe += _eff;
+        var _tu = e.maxhp * 0.025;
+        while (e.dmgTithe >= _tu) { e.dmgTithe -= _tu; e.dmgTitheUnits++; bossTitheUnit(e); }
+      }
+    }
     e.hitFlash = isCrit ? 0.14 : 0.08;
     if (isCrit) { addPopup(e.x, e.y - 30, commas(Math.round(dmg)) + '!', UI_GOLD, 30); SFX.crit(); spark(e.x, e.y, [1, 0.9, 0.5], 5, 320, 22); if (Engine.gold.freeTop > 1) spawnGold(e.x, e.y, 1, 0.35); }
     else if (Math.random() < 0.2) SFX.hit();
@@ -4358,7 +4615,16 @@
       // to gold (bullets from other emitters keep flying — no free screen-clear).
       if (e.arch === 'midship') cancelOwnerBullets(e.seq, e.x, e.y);
     }
-    if (e.onDeath) e.onDeath(e);
+    // fix #7: a dying retinue add drops the boss-side cached live-count (the inc lives in
+    // spawnRetinueAdd). Guard on the seq so only the summoning boss's counter moves; a
+    // post-boss-death fly-off (G.boss null / re-slotted) simply doesn't decrement a
+    // stale/absent boss, which is fine — that boss is gone.
+    if (e.retinueSeq && G.boss && G.boss.seq === e.retinueSeq && G.boss.retinueLive > 0) G.boss.retinueLive--;
+    // fix #1: onDeath must respect the reward flag. A forced despawn (expireRetinue on a
+    // phase transition, or the boss-death fly-off self-kill) passes reward=false, so a
+    // retinue add's onDeath drops NO loot; only a genuine player kill (reward=true) pays.
+    // Structural cleanup inside an onDeath (if any) still runs on either path.
+    if (e.onDeath) e.onDeath(e, reward);
     Engine.enemies.release(e);
   }
 
@@ -4457,7 +4723,7 @@
         // sweep enemy bullets within 220px of the boss to gold
         Engine.bullets.forEach(function (b) { if (b.friendly) return; var dx = b.x - e.x, dy = b.y - e.y; if (dx * dx + dy * dy < 220 * 220) { if (Engine.gold.freeTop > 0) spawnGold(b.x, b.y, 1, 0.4); spark(b.x, b.y, [1, 0.5, 0.85], 2, 160, 16); Engine.bullets.release(b); } });
         flash(e.x, e.y, [1, 0.4, 0.7], 90, 0.25);
-      } else { charmEnemy(e); flash(e.x, e.y, [1, 0.5, 0.85], 60, 0.2); }
+      } else { charmEnemy(e, G.specialR); flash(e.x, e.y, [1, 0.5, 0.85], 60, 0.2); }   // §7 fix #2: HEARTSEEKER charm duration rides specialR
       return;
     }
     // ARTEMIS THE LOOSED ARROW — the first foe struck becomes the Hunted at full ramp.
@@ -4484,6 +4750,7 @@
     damageEnemy(e, dmg, isCrit);
     if (s.crescent) {
       s.damage *= 1.18;                                                   // crescent gains power per foe cleaved
+      if (SFX.blade) SFX.blade(s.hitN);                                   // Pass4: per-pierce crescent shing (pitch rises with pierce count)
       if (G.duos.saintOfWar && !e.dying) { e.weak = true; e.weakT = 4; }  // SAINT OF WAR: cleaves Weaken
       if (G.duos.godsOfWar && e.dying && wasTerror) addFrenzy();          // GODS OF WAR: terrified crescent-kills feed frenzy
     }
@@ -4561,7 +4828,9 @@
 
   // ================= QUETZ — THE COIL =================
   function quetzCoilHit(e, dmg) {
+    var was = e.coilQ;
     e.coilQ = Math.min(6, e.coilQ + 1); e.coilT = 0.9;
+    if (e.coilQ > was && SFX.coilWhistle) SFX.coilWhistle(e.coilQ);   // Pass4 COIL cue: rising whistle only on a real tighten (never per-frame at the cap)
     return dmg * (1 + 0.10 * e.coilQ);   // ×1.60 at 6 bites
   }
 
@@ -4573,8 +4842,8 @@
     var every = (G.ult.god === 'allfather') ? 1 : (G.mods.odinRaven ? 3 : 4);   // odinFury re-anchor: carve every 3rd
     if (e.runeHits >= every && e.runes < 9) {
       e.runes++; e.runeHits = 0;
-      spark(e.x, e.y - e.scale * 0.4, [1, 0.85, 0.4], 3, 200, 18); SFX.hit();   // stone-chisel chip
-      if (e.runes === 9) { flash(e.x, e.y, [1, 0.85, 0.4], 140, 0.3); ringShock(e.x, e.y, [1, 0.85, 0.4], 40, 1800, 0.4); SFX.boom(); }   // the ninth: doom-toll
+      spark(e.x, e.y - e.scale * 0.4, [1, 0.85, 0.4], 3, 200, 18); if (SFX.carveChip) SFX.carveChip(); else SFX.hit();   // stone-chisel chip (Pass4 rune-carve cue)
+      if (e.runes === 9) { flash(e.x, e.y, [1, 0.85, 0.4], 140, 0.3); ringShock(e.x, e.y, [1, 0.85, 0.4], 40, 1800, 0.4); if (SFX.doomToll) SFX.doomToll(); else SFX.boom(); }   // the ninth: doom-toll
     }
     var out = dmg * mult;
     // THE NINTH RUNE — doom-bolts Mark (feeds Gungnir / THE ALLSEEING) + optional splash.
@@ -4620,7 +4889,7 @@
       spark(b.x, b.y, [0.55, 1, 0.35], 2, 160, 14);
       flash(b.x, b.y, [0.9, 1, 0.85], 24, 0.1);     // white pop on the flip
     }
-    if (n > 0) { ringShock(foe.x, foe.y, [0.4, 1, 0.4], 40, 2400, 0.35); SFX.graze(); }   // green RING implode + LIFT voice
+    if (n > 0) { ringShock(foe.x, foe.y, [0.4, 1, 0.4], 40, 2400, 0.35); if (SFX.pilferLift) SFX.pilferLift(); else SFX.graze(); }   // green RING implode + LIFT voice (Pass4 PILFER cue)
   }
 
   // §9a HONEST PIERCE. maxHits = pierce+1 is the shot's LIFETIME cap on distinct
@@ -4793,7 +5062,12 @@
     // the harness can prove auto-fire stays silent on title/pause.
     frame: function (dt) { update(dt || Engine.DT); Engine.flushEdges(); },
     // hurry the boss to its next phase (sets hp to the segment floor = a damage-beat).
-    advancePhase: function () { var b = G.boss; if (b && b.arrived && b.breathT <= 0) { b.hp = b.segFloorHp; b.phaseT = 9999; } },
+    // HP-depletion clear: drop hp to the segment floor and leave phaseT untouched (so
+    // timedOut stays false → a REAL clear, seized=true → PHASE SEIZED + kit payout).
+    advancePhase: function () { var b = G.boss; if (b && b.arrived && b.breathT <= 0) { b.hp = b.segFloorHp; } },
+    // timeout transition: run the phase timer out WITHOUT dropping hp (fix #4 verify) —
+    // timedOut=true, seized=false → transition happens but NO kit payout / no HUBRIS.
+    timeoutPhase: function () { var b = G.boss; if (b && b.arrived && b.breathT <= 0) { b.phaseT = 1e9; } },
     // ---- boss-FIX verify surface (freeze / theft / nail / jackpot / HUD) -----
     // Drive fixed combat steps DIRECTLY (bypasses the RAF wrapper's pause/hitstop
     // gating) then flush input edges like a real frame. Deterministic for headless.
@@ -4802,6 +5076,25 @@
     spawnTalos: function () { Game.beginBoss(Game.bosses.warden, 1); return G.boss ? G.boss._i : -1; },
     arriveBoss: function (y) { var b = G.boss; if (b) { b.arrived = true; b.breathT = 0; if (y != null) b.y = y; } },
     armNail: function () { var b = G.boss; if (b) { b.nailActive = true; b.nailR = 30; b.nailX = b.x; b.nailY = b.y + b.scale * 0.44; } },
+    // §8 verify surface (zero cost unless called): damage-tithe accumulator + retinue.
+    dmgTithe: function () { return G.boss ? G.boss.dmgTithe : 0; },
+    // §8 verify: deal raw damage to the live boss (drives the tithe accumulator) and
+    // return the units crossed; and charm a placed dummy through the aphrodite path so
+    // the star-fix #2 charm-duration (rides specialR) is measurable.
+    damageBoss: function (dmg) { var b = G.boss; if (b && !b.dying) damageEnemy(b, dmg || 0, false); return b ? b.dmgTitheUnits : 0; },
+    charmDummyDur: function (i, sr) { var e = Engine.enemies.items[i]; if (!e || !e.active) return 0; var was = G.specialR; G.specialR = sr; charmEnemy(e, sr); G.specialR = was; return e.charmT; },
+    titheUnits: function () { return G.boss ? G.boss.dmgTitheUnits : 0; },
+    retinueCount: function () { return G.boss ? retinueCount(G.boss) : 0; },
+    retinueLive: function () { return G.boss ? G.boss.retinueLive : -1; },   // fix #7: cached counter (must track the scan)
+    retIdxList: function () { var out = []; if (!G.boss) return out; Engine.enemies.forEach(function (e) { if (!e.dying && e.retinueSeq === G.boss.seq) out.push({ i: e._i, retIdx: e.retIdx, s0: e.s0, s3: e.s3, retVac: e.retVac, retLinkSeq: e.retLinkSeq }); }); return out; },   // fix #3/#5 verify
+    // fix #1 verify: sever every live add's boss-link (retLinkSeq) + drop it past the
+    // bottom edge so ONE step routes it through the authentic onUpdate fly-off branch
+    // (killEnemy(r,false) → onDeath(r,false)) — the same call the boss-death fly-off makes.
+    orphanRetinue: function () { if (!G.boss) return 0; var n = 0; Engine.enemies.forEach(function (e) { if (!e.dying && e.retinueSeq === G.boss.seq) { e.retLinkSeq = -1; e.y = 1e6; n++; } }); return n; },
+    // fix #6 verify: read a pooled slot's retinue-link fields to prove the allocator zeroes them.
+    enemyRetFields: function (i) { var e = Engine.enemies.items[i]; if (!e) return null; return { retLinkSeq: e.retLinkSeq, retIdx: e.retIdx, retinueLive: e.retinueLive, retinueSeq: e.retinueSeq }; },
+    // arm + materialize a named retinue off the live boss (rivet/assessor/tribute).
+    armRetinue: function (kind, n, col) { var b = G.boss; if (!b) return 0; armRetinue(b, kind, n || 2, kind === 'rivet' ? 4 : 5, col || [b.r, b.g, b.b]); return retinueCount(b); },
     fireEdict: function () { fireEdict(); },
     setPlayer: function (x, y) { G.player.x = x; G.player.y = y; },
     playerPos: function () { return { x: G.player.x, y: G.player.y }; },
@@ -5096,6 +5389,7 @@
     spark(x, y, [0.7, 0.95, 1], 10, 300, 24);
     var dx = G.player.x - x, dy = G.player.y - y, d = Math.hypot(dx, dy) || 1;
     flash(x + dx / d * 44, y + dy / d * 44, [0.7, 0.95, 1], 90, 0.2);
+    if (SFX.recall) SFX.recall();   // Pass4: owned-entity recall cue (shared)
   }
   function expireKitHazards(type) {
     for (var i = 0; i < hazards.length; i++) { if (hazards[i].active && hazards[i].type === type) { recallFx(hazards[i].x, hazards[i].y); hazards[i].active = false; } }
@@ -5168,6 +5462,7 @@
     if (G.communion && G.communion !== prev) {
       announce('PANTHEON COMMUNION', G.communion + ' — ' + names[G.communion], 2.6);
       G.flashAll = Math.max(G.flashAll, 0.25);
+      if (SFX.communion) SFX.communion(G.communion);   // Pass4: per-pantheon communion sting on set-bonus
     }
   }
   function effMultCap() { return G.up.multCap + (G.communion === 'OLYMPUS' ? 1 : 0); }

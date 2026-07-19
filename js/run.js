@@ -167,6 +167,79 @@
   Run.GODS = GODS;
   var GOD_KEYS = ['zeus', 'poseidon', 'artemis', 'aphrodite', 'ares', 'heimdall', 'ra', 'anubis', 'loki', 'odin', 'wukong', 'quetz', 'thor', 'guanyu', 'jade'];
 
+  // §7 THREE-LINE CONTRACT card copy. GODS[g].attack/.special mix identity + mechanic;
+  // the card wants a terse DESC one-liner + a ▸HOW activation/stack fragment (≤12 words,
+  // dropped when empty). GOD_CARD holds the per-slot split used by tAttack/tSpecial.
+  var GOD_CARD = {
+    zeus:      { aDesc: 'Attacks arc chain lightning between nearby foes.', aHow: 'Each hit forks to the next foe.',
+                 sDesc: 'SKYFALL cracks a bolt straight down your lane.', sHow: 'Forks to nearby foes; struck are Stunned.' },
+    poseidon:  { aDesc: 'Knocks foes back; slams deal impact damage.', aHow: 'Wall-slams add bonus impact.',
+                 sDesc: 'A tidal wall sweeps up the whole field.', sHow: 'Carries enemy bullets off as gold.' },
+    artemis:   { aDesc: 'Silver arrows brand your HUNTED and home to it.', aHow: 'Hits ramp; a kill chains the hunt on.',
+                 sDesc: 'THE LOOSED ARROW — a piercing, precise needle.', sHow: 'Marks all it strikes; first becomes Hunted.' },
+    aphrodite: { aDesc: 'Attacks stack Charm across the swarm.', aHow: '+15% to the charm-touched & Weakened.',
+                 sDesc: 'HEARTSEEKER weaves a slow heart to a foe.', sHow: 'Charms a minion, or Weakens a boss.' },
+    ares:      { aDesc: 'WAR-HEAT — fight at the muzzle to stoke it.', aHow: 'Javelins → xiphos → doru bundle + labrys.',
+                 sDesc: 'Phobos & Deimos dive-bomb the field.', sHow: 'Every strike sows Terror.' },
+    heimdall:  { aDesc: 'THE BIFRÖST lays a bridge down your lane.', aHow: 'Fire from it to loose spectrum lances.',
+                 sDesc: 'Gjallarhorn wounds and Marks every foe.', sHow: 'Hurls their bullets away.' },
+    ra:        { aDesc: 'SOLAR LENS focuses a beam on ONE held foe.', aHow: 'Holds through 4 heat stages, up to ×2.5.',
+                 sDesc: 'Solar Flare flashes the screen white.', sHow: 'Ignites every foe with Burn.' },
+    anubis:    { aDesc: 'THE WEIGHING loads the scales on each foe.', aHow: 'At the tip the Verdict devours the weak.',
+                 sDesc: 'GATE OF DUAT opens a sand-vortex below.', sHow: 'Drags the wounded; bleeds missing health.' },
+    loki:      { aDesc: 'PILFER pickpockets a foe over three marks.', aHow: 'On the third, snatch 8 nearby bullets.',
+                 sDesc: 'Shadow-Twin decoy stands in for you.', sHow: 'Draws all aimed fire; soaks bullets.' },
+    odin:      { aDesc: 'NINE NIGHTS — one heavy rune-bolt.', aHow: 'Every 4th hit carves a rune, +15% forever.',
+                 sDesc: 'Gungnir never misses, piercing foe after foe.', sHow: 'Marks each foe it runs through.' },
+    wukong:    { aDesc: 'Kills may spawn a hair-clone that fights on.', aHow: 'The clone mirrors your fire.',
+                 sDesc: 'Ruyi Jingu Bang slams the column above you.', sHow: '' },
+    guanyu:    { aDesc: 'Shots become crescent blades that cleave.', aHow: 'Each pierce feeds the next with power.',
+                 sDesc: 'Crescent Moon Sweep clears the whole field.', sHow: 'Hurls struck foes aside.' },
+    jade:      { aDesc: 'IMPERIAL EDICTS — five homing edicts fan out.', aHow: 'They seek foes and Stun them.',
+                 sDesc: 'IMPERIAL JUDGEMENT smites foes with chain lightning.', sHow: 'Recast to refresh the twin storm-clouds.' },
+    quetz:     { aDesc: 'Three streams braid into a plumed helix.', aHow: 'Hold ONE body to COIL +10%/bite (max +60%).',
+                 sDesc: 'Sky Serpent sweeps the field of bullets.', sHow: 'Eats them into your DIVINE INTERVENTION gauge.' },
+    thor:      { aDesc: 'Mjölnir returns, smashing twice per throw.', aHow: '',
+                 sDesc: "Giant's Bane crushes the toughest foe.", sHow: '' }
+  };
+
+  // §7 STARLINE table — per god×slot the concrete quantity a SIGNATURE star scales.
+  // starLine() prints "★★★  ×2.25 <qtyLabel> & <secondary>" from LADDER[tierOf(cur)].
+  var STARLINE = {
+    zeus:      { attack: { qtyLabel: 'arc damage', secondary: '+chain reach' }, special: { qtyLabel: 'bolt damage', secondary: 'wider stun' } },
+    poseidon:  { attack: { qtyLabel: 'impact damage', secondary: '+knockback' }, special: { qtyLabel: 'wave damage', secondary: 'gold sweep' } },
+    artemis:   { attack: { qtyLabel: 'arrow damage', secondary: 'hunt ramp' }, special: { qtyLabel: 'needle damage', secondary: 'marks' } },
+    aphrodite: { attack: { qtyLabel: 'charm damage', secondary: 'Weaken' }, special: { qtyLabel: 'heart damage', secondary: 'charm dwell' } },
+    ares:      { attack: { qtyLabel: 'armory damage', secondary: 'war-heat' }, special: { qtyLabel: 'Terror damage', secondary: 'dread' } },
+    heimdall:  { attack: { qtyLabel: 'lance damage', secondary: 'marks' }, special: { qtyLabel: 'horn damage', secondary: '+shove' } },
+    ra:        { attack: { qtyLabel: 'beam damage', secondary: 'heat stages' }, special: { qtyLabel: 'flare damage', secondary: 'Burn' } },
+    anubis:    { attack: { qtyLabel: 'weigh damage', secondary: 'the scales' }, special: { qtyLabel: 'gate drain', secondary: 'bleed' } },
+    loki:      { attack: { qtyLabel: 'pilfer damage', secondary: 'bullet snatch' }, special: { qtyLabel: 'decoy soak', secondary: 'draw' } },
+    odin:      { attack: { qtyLabel: 'bolt damage', secondary: 'rune carve' }, special: { qtyLabel: 'Gungnir damage', secondary: 'pierce' } },
+    wukong:    { attack: { qtyLabel: 'clone fire', secondary: 'spawn odds' }, special: { qtyLabel: 'staff damage', secondary: 'stun' } },
+    guanyu:    { attack: { qtyLabel: 'crescent damage', secondary: 'per-pierce' }, special: { qtyLabel: 'sweep damage', secondary: 'shove' } },
+    jade:      { attack: { qtyLabel: 'edict damage', secondary: 'stun' }, special: { qtyLabel: 'judgement damage', secondary: 'chain' } },
+    quetz:     { attack: { qtyLabel: 'helix damage', secondary: 'coil bite' }, special: { qtyLabel: 'serpent damage', secondary: 'DI gauge' } },
+    thor:      { attack: { qtyLabel: 'hammer damage', secondary: 'double-smash' }, special: { qtyLabel: "Bane damage", secondary: 'knockback' } }
+  };
+  var MAGSTR = { '1': '1.0', '1.5': '1.5', '2.25': '2.25', '2.9': '2.9', '3.5': '3.5' };
+  function magStr(m) { return MAGSTR['' + m] || ('' + m); }
+  function tierIdx(m) { return m >= 3.5 ? 4 : m >= 2.9 ? 3 : m >= 2.25 ? 2 : m >= 1.5 ? 1 : 0; }
+  // ★-LINE for a transform at its CURRENT tier: "★★★  ×2.25 bolt damage & +chain".
+  function starLine(god, slot, cur) {
+    var mag = LADDER[tierIdx(cur)], stars = magStars(cur);
+    var sl = STARLINE[god] && STARLINE[god][slot];
+    if (!sl) return stars + '  ×' + magStr(mag) + ' signature';
+    var s = stars + '  ×' + magStr(mag) + ' ' + sl.qtyLabel;
+    if (sl.secondary) s += ' & ' + sl.secondary;
+    return s;
+  }
+  // level card now→next ×-line: "×1.5 → ×2.25 bolt damage".
+  function levelStarLine(god, slot, cur, next) {
+    var sl = STARLINE[god] && STARLINE[god][slot];
+    return '×' + magStr(cur) + ' → ×' + magStr(next) + ' ' + (sl ? sl.qtyLabel : 'signature');
+  }
+
   // §2.5 ULTIMATES — god-tied C-key burst transforms. [name, DESC ▸HOW] per the §7
   // three-line contract (no ★-line: ultimates have no star levels first wave).
   var ULTS = {
@@ -259,7 +332,7 @@
     featheredHeart: { name: 'FEATHERED HEART', gods: ['aphrodite', 'quetz'], desc: 'the serpent charms instead of harming', needSlot: { quetz: 'special' } },
     stormfathers: { name: 'STORMFATHERS', gods: ['zeus', 'thor'], desc: 'every hammer impact cracks lightning' },
     ragnarok: { name: 'RAGNARÖK', gods: ['thor', 'loki'], desc: 'the decoy ends in a Mjölnir strike', needSlot: { loki: 'special' } },
-    wildHunt: { name: 'WILD HUNT', gods: ['odin', 'ares'], desc: 'doom-bolts and raven dives savage the Terrified, feeding frenzy' },
+    wildHunt: { name: 'WILD HUNT', gods: ['odin', 'ares'], desc: 'doom-bolts and raven dives savage the Terrified (×2), feeding frenzy' },
     fifthSunDawn: { name: 'FIFTH SUN DAWN', gods: ['ra', 'quetz'], desc: 'the serpent burns; eaten bullets ignite', needSlot: { quetz: 'special' } },
     havocInHeaven: { name: 'HAVOC IN HEAVEN', gods: ['wukong', 'zeus'], desc: "clones' shots chain lightning" },
     eternalDevotion: { name: 'ETERNAL DEVOTION', gods: ['anubis', 'aphrodite'], desc: 'the executed rise as charmed ghosts', needSlot: { anubis: 'attack' } },
@@ -267,7 +340,7 @@
     swornBrothers: { name: 'SWORN BROTHERS', gods: ['guanyu', 'wukong'], desc: 'clones swing crescent blades that pierce' },
     saintOfWar: { name: 'SAINT OF WAR', gods: ['guanyu', 'jade'], desc: 'crescents Weaken every foe they cleave', needSlot: { guanyu: 'attack' } },
     twoThrones: { name: 'TWO THRONES', gods: ['zeus', 'jade'], desc: 'IMPERIAL JUDGEMENT bolts crack an extra chain of lightning', needSlot: { jade: 'special' } },
-    godsOfWar: { name: 'GODS OF WAR', gods: ['ares', 'guanyu'], desc: 'crescents always crit the Terrified; such kills feed frenzy', needSlot: { guanyu: 'attack' } },
+    godsOfWar: { name: 'GODS OF WAR', gods: ['ares', 'guanyu'], desc: 'crescents strike the Terrified precisely; such kills feed frenzy', needSlot: { guanyu: 'attack' } },
     peachBanquet: { name: 'PEACH BANQUET', gods: ['wukong', 'jade'], desc: 'kills within 3s of an IMPERIAL JUDGEMENT bolt drop peaches that feed the DIVINE INTERVENTION gauge', needSlot: { jade: 'special' } },
     theAllseeing: { name: 'THE ALLSEEING', gods: ['heimdall', 'odin'], desc: 'Marked foes take Gungnir and raven hits at +40%' },
     heraldOfRagnarok: { name: 'HERALD OF RAGNARÖK', gods: ['heimdall', 'thor'], desc: 'hammer impacts blast a mini horn shove' },
@@ -275,36 +348,44 @@
   };
   Run.DUOS = DUOS;
 
+  // §7 copy: [id, name, DESC, ▸HOW]. ATTACK POWER + APEX carry the exact §7 wording.
   var SCALING = [
-    ['atkdmg', 'ATTACK POWER', '+15% attack damage'],
-    ['atkrate', 'RAPID FIRE', '+10% attack rate'],
-    ['spdmg', 'SIEGE ROUNDS', '+20% special damage'],
-    ['spcharge', 'RESERVE CELL', '+1 max special charge'],
-    ['sprecharge', 'MOMENTUM', '+20% special recharge']
+    ['atkdmg', 'ATTACK POWER', '+15% attack damage.', 'Stacks — buffs your base stream, not signatures.'],
+    ['atkrate', 'RAPID FIRE', '+10% attack rate.', 'Stacks — the whole torrent fires faster.'],
+    ['spdmg', 'SIEGE ROUNDS', '+20% special damage.', 'Stacks.'],
+    ['spcharge', 'RESERVE CELL', '+1 max special charge.', ''],
+    ['sprecharge', 'MOMENTUM', '+20% special recharge.', 'Stacks.']
   ];
   var GENERIC = [
-    ['life', 'REDUNDANCY', '+1 life'],
-    ['hitbox', 'PINPOINT', '-25% hitbox (once)'],
-    ['magnet', 'LODESTONE', '+60% magnet radius'],
-    ['goldworth', 'APPRAISAL', '+25% gold value'],
-    ['vdur', 'LONG INTERVENTION', '+1.5s DIVINE INTERVENTION duration'],
-    ['vcap', 'APEX', '+1 multiplier cap']
+    ['life', 'REDUNDANCY', '+1 life.', ''],
+    ['hitbox', 'PINPOINT', '-25% hitbox.', 'Once — a permanently smaller kill-dot.'],
+    ['magnet', 'LODESTONE', '+60% magnet radius.', ''],
+    ['goldworth', 'APPRAISAL', '+25% gold value.', ''],
+    ['vdur', 'LONG INTERVENTION', '+1.5s DIVINE INTERVENTION duration.', ''],
+    // §7: never "HUBRIS ceiling" (that's the x1.0-2.0 skill meter), never "x2->x3".
+    ['vcap', 'APEX', 'APEX — your APOTHEOSIS multiplier climbs one step.', 'Cap ×5 → ×6 (max ×8); +0.25 each kill while golden.']
   ];
 
   // ---- boon template builders -----------------------------------------
-  function tAttack(g, swap) { var G = GODS[g]; return { kind: 'transformA', god: g, slot: 'attack', swap: !!swap, name: G.name, epithet: G.epithet, desc: G.attack, css: G.css }; }
-  function tSpecial(g, swap) { var G = GODS[g]; return { kind: 'transformS', god: g, slot: 'special', swap: !!swap, name: G.name, epithet: G.epithet, desc: G.special, css: G.css }; }
+  function tAttack(g, swap) { var G = GODS[g], C = GOD_CARD[g] || {}; return { kind: 'transformA', god: g, slot: 'attack', swap: !!swap, name: G.name, epithet: G.epithet, desc: C.aDesc || G.attack, how: C.aHow || '', css: G.css }; }
+  function tSpecial(g, swap) { var G = GODS[g], C = GOD_CARD[g] || {}; return { kind: 'transformS', god: g, slot: 'special', swap: !!swap, name: G.name, epithet: G.epithet, desc: C.sDesc || G.special, how: C.sHow || '', css: G.css }; }
   // §2.5 — ultimate card: epithet is the ULTIMATE'S name (the god name is the card name);
   // id=god so the verify seam (Run._poolHas) can find it. No star levels, so no mag.
   function tUltimate(g, swap) { var G = GODS[g], U = ULTS[g]; return { kind: 'ultimate', god: g, id: g, slot: 'ultimate', swap: !!swap, name: G.name, epithet: U[0], desc: U[1], css: G.css }; }
   function tMod(g, id, desc) { var G = GODS[g]; return { kind: 'mod', god: g, id: id, name: G.name, epithet: G.epithet, desc: desc, css: G.css }; }
-  function tScale(id, name, desc) { return { kind: 'scale', id: id, name: name, epithet: 'battle upgrade', desc: desc, css: COL_CYAN }; }
-  function tGeneric(id, name, desc) { return { kind: 'generic', id: id, name: name, epithet: 'battle upgrade', desc: desc, css: COL_CYAN }; }
+  // fix #8: fetch a [id,name,DESC,HOW] copy-row from SCALING/GENERIC by id (single source
+  // of truth for both the offer pool and the forceOffer verify surface).
+  function copyRow(arr, id) { for (var i = 0; i < arr.length; i++) if (arr[i][0] === id) return arr[i]; return arr[0]; }
+  function tScale(id, name, desc, how) { return { kind: 'scale', id: id, name: name, epithet: 'battle upgrade', desc: desc, how: how || '', css: COL_CYAN }; }
+  function tGeneric(id, name, desc, how) { return { kind: 'generic', id: id, name: name, epithet: 'battle upgrade', desc: desc, how: how || '', css: COL_CYAN }; }
   function tCharm(id) { var c = CHARMS[id], G = GODS[c.god]; return { kind: 'charm', id: id, god: c.god, name: c.name, epithet: 'charm of ' + G.name, desc: c.desc, css: G.css }; }
   function tLevel(slot, god) {
-    var G = GODS[god], cur = slot === 'attack' ? Game.st().attackR : Game.st().specialR, nm = nextMag(cur);
-    return { kind: slot === 'attack' ? 'levelA' : 'levelS', god: god, slot: slot, mag: nm, level: true,
-      name: G.name, epithet: 'LEVEL UP', desc: G.name + ' ' + (slot === 'attack' ? 'ATTACK' : 'SPECIAL') + '  ' + magStars(cur) + ' → ' + magStars(nm), css: G.css };
+    var G = GODS[god], C = GOD_CARD[god] || {}, cur = slot === 'attack' ? Game.st().attackR : Game.st().specialR, nm = nextMag(cur);
+    return { kind: slot === 'attack' ? 'levelA' : 'levelS', god: god, slot: slot, mag: nm, curMag: cur, level: true,
+      name: G.name, epithet: 'LEVEL UP',
+      // §7 LEVEL-UP DESC: "ODIN ATTACK ★★☆☆☆ → ★★★☆☆"; ▸HOW re-states the signature it grows.
+      desc: G.name + ' ' + (slot === 'attack' ? 'ATTACK' : 'SPECIAL') + '  ' + magStars(cur) + ' → ' + magStars(nm),
+      how: slot === 'attack' ? (C.aHow || '') : (C.sHow || ''), css: G.css };
   }
   function tDuo(id) { var d = DUOS[id]; return { kind: 'duo', id: id, slot: null, duo: true, name: d.name, epithet: 'DUO BOON', desc: d.desc, css: COL_GOLD }; }
 
@@ -326,7 +407,7 @@
   }
   function rerollPrice() { return Math.max(10, Math.round(Run.rerollCost * (Game.rerollHalf && Game.rerollHalf() ? 0.5 : 1))); } // RAVEN QUILL charm
   function finalizeBoon(t, shop) {
-    var b = { kind: t.kind, god: t.god, id: t.id, slot: t.slot, swap: !!t.swap, name: t.name, epithet: t.epithet, desc: t.desc, css: t.css, duo: !!t.duo, mag: t.mag };
+    var b = { kind: t.kind, god: t.god, id: t.id, slot: t.slot, swap: !!t.swap, name: t.name, epithet: t.epithet, desc: t.desc, how: t.how || '', curMag: t.curMag, css: t.css, duo: !!t.duo, mag: t.mag };
     var rar = rollRarity(shop);
     // A swap arrives at the SAME tier as the transform it replaces.
     if (b.swap) {
@@ -450,14 +531,14 @@
     // scaling (weight lowered now that poms exist)
     SCALING.forEach(function (sc) {
       if (sc[0] === 'spcharge' && st.sp.max >= 5) return;
-      push(tScale(sc[0], sc[1], sc[2]), 4);
+      push(tScale(sc[0], sc[1], sc[2], sc[3]), 4);
     });
     // generics (lower weight)
     GENERIC.forEach(function (gc) {
       if (gc[0] === 'vcap' && st.up.multCap >= 8) return;
       if (gc[0] === 'hitbox' && st.up.hitboxMul < 1) return;
       if (gc[0] === 'life' && st.lives >= 6) return;
-      push(tGeneric(gc[0], gc[1], gc[2]), 3);
+      push(tGeneric(gc[0], gc[1], gc[2], gc[3]), 3);
     });
     // passive charms (ungated; one per god per run) — the whole charm family
     // shares Hermes' old blessing mass (~5 total, declining as they're owned)
@@ -472,6 +553,41 @@
     for (var i = 0; i < pool.length; i++) { if (pool[i].kind === kind && pool[i].id === id) return true; }
     return false;
   };
+
+  // Verify hook (zero cost unless called): build one finalized boon per requested kind
+  // against the CURRENT Game.st() (harness equips gods/stars/duo pair first), set them
+  // as the draft offers, and enter draft mode so Run.draw renders the §7 contract.
+  // kinds e.g. ['transformA','duo','levelA']. Guards missing gods (skips, never throws).
+  Run.forceOffer = function (kinds) {
+    var st = Game.st(), out = [];
+    for (var i = 0; i < kinds.length; i++) {
+      var k = kinds[i], t = null;
+      if (k === 'transformA') t = tAttack(st.attackGod || 'zeus', false);
+      else if (k === 'transformS') t = tSpecial(st.specialGod || 'poseidon', false);
+      else if (k === 'levelA') { if (st.attackGod) t = tLevel('attack', st.attackGod); }
+      else if (k === 'levelS') { if (st.specialGod) t = tLevel('special', st.specialGod); }
+      else if (k === 'ultimate') t = tUltimate(st.attackGod || 'zeus', false);
+      else if (k === 'duo') {
+        // prefer a duo whose pair matches the equipped gods, else a stable default.
+        var did = null;
+        for (var dk in DUOS) { var pr = DUOS[dk].gods; if ((st.attackGod === pr[0] && st.specialGod === pr[1]) || (st.attackGod === pr[1] && st.specialGod === pr[0])) { did = dk; break; } }
+        t = tDuo(did || 'eclipse');
+      } else if (k === 'charm') t = tCharm('charmZeus');
+      // fix #8: reference the SCALING / GENERIC source rows so the verify surface renders
+      // EXACTLY what the live pool renders — a later copy edit can no longer diverge.
+      else if (k === 'scale') { var _sc = copyRow(SCALING, 'atkdmg'); t = tScale(_sc[0], _sc[1], _sc[2], _sc[3]); }
+      else if (k === 'generic') { var _gc = copyRow(GENERIC, 'vcap'); t = tGeneric(_gc[0], _gc[1], _gc[2], _gc[3]); }
+      if (t) out.push(finalizeBoon(t, false));
+    }
+    if (!out.length) return 0;
+    Run.draftOffers = out; Run.draftSel = 0;
+    Game.setMode('draft');
+    return out.length;
+  };
+
+  // fix #8 verify: expose the SCALING/GENERIC source rows so the harness can prove
+  // forceOffer renders EXACTLY the source copy (both now go through copyRow).
+  Run._verifyCopy = function () { return { scale: copyRow(SCALING, 'atkdmg'), generic: copyRow(GENERIC, 'vcap') }; };
 
   function wpick(list) {
     var tot = 0, i;
@@ -800,6 +916,42 @@
     if (line) lines.push(line);
     for (i = 0; i < lines.length; i++) ctx.fillText(lines[i], cx, y + i * lh);
   }
+  // like wrap, but returns the line array (so the caller can advance the cursor).
+  function wrapArr(ctx, text, maxw) {
+    var words = text.split(' '), line = '', lines = [], i;
+    for (i = 0; i < words.length; i++) { var t = line ? line + ' ' + words[i] : words[i]; if (ctx.measureText(t).width > maxw && line) { lines.push(line); line = words[i]; } else line = t; }
+    if (line) lines.push(line);
+    return lines;
+  }
+  // §7 CONTRACT — the three body lines for a card: DESC (one-liner) / ▸HOW (fragment,
+  // dropped if empty) / ★-LINE (concrete scaled quantity at current tier). SCALING &
+  // GENERIC carry no ★-line; only transforms/levels do.
+  function cardTierMag(b) {
+    // a fresh transform equips the god at base (mag 1.0); a swap arrives at the tier
+    // of the slot it replaces (finalizeBoon mirrors the same rarity rule).
+    if (b.swap) { var st = Game.st(); return b.slot === 'attack' ? st.attackR : st.specialR; }
+    return 1.0;
+  }
+  function cardLines(b) {
+    var desc = b.desc, how = b.how || '', star = '';
+    if (b.kind === 'ultimate') {                          // ULTS pack "DESC ▸ HOW" in one string
+      var parts = b.desc.split(' ▸ '); desc = parts[0]; if (parts[1]) how = parts[1];
+    } else if (b.kind === 'transformA' || b.kind === 'transformS') {
+      star = starLine(b.god, b.slot, cardTierMag(b));
+    } else if (b.kind === 'levelA' || b.kind === 'levelS') {
+      star = levelStarLine(b.god, b.slot, b.curMag, b.mag);   // now→next ×-line
+    }
+    return { desc: desc, how: how, star: star };
+  }
+  // §7 LEVEL rail: 1.0 · 1.5 · [2.25] · 2.9 · 3.5 with the NEXT node bracketed & lit.
+  var RAIL = [1.0, 1.5, 2.25, 2.9, 3.5];
+  function drawRail(ctx, cx, y, cur, next, sold) {
+    var parts = [], i;
+    for (i = 0; i < RAIL.length; i++) { var isNext = Math.abs(RAIL[i] - next) < 0.01; parts.push(isNext ? '[' + magStr(RAIL[i]) + ']' : magStr(RAIL[i])); }
+    ctx.font = '600 16px Consolas, monospace';   // 16px: the 5-node rail fits a 306px card
+    ctx.fillStyle = sold ? '#6a5a2e' : COL_GOLD;
+    ctx.fillText(parts.join(' · '), cx, y);
+  }
   function commas(n) { return Math.floor(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
   function kindLabel(b) {
     var s = b.kind === 'transformA' ? 'ATTACK BOON' : b.kind === 'transformS' ? 'SPECIAL BOON'
@@ -1027,16 +1179,45 @@
     ctx.fillStyle = sold ? '#4a6570' : b.css;
     var nf = b.name.length > 9 ? 28 : 40;
     ctx.font = '700 ' + nf + 'px Consolas, monospace';
-    spaced(ctx, b.name, x + w / 2, y + h * 0.30, b.name.length > 9 ? 1 : 3);
+    var nameY = y + h * 0.30;
+    spaced(ctx, b.name, x + w / 2, nameY, b.name.length > 9 ? 1 : 3);
+    // §7: NAME + ★-track — a small current-tier star row under the name (transforms/levels).
+    var isXform = (b.kind === 'transformA' || b.kind === 'transformS');
+    var isLevel = (b.kind === 'levelA' || b.kind === 'levelS');
+    var hasTrack = isXform || isLevel, panY, epiY;
+    if (hasTrack) {
+      ctx.fillStyle = sold ? '#6a5a2e' : COL_GOLD; ctx.font = '600 18px Consolas, monospace';
+      ctx.fillText(magStars(isXform ? cardTierMag(b) : b.curMag), x + w / 2, nameY + 24);
+      panY = nameY + 48; epiY = nameY + (b.god && GODS[b.god] ? 72 : 58);
+    } else { panY = nameY + 34; epiY = nameY + ((b.god && GODS[b.god]) ? 60 : 44); }
     // pantheon tag line
     var pan = (b.god && GODS[b.god]) ? GODS[b.god].pantheon : '';
-    if (pan) { ctx.fillStyle = sold ? '#3d545c' : b.css; ctx.font = '600 20px Consolas, monospace'; ctx.fillText('· ' + pan + ' ·', x + w / 2, y + h * 0.30 + 34); }
+    if (pan) { ctx.fillStyle = sold ? '#3d545c' : b.css; ctx.font = '600 20px Consolas, monospace'; ctx.fillText('· ' + pan + ' ·', x + w / 2, panY); }
     // epithet
     ctx.fillStyle = sold ? '#3d545c' : COL_DIM; ctx.font = 'italic 500 23px Consolas, monospace';
-    ctx.fillText(b.epithet, x + w / 2, y + h * 0.30 + (pan ? 60 : 44));
-    // desc
-    ctx.fillStyle = sold ? '#4a6570' : COL_COMMON; ctx.font = '500 27px Consolas, monospace';
-    wrap(ctx, b.desc, x + w / 2, y + h * 0.52, w - 54, 34);
+    ctx.fillText(b.epithet, x + w / 2, epiY);
+    // ---- §7 three-line contract body: DESC / ▸HOW / ★-LINE (or the LEVEL rail) ----
+    var L = cardLines(b), by = epiY + 34;
+    ctx.fillStyle = sold ? '#4a6570' : COL_COMMON; ctx.font = '500 25px Consolas, monospace';
+    var dl = wrapArr(ctx, L.desc, w - 50);
+    for (var _d = 0; _d < dl.length; _d++) { ctx.fillText(dl[_d], x + w / 2, by); by += 31; }
+    if (L.how) {
+      by += 3; ctx.fillStyle = sold ? '#3d545c' : COL_CYAN; ctx.font = '500 21px Consolas, monospace';
+      var hl = wrapArr(ctx, '▸ ' + L.how, w - 44);
+      for (var _h = 0; _h < hl.length; _h++) { ctx.fillText(hl[_h], x + w / 2, by); by += 26; }
+    }
+    var floorY = y + h - (price != null ? 84 : 30);       // the ★-block may not cross into the price zone / card edge
+    if (isLevel) {                                        // ★-LINE now→next + the 5-node rail
+      by += 8; if (by > floorY - 56) by = floorY - 56;    // clamp: anchor the block above the bottom, never clip
+      ctx.fillStyle = sold ? '#7a6a3a' : COL_GOLD; ctx.font = '600 23px Consolas, monospace';
+      ctx.fillText(L.star, x + w / 2, by); by += 30;
+      drawRail(ctx, x + w / 2, by, b.curMag, b.mag, sold);
+    } else if (L.star) {                                  // ★-LINE at current tier (transforms only)
+      by += 8; ctx.fillStyle = sold ? '#7a6a3a' : COL_GOLD; ctx.font = '600 22px Consolas, monospace';
+      var sl = wrapArr(ctx, L.star, w - 40);
+      if (by > floorY - (sl.length - 1) * 26) by = floorY - (sl.length - 1) * 26;   // clamp: never clip the card edge
+      for (var _s = 0; _s < sl.length; _s++) { ctx.fillText(sl[_s], x + w / 2, by); by += 26; }
+    }
     if (price != null) {
       ctx.fillStyle = sold ? COL_RED : COL_GOLD; ctx.font = '700 36px Consolas, monospace';
       ctx.fillText(sold ? 'SOLD' : (commas(price) + ' g'), x + w / 2, y + h - 44);
