@@ -68,6 +68,18 @@ counts as one of the 82; gen only the style the owner picks, A, B, or C) and
 34.6 (solar barque — additive, 83rd file, gen once the ultimate roster is
 ratified). A batch run before the flags clear delivers 81 files.
 
+**DETAIL BUDGET — hard rule on COMBAT SPRITES, Sections 8–9 (owner verdict
+2026-07-19: the first boss/elite field-sprite gens came out "wayyy too
+detailed, in a bad way" — in-game models only; STORYBOOK portraits may stay
+intricate per ART.md).** At in-game size over black under bloom, detail reads
+as noise: a sprite is one bold silhouette + one motif + a rim, nothing else.
+Treat the templates' MAXIMUM SIMPLICITY clauses as hard constraints: **at most
+~8 large flat shapes per sprite**; no panel lines, greebles, engraving,
+rivets, or ornament below read-size — omit, never shrink. Coordinator QA: view
+every Section 8–9 output scaled to its in-game read size (~60–100px for
+bosses, smaller for popcorn) — if it reads as texture instead of a shape,
+reject and re-gen with "SIMPLER: fewer, larger, flatter shapes" appended.
+
 Output convention:
 - **Filename**: `<prompt#>[-<row#>]-<slug>.png`, e.g. `16-odin.png`,
   `33-1-mjolnir.png`, `30-10-huginn-muninn.png`.
@@ -806,9 +818,12 @@ shape alone, never "same hull, different tint". THE EDGE IS LIGHT: the entire
 silhouette is carried by a self-luminous hostile rim-glow in a warm
 red-magenta family tinted with the accent color {ACCENT}; there is NO drawn
 outline; the interior is quiet dark mid-tone planes only, gilded-myth armor
-suggested in broad dark shapes. Sacred and ceremonial menace, never gory.
-Silhouette must read instantly at small sprite size over a black field under
-additive bloom. Deliver: PNG, 1:1 square, sprite centered, on a fully
+suggested in broad dark shapes. MAXIMUM SIMPLICITY: compose the whole sprite
+from at most 8 large flat shapes; no panel lines, no greebles, no engraved
+texture, no ornament — any element that will not survive at final sprite size
+must be omitted entirely. Sacred and ceremonial menace, never gory. Silhouette
+must read instantly at small sprite size over a black field under additive
+bloom. Deliver: PNG, 1:1 square, sprite centered, on a fully
 TRANSPARENT ground — never white, never light gray, no backdrop of any kind.
 Negative: no photorealism, no airbrushed or plastic gradients, no glossy 3D
 render, no mixed mythological traditions, no ink outline, no paper grain, no
@@ -852,7 +867,9 @@ scene, {ORIENTATION}. This is a sacred relic-weapon of the gods: reliquary
 craftsmanship, ceremonial, mythic — never sci-fi, never a machine. THE EDGE IS
 LIGHT: the silhouette is carried by a self-luminous rim-glow in {RIM}; there is
 NO drawn outline; the interior is quiet dark mid-tone planes with gilded-myth
-detail suggested in broad dark shapes only. Silhouette must read instantly at
+detail suggested in broad dark shapes only. MAXIMUM SIMPLICITY: at most 8 large
+flat shapes; no engraving, no filigree, no ornament smaller than the read size
+below — omit it entirely rather than render it smaller. Silhouette must read instantly at
 {READ SIZE} over a black field under additive bloom. Deliver: PNG, 1:1 square,
 sprite centered, on a fully TRANSPARENT ground — never white, never light gray,
 no backdrop of any kind. Negative: no photorealism, no airbrushed or plastic
