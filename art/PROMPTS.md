@@ -144,6 +144,49 @@ gradients, no glossy 3D render, no mixed mythological traditions, no pure black
 center column, no watermark.
 ```
 
+### 1b. GAME OVER keyart
+
+```
+Painted illustration, storybook style: the aftermath of hubris — a small
+broken ship silhouette sinking downward through dark water, its faint cyan
+glow guttering out, while a thin stream of gold coins it carried scatters
+upward away from it toward a distant uncaring crowned silhouette high above.
+Game-native gilded iconography only: crown, coins, one small ship — no motifs
+from any real-world mythology. CRITICAL COMPOSITION: the central band (middle
+50% of the height) stays very dark and quiet for large text overlay;
+concentrate detail at the extreme top and bottom. Somber, reliquary, never
+gory. Palette: near-black ground #05080b, cold dim teal #6fa9b8 dominant, a
+guttering cyan #5fe6ff glint on the ship, sparse gold #ffd766 coins, warm
+near-black outline #231A20 with outer contours 3x interior weight, restrained
+gold-leaf grain. Deliver: PNG, 9:16 portrait (1080x1920), on a near-black
+#05080b ground — never white or light gray. Negative: no photorealism, no
+airbrushed or plastic gradients, no glossy 3D render, no mixed mythological
+traditions, no pure black #000000, no gore or skulls, no text or lettering,
+no busy particle noise, no bright detail in the center band, no watermark.
+```
+
+### 1c. VICTORY keyart — the king is felled
+
+```
+Painted illustration, storybook style: a colossal gaunt crowned figure of
+hardened gold breaking apart from below — great cracked golden shards
+drifting outward and UP off the top edge — while an unbroken torrent of
+freed gold coins pours down both sides toward a small bright triumphant ship
+rising through the middle distance on a column of cyan-white light.
+Game-native gilded iconography only: crown, coins, light, one ship. CRITICAL
+COMPOSITION: the central vertical column (middle 40% of the width) holds only
+the small ship and its light — keep it dark enough for text overlay above and
+below the ship; all gold detail at the edges and top. Triumphant, sacred,
+gleaming. Palette: near-black ground #05080b, gold #ffd766 dominant at the
+edges, cyan #5fe6ff and white on the ship's column of light, warm near-black
+outline #231A20 with outer contours 3x interior weight, restrained gold-leaf
+grain. Deliver: PNG, 9:16 portrait (1080x1920), on a near-black #05080b
+ground — never white or light gray. Negative: no photorealism, no airbrushed
+or plastic gradients, no glossy 3D render, no mixed mythological traditions,
+no pure black #000000, no text or lettering, no busy particle noise, no
+bright detail over the text zones, no watermark.
+```
+
 ---
 
 ## Section 2 — Pantheon emblems (1:1, silhouette-first)
