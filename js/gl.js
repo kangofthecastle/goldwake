@@ -17,6 +17,14 @@
   // Switch live from the console: GL.setBulletStyle('B'). Default A.
   GL.bulletStyle = 'A';
 
+  // JADE EMPEROR edict silhouette (debug switch for the owner to pick from renders):
+  // 'A' = scroll-talisman (violet tablet, gold border, red seal-dot) — live default;
+  // 'B' = hanging vertical banner trailing like a ribbon;
+  // 'C' = square imperial seal-stamp chop (stamps a glowing seal-mark on hit).
+  // Drawn procedurally in game.js drawShots; this is only the style flag.
+  GL.edictStyle = 'A';
+  GL.setEdictStyle = function (s) { GL.edictStyle = (s === 'B' || s === 'C') ? s : 'A'; };
+
   // Sprite ids -> atlas region index.
   GL.SPR = {
     GLOW: 0,        // soft radial glow disc

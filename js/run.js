@@ -91,14 +91,14 @@
                  attack: 'WAR-HEAT: fight at the muzzle to stoke it — javelins escalate to xiphos blades, then a doru bundle + labrys.',
                  special: 'Phobos & Deimos dive-bomb foes, sowing Terror with every strike.' },
     heimdall:  { name: 'HEIMDALL', epithet: 'the Watchman', pantheon: 'ASGARD', css: '#ffe3c2', color: [1.0, 0.89, 0.76],
-                 attack: 'THE BIFRÖST: a rainbow bridge forms above you on a beat; shots crossing it refract into five rays and it Marks foes.',
+                 attack: 'THE BIFRÖST: a rainbow bridge lays down your lane on a beat; fire from it to loose spectrum lances. Foes on the bridge are Marked.',
                  special: 'Gjallarhorn: a blast that wounds and Marks all foes, hurling their bullets away.' },
     ra:        { name: 'RA', epithet: 'the Radiant', pantheon: 'KEMET', css: '#ffe89a', color: [1.0, 0.9, 0.55],
                  attack: 'SOLAR LENS: hold fire on ONE foe to focus the beam through 4 heat stages, up to ×2.5.',
                  special: 'Solar Flare: a screen flash that ignites every foe with Burn.' },
     anubis:    { name: 'ANUBIS', epithet: 'Weigher of Hearts', pantheon: 'KEMET', css: '#e8c46a', color: [0.9, 0.75, 0.35],
-                 attack: '+25% damage below half health; executes non-bosses below 25% for +50% gold.',
-                 special: 'Judgment of Duat: every foe is struck for a share of its missing health.' },
+                 attack: 'THE WEIGHING: your hits load the scales on every foe; when they tip, the Verdict devours the weak for gold (bosses take a judgment burst + Weaken).',
+                 special: 'GATE OF DUAT: a gate of sand opens below; the wounded are dragged toward judgment, bleeding missing health.' },
     loki:      { name: 'LOKI', epithet: 'the Trickster', pantheon: 'ASGARD', css: '#8cff5a', color: [0.55, 1.0, 0.35],
                  // PASS2: PILFER text is pre-set so a restore of the Loki ATTACK draft is already correct.
                  attack: 'PILFER — your hits pickpocket a foe (3 marks); on the third, snatch the 8 nearest enemy bullets.',
@@ -113,11 +113,11 @@
                  attack: 'Shots become crescent blades that cleave, gaining power per foe pierced.',
                  special: 'Crescent Moon Sweep: a colossal blade sweeps the field, hurling foes aside.' },
     jade:      { name: 'JADE EMPEROR', epithet: 'Sovereign of Heaven', pantheon: 'CELESTIAL COURT', css: '#c99aff', color: [0.79, 0.60, 1.0],
-                 attack: 'Attacks issue homing imperial edicts that Stun the condemned.',
-                 special: "Heaven's Verdict: a volley of homing edicts Stuns every foe on the field." },
+                 attack: 'IMPERIAL EDICTS: five homing edicts fan out, seek foes, and Stun them.',
+                 special: 'IMPERIAL JUDGEMENT: twin storm-clouds smite random foes with chain lightning; recast to refresh.' },
     quetz:     { name: 'QUETZALCOATL', epithet: 'the Plumed Serpent', pantheon: 'FIFTH SUN', css: '#5affc0', color: [0.35, 1.0, 0.75],
                  attack: 'Three streams braid into a plumed helix (pierces 1); hold it on ONE body to COIL it +10%/bite, up to +60%.',
-                 special: 'Sky Serpent sweeps the field, eating bullets into your apotheosis gauge.' },
+                 special: 'Sky Serpent sweeps the field, eating bullets into your DIVINE INTERVENTION gauge.' },
     thor:      { name: 'THOR', epithet: 'the Thunderer', pantheon: 'ASGARD', css: '#8fb4d8', color: [0.56, 0.66, 0.82],
                  attack: 'Mjölnir: a returning hammer that smashes twice per throw.',
                  special: "Giant's Bane: a colossal hammer crushes the toughest foe." }
@@ -140,9 +140,9 @@
     charmOdin:      { god: 'odin',      name: 'RAVEN QUILL',      desc: 'Huginn & Muninn fly with you, diving at foes (any attack)' },
     charmThor:      { god: 'thor',      name: 'HAMMER SHARD',     desc: '+15% special damage' },
     charmWukong:    { god: 'wukong',    name: 'GOLDEN HAIR',      desc: '+12% move speed, +15% focus speed' },
-    charmQuetz:     { god: 'quetz',     name: 'PLUMED CREST',     desc: '+1.2s apotheosis duration' },
+    charmQuetz:     { god: 'quetz',     name: 'PLUMED CREST',     desc: '+1.2s DIVINE INTERVENTION duration' },
     charmGuanyu:    { god: 'guanyu',    name: 'OATH TABLET',      desc: 'your multiplier survives death' },
-    charmJade:      { god: 'jade',      name: 'IMPERIAL SEAL',    desc: 'apotheosis bonus pays +30%' }
+    charmJade:      { god: 'jade',      name: 'IMPERIAL SEAL',    desc: 'DIVINE INTERVENTION bonus pays +30%' }
   };
   Run.CHARMS = CHARMS;
   var CHARM_KEYS = ['charmZeus', 'charmPoseidon', 'charmArtemis', 'charmAphrodite', 'charmAres', 'charmHeimdall', 'charmRa', 'charmAnubis', 'charmLoki', 'charmOdin', 'charmThor', 'charmWukong', 'charmQuetz', 'charmGuanyu', 'charmJade'];
@@ -156,26 +156,26 @@
     ares: [['aresDecay', 'frenzy decays half as fast', 'attack'], ['aresCharge', 'frenzy charges special 2x at 5+', 'attack'], ['aresTerror', 'terror lasts +1.5s', 'special'], ['aresSpoils', 'terror-slams drop gold', 'special']],
     heimdall: [['heimVigil', '+20% damage to Marked foes', 'any'], ['heimHorn', 'Gjallarhorn hits harder; shove 350px', 'special'], ['heimEcho', 'the horn echoes once at 50% after 1s', 'special']],
     ra: [['raRamp', 'beam ramps faster & higher', 'attack'], ['raSpread', 'burning foes spread Burn on death', 'any'], ['raSplit', 'beam splits vs swarms', 'attack'], ['raBurn', 'beam ignites its target', 'attack']],
-    anubis: [['anubisThresh', 'execute threshold 25% → 33%', 'attack'], ['anubisRefund', 'executes refund special charge', 'attack'], ['anubisShard', 'executes drop an apotheosis shard', 'attack'], ['anubisBossDmg', 'below-half bonus vs bosses +25% → +40%', 'attack']],
+    anubis: [['anubisHeavy', 'HEAVY HEART: foes below half tip 2× faster', 'attack'], ['anubisFeast', 'FEAST OF THE FAITHFUL: Verdict/Gate kill gold +50%', 'any'], ['anubisRefund', 'a Verdict refunds special charge', 'attack'], ['anubisShard', 'a Verdict drops a DIVINE INTERVENTION shard', 'attack']],
     // PASS2: lokiVaunt + lokiChance restored under PILFER (their Confuse-era readers are replaced).
-    loki: [['lokiLong', 'decoy lasts 6 → 9s', 'special'], ['lokiBoom', 'decoy explodes: bullets → gold', 'special'], ['lokiVaunt', 'pilfered daggers charge APOTHEOSIS', 'attack'], ['lokiChance', 'PICKPOCKET: Pilfer on the 2nd mark; steal 12', 'attack']],
+    loki: [['lokiLong', 'decoy lasts 6 → 9s', 'special'], ['lokiBoom', 'decoy explodes: bullets → gold', 'special'], ['lokiVaunt', 'pilfered daggers charge DIVINE INTERVENTION', 'attack'], ['lokiChance', 'PICKPOCKET: Pilfer on the 2nd mark; steal 12', 'attack']],
     odin: [['odinRaven', 'odinFury: runes carve every 3rd hit (from 4th)', 'attack'], ['odinMark', 'Gungnir marks last; bonus x1.4', 'special'], ['odinRavenMark', 'odinSunder: doom-bolts splash 50% to a nearby foe', 'attack'], ['odinGungnir', 'Gungnir +50% damage & longer', 'special']],
     wukong: [['wukongClones', 'clones last 7s, cap 3', 'attack'], ['wukongStaff', 'staff wider; survivors Stunned', 'special'], ['wukongSpecial', 'clones echo your special at 25%', 'special'], ['wukongChance', 'clone spawn 20% → 35%', 'attack']],
     quetz: [['quetzBig', 'serpent larger & slower', 'special'], ['quetzGold', 'eaten bullets also pay gold', 'special'], ['quetzCircle', 'serpent circles you at the end', 'special'], ['quetzPierce', '+1 more pierce', 'attack']],
     thor: [['thorBelt', 'Megingjörð: +40% dmg, +50% knockback', 'any'], ['thorFast', 'throw cycle 1.4s → 0.9s', 'attack'], ['thorGauntlet', 'Járngreipr: catch grants +30% stream 2s', 'any'], ['thorSkymark', 'hammer hovers spinning at apex', 'attack']],
     guanyu: [['guanWide', 'crescents wider; +1 pierce', 'attack'], ['guanOath', 'Peach-Garden Oath: +30% attack damage while Focused', 'attack'], ['guanWake', 'the sweep leaves a burning arc', 'special'], ['guanSpoils', 'foes slain by the sweep pay +50% gold', 'special']],
-    jade: [['jadeOften', 'edicts issue twice as often', 'attack'], ['jadeStun', 'Stunned foes take +25% damage', 'any'], ['jadeWrath', 'the Verdict volley fires a second wave at 50%', 'special'], ['jadeTribute', 'Weakened foes pay +30% gold on death', 'any']]
+    jade: [['jadeOften', 'IMPERIAL JUDGEMENT hurls bolts every 0.5s (from 0.8s)', 'special'], ['jadeStun', 'Stunned foes take +25% damage', 'any'], ['jadeMirror', 'MIRROR REFLECTION: bolts bank off a mirror to the strongest foe', 'special'], ['jadeTribute', 'Weakened foes pay +30% gold on death', 'any']]
   };
   Run.MODS = MODS;
   // mods that are one-shot (skip once owned); zeusChain / artemisCrit stack
   var BOOL_MODS = { zeusCrit: 1, zeusFork: 1, zeusField: 1, poseidonBig: 1, poseidonDrag: 1, poseidonSplash: 1, poseidonForce: 1,
     artemisRefund: 1, artemisSpread: 1, artemisMulti: 1, aphroLong: 1, aphroExplode: 1, aphroTaunt: 1, aphroFast: 1,
     aresDecay: 1, aresCharge: 1, aresTerror: 1, aresSpoils: 1, heimVigil: 1, heimPrism: 1, heimHorn: 1, heimEcho: 1,
-    raRamp: 1, raSpread: 1, raSplit: 1, raBurn: 1, anubisThresh: 1, anubisRefund: 1, anubisShard: 1, anubisBossDmg: 1,
+    raRamp: 1, raSpread: 1, raSplit: 1, raBurn: 1, anubisHeavy: 1, anubisFeast: 1, anubisRefund: 1, anubisShard: 1,
     lokiLong: 1, lokiBoom: 1, lokiVaunt: 1, lokiChance: 1, odinRaven: 1, odinMark: 1, odinRavenMark: 1, odinGungnir: 1,
     wukongClones: 1, wukongStaff: 1, wukongSpecial: 1, wukongChance: 1, quetzBig: 1, quetzGold: 1, quetzCircle: 1, quetzPierce: 1,
     thorBelt: 1, thorFast: 1, thorGauntlet: 1, thorSkymark: 1,
-    guanWide: 1, guanOath: 1, guanWake: 1, guanSpoils: 1, jadeOften: 1, jadeStun: 1, jadeWrath: 1, jadeTribute: 1 };
+    guanWide: 1, guanOath: 1, guanWake: 1, guanSpoils: 1, jadeOften: 1, jadeStun: 1, jadeMirror: 1, jadeTribute: 1 };
 
   // ---- transform level ladder (pom-style upgrades) --------------------
   var LADDER = [1.0, 1.5, 2.25, 2.9, 3.5];
@@ -186,26 +186,26 @@
   var DUOS = {
     eclipse: { name: 'ECLIPSE', gods: ['zeus', 'ra'], desc: 'the solar beam arcs chain lightning', needSlot: { ra: 'attack' } },
     worldSerpent: { name: 'WORLD SERPENT', gods: ['poseidon', 'quetz'], desc: 'the sky serpent leaves a bullet-sweeping wake', needSlot: { quetz: 'special' } },
-    deathSentence: { name: 'DEATH SENTENCE', gods: ['artemis', 'anubis'], desc: 'crits execute foes below 40%' },
+    deathSentence: { name: 'DEATH SENTENCE', gods: ['artemis', 'anubis'], desc: 'precise strikes execute foes below 40% and load double weight on the scales' },
     loveAndWar: { name: 'LOVE AND WAR', gods: ['aphrodite', 'ares'], desc: 'charmed allies rage; their end sows Terror' },
     doubleTrouble: { name: 'DOUBLE TROUBLE', gods: ['loki', 'wukong'], desc: 'the decoy is a firing clone', needSlot: { loki: 'special' } },
-    huntersEye: { name: "HUNTER'S EYE", gods: ['odin', 'artemis'], desc: 'marked foes always crit' },
+    huntersEye: { name: "HUNTER'S EYE", gods: ['odin', 'artemis'], desc: 'Marked foes always expose a weak point' },
     bloodAndFire: { name: 'BLOOD AND FIRE', gods: ['ra', 'ares'], desc: 'frenzy never fades while anything burns', needSlot: { ares: 'attack' } },
     typhoonPillar: { name: 'TYPHOON PILLAR', gods: ['poseidon', 'wukong'], desc: 'the staff sends a tidal shockwave', needSlot: { wukong: 'special' } },
     allfathersWrath: { name: "ALLFATHER'S WRATH", gods: ['zeus', 'odin'], desc: 'Gungnir chains lightning per pierce', needSlot: { odin: 'special' } },
     featheredHeart: { name: 'FEATHERED HEART', gods: ['aphrodite', 'quetz'], desc: 'the serpent charms instead of harming', needSlot: { quetz: 'special' } },
     stormfathers: { name: 'STORMFATHERS', gods: ['zeus', 'thor'], desc: 'every hammer impact cracks lightning' },
     ragnarok: { name: 'RAGNARÖK', gods: ['thor', 'loki'], desc: 'the decoy ends in a Mjölnir strike', needSlot: { loki: 'special' } },
-    wildHunt: { name: 'WILD HUNT', gods: ['odin', 'ares'], desc: 'ravens hunt the Terrified x3, feeding frenzy', needSlot: { odin: 'attack' } },
+    wildHunt: { name: 'WILD HUNT', gods: ['odin', 'ares'], desc: 'your Huginn & Muninn ravens hunt the Terrified x3, feeding frenzy' },
     fifthSunDawn: { name: 'FIFTH SUN DAWN', gods: ['ra', 'quetz'], desc: 'the serpent burns; eaten bullets ignite', needSlot: { quetz: 'special' } },
     havocInHeaven: { name: 'HAVOC IN HEAVEN', gods: ['wukong', 'zeus'], desc: "clones' shots chain lightning" },
     eternalDevotion: { name: 'ETERNAL DEVOTION', gods: ['anubis', 'aphrodite'], desc: 'the executed rise as charmed ghosts', needSlot: { anubis: 'attack' } },
     stormSurge: { name: 'STORM SURGE', gods: ['thor', 'poseidon'], desc: 'hammer impacts emit tidal waves' },
     swornBrothers: { name: 'SWORN BROTHERS', gods: ['guanyu', 'wukong'], desc: 'clones swing crescent blades that pierce' },
     saintOfWar: { name: 'SAINT OF WAR', gods: ['guanyu', 'jade'], desc: 'crescents Weaken every foe they cleave', needSlot: { guanyu: 'attack' } },
-    twoThrones: { name: 'TWO THRONES', gods: ['zeus', 'jade'], desc: 'Verdict edicts crack chain lightning on impact', needSlot: { jade: 'special' } },
+    twoThrones: { name: 'TWO THRONES', gods: ['zeus', 'jade'], desc: 'IMPERIAL JUDGEMENT bolts crack an extra chain of lightning', needSlot: { jade: 'special' } },
     godsOfWar: { name: 'GODS OF WAR', gods: ['ares', 'guanyu'], desc: 'crescents always crit the Terrified; such kills feed frenzy', needSlot: { guanyu: 'attack' } },
-    peachBanquet: { name: 'PEACH BANQUET', gods: ['wukong', 'jade'], desc: 'kills within 3s of a Verdict drop peaches that feed the apotheosis gauge', needSlot: { jade: 'special' } },
+    peachBanquet: { name: 'PEACH BANQUET', gods: ['wukong', 'jade'], desc: 'kills within 3s of an IMPERIAL JUDGEMENT bolt drop peaches that feed the DIVINE INTERVENTION gauge', needSlot: { jade: 'special' } },
     theAllseeing: { name: 'THE ALLSEEING', gods: ['heimdall', 'odin'], desc: 'Marked foes take Gungnir and raven hits at +40%' },
     heraldOfRagnarok: { name: 'HERALD OF RAGNARÖK', gods: ['heimdall', 'thor'], desc: 'hammer impacts blast a mini horn shove' },
     falseDawn: { name: 'FALSE DAWN', gods: ['heimdall', 'loki'], desc: 'the decoy pulses a marking horn every 2s', needSlot: { loki: 'special' } }
@@ -224,7 +224,7 @@
     ['hitbox', 'PINPOINT', '-25% hitbox (once)'],
     ['magnet', 'LODESTONE', '+60% magnet radius'],
     ['goldworth', 'APPRAISAL', '+25% gold value'],
-    ['vdur', 'LONG APOTHEOSIS', '+1.5s apotheosis duration'],
+    ['vdur', 'LONG INTERVENTION', '+1.5s DIVINE INTERVENTION duration'],
     ['vcap', 'APEX', '+1 multiplier cap']
   ];
 
@@ -297,6 +297,25 @@
     return oa || os;
   }
 
+  // DUO GATING (owner 2026-07-19, §7): a duo is OFFERED only when the run holds ≥1
+  // ADDITIONAL boon from either god of the pair beyond the two slot transforms — a star
+  // level above base on their slot, a god-tied mod, or that god's charm.
+  function investedIn(pair, st) {
+    for (var k = 0; k < pair.length; k++) {
+      var g = pair[k];
+      // star level above base on this god's occupied slot
+      if (st.attackGod === g && st.attackR > 1.0) return true;
+      if (st.specialGod === g && st.specialR > 1.0) return true;
+      // any god-tied mod (mod ids are per-god; check this god's mod table)
+      var ms = MODS[g];
+      for (var m = 0; m < ms.length; m++) { if (st.mods[ms[m][0]]) return true; }
+      // that god's charm (charm<CapitalizedGod>)
+      var cid = 'charm' + g.charAt(0).toUpperCase() + g.slice(1);
+      if (st.charms[cid]) return true;
+    }
+    return false;
+  }
+
   // a duo may require a god in a specific slot (needSlot: { god: 'attack'|'special' })
   function duoSlotOk(d, st) {
     if (!d.needSlot) return true;
@@ -327,7 +346,7 @@
       if (st.duos[did]) continue;
       var d = DUOS[did], pr = d.gods;
       var pairOk = (st.attackGod === pr[0] && st.specialGod === pr[1]) || (st.attackGod === pr[1] && st.specialGod === pr[0]);
-      if (pairOk && duoSlotOk(d, st)) push(tDuo(did), 3);
+      if (pairOk && duoSlotOk(d, st) && investedIn(pr, st)) push(tDuo(did), 3);   // §7 DUO GATING: equipped + invested
     }
     // god mods (only for owned gods, in the required slot)
     GOD_KEYS.forEach(function (g) {
@@ -356,6 +375,13 @@
     CHARM_KEYS.forEach(function (id) { if (!st.charms[id]) push(tCharm(id), charmW); });
     return out;
   }
+
+  // verify seam: is a given card kind+id currently in the offer pool? (duo-gating check)
+  Run._poolHas = function (kind, id) {
+    var pool = candidatePool(false);
+    for (var i = 0; i < pool.length; i++) { if (pool[i].kind === kind && pool[i].id === id) return true; }
+    return false;
+  };
 
   function wpick(list) {
     var tot = 0, i;
@@ -716,7 +742,7 @@
     spaced(ctx, 'HUBRIS', W / 2, H * 0.16, 30);   // 6 letters: wider tracking than the old 8-letter mark
     ctx.fillStyle = COL_CYAN; ctx.font = '500 34px Consolas, monospace';
     // textBaseline is 'top': clear the full 150px glyph block before the subtitle
-    ctx.fillText('an apotheosis-driven bullet hell', W / 2, H * 0.16 + 160);
+    ctx.fillText('a divine-intervention bullet hell', W / 2, H * 0.16 + 160);
 
     var pulse = 0.5 + 0.5 * Math.sin(perfNow() * 0.005);
     ctx.globalAlpha = 0.55 + 0.45 * pulse; ctx.fillStyle = '#ffffff'; ctx.font = '700 52px Consolas, monospace';
@@ -727,7 +753,7 @@
       'WASD / Arrows  move          Shift  focus',
       'Shift-tap + direction  ghost dodge (i-frames)',
       'Z / Space  attack            X  SPECIAL',
-      'C  APOTHEOSIS                P / Esc  pause',
+      'C  DIVINE INTERVENTION       P / Esc  pause',
       'Left/Right + Z  choose boons  (or click)',
       'R  restart run    M  mute'
     ];
@@ -743,7 +769,7 @@
     ctx.fillText('— PERMANENT UNLOCKS —', ux, uy);
     var us = [
       [un.startLife, 'Talos slain', '+1 starting life'],
-      [un.startGauge, 'Run completed', 'start with 25% apotheosis'],
+      [un.startGauge, 'Run completed', 'start with 25% DIVINE INTERVENTION'],
       [un.baseDamage, 'Career gold ' + commas(CAREER_GOLD_UNLOCK), '+10% base damage']
     ];
     for (var k = 0; k < us.length; k++) {
