@@ -20,6 +20,19 @@ field. A sprite obeys combat law, never storybook law: **self-luminous rim-glow
 in place of the `#231A20` ink outline** (ink outlines are STORYBOOK-only),
 transparent ground, **no paper grain**, silhouette readable at actual in-game
 size (the player ship renders ~60–80px on the 1080-wide field; popcorn smaller).
+
+**THE DETAIL BUDGET (owner ruling 2026-07-19, after the first boss/elite
+field-sprite gens failed as "wayyy too detailed").** At in-game size, over
+black, under bloom, detail is noise: ornament shimmers, aliases, and steals
+contrast from the silhouette that carries gameplay information. A combat
+sprite is **one bold silhouette + one motif + a rim — nothing else**, composed
+from **at most ~8 large flat shapes**. No panel lines, greebles, engraving,
+rivet fields, or micro-ornament; anything that will not survive at the
+sprite's read size is **omitted entirely, never rendered smaller**. Judge
+every sprite at its in-game size, not at full resolution — a gen that "looks
+finished" zoomed-in is usually failing this rule. Generation-model bias runs
+exactly opposite to this budget; treat simplicity clauses in prompts as hard
+constraints. (STORYBOOK assets are exempt — that layer is allowed intricacy.)
 The **faction color law is absolute**: player ship = cool cyan/white family;
 enemy sprites = warm/hostile family carrying their archetype accent. The
 **center of the player ship stays visually quiet** — the bright hitbox dot is

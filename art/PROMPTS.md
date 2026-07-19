@@ -68,17 +68,16 @@ counts as one of the 82; gen only the style the owner picks, A, B, or C) and
 34.6 (solar barque — additive, 83rd file, gen once the ultimate roster is
 ratified). A batch run before the flags clear delivers 81 files.
 
-**DETAIL BUDGET — hard rule on COMBAT SPRITES, Sections 8–9 (owner verdict
-2026-07-19: the first boss/elite field-sprite gens came out "wayyy too
-detailed, in a bad way" — in-game models only; STORYBOOK portraits may stay
-intricate per ART.md).** At in-game size over black under bloom, detail reads
-as noise: a sprite is one bold silhouette + one motif + a rim, nothing else.
-Treat the templates' MAXIMUM SIMPLICITY clauses as hard constraints: **at most
-~8 large flat shapes per sprite**; no panel lines, greebles, engraving,
-rivets, or ornament below read-size — omit, never shrink. Coordinator QA: view
-every Section 8–9 output scaled to its in-game read size (~60–100px for
-bosses, smaller for popcorn) — if it reads as texture instead of a shape,
-reject and re-gen with "SIMPLER: fewer, larger, flatter shapes" appended.
+**DETAIL BUDGET — hard rule on COMBAT SPRITES, Sections 8–9.** Doctrine lives
+in **ART.md — "THE DETAIL BUDGET" under the third clause** (owner ruling
+2026-07-19 after the first boss/elite field-sprite gens failed as too
+detailed): one bold silhouette + one motif + a rim, at most ~8 large flat
+shapes, ornament below read-size omitted — never shrunk; STORYBOOK portraits
+exempt. The templates' MAXIMUM SIMPLICITY clauses are that rule made local —
+hard constraints, not flavor. Coordinator QA: view every Section 8–9 output
+scaled to its in-game read size (~60–100px for bosses, smaller for popcorn) —
+if it reads as texture instead of a shape, reject and re-gen with "SIMPLER:
+fewer, larger, flatter shapes" appended.
 
 Output convention:
 - **Filename**: `<prompt#>[-<row#>]-<slug>.png`, e.g. `16-odin.png`,
