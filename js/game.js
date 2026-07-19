@@ -144,7 +144,7 @@
       hitstopT: 0,   // micro-hitstop remaining (s of SIM frozen); see JUICE + update()
       player: {
         x: W / 2, y: H - 300, alive: true, invuln: 2.0, blink: 0,
-        fireT: 0, respawnT: 0, dead: false, drones: [], recoil: 0, hammerT: 0, edictT: 0, volleyN: 0
+        fireT: 0, respawnT: 0, dead: false, drones: [], recoil: 0, hammerT: 0, volleyN: 0
       },
       vaunt: { gauge: (opts.gaugePct || 0) * GAUGE_MAX, active: false, timer: 0, duration: VAUNT_DUR, killCount: 0, mercy: 0, ready: (opts.gaugePct || 0) >= 1 },
       // special weapon
@@ -189,8 +189,8 @@
       // so it survives target motion and chains cleanly. huntSwap/huntStray = sticky counter.
       hunt: { foe: null, foeSeq: 0, stacks: 0, stackT: 0, stray: null, straySeq: 0, swap: 0 },
       // HEIMDALL THE BIFRÖST — a drawn hazard (not a pooled entity): t = cadence clock,
-      // seamT = telegraph clock, y = band altitude, life = band remaining once solid.
-      bifrost: { t: 0, seamT: 0, x: 0, y: 0, life: 0, active: false },
+      // seamT = telegraph clock, x = band's vertical-seam player-x, life = band remaining once solid.
+      bifrost: { t: 0, seamT: 0, x: 0, life: 0, active: false },
       // JADE EMPEROR IMPERIAL JUDGEMENT — twin storm-clouds (owned entities, §5) that hurl
       // alternating chain-bolts at random foes; jadeMirror banks bolts to the strongest.
       judge: { active: false, timer: 0, boltT: 0, side: 0 },
@@ -209,7 +209,7 @@
       clones: [],
       debris: [],
       // god-special timers: Ra apotheosis surge, Gjallarhorn echo, Verdict 2nd wave + peach window
-      raSurgeT: 0, hornEchoT: 0, verdict: { t: 0, mult: 0.5 }, verdictPeachT: 0,
+      raSurgeT: 0, hornEchoT: 0, verdictPeachT: 0,
       skyfall: { x: 0, t: 0 },   // ZEUS SKYFALL — transient column draw (~0.22s)
       hermes: { speed: 0, focus: 0, recharge: 0, graze: 0 },
       charms: {},
@@ -939,7 +939,7 @@
     s.weave = 0; s.phase = 0;
     s.cloneShot = false; s.crescent = false;
     s.markHit = false; s.forceCrit = 0;
-    s.huntHome = false; s.refracted = false; s.loosed = false; s.brandedFirst = false;
+    s.huntHome = false; s.loosed = false; s.brandedFirst = false;
     resetShotHits(s);
     return s;
   }
@@ -1554,6 +1554,9 @@
   function gateOfDuat() {
     var d = G.duat;
     d.active = true; d.x = W / 2; d.y = H - 70; d.dur = 2.5; d.timer = 2.5;
+    // fresh per-cast boss cap: zero every live foe's gate-drain accumulator so a recast
+    // (or a boss that survived a prior gate) gets its own min(0.05·specialR,0.15)·maxhp ceiling.
+    Engine.enemies.forEach(function (e) { e.duatDmg = 0; });
     G.flashAll = Math.max(G.flashAll, 0.2); addShake(5);
     ringShock(d.x, d.y, [0.85, 0.7, 0.3], 90, 3600, 0.5);
   }
@@ -1567,11 +1570,17 @@
       var share = (e.maxhp - e.hp) * (dt / d.dur) * 0.4 * G.specialR;   // missing-HP share over the duration
       if (!e.boss) {
         var dx = d.x - e.x, dy = d.y - e.y, di = Math.hypot(dx, dy) || 1;
-        e.dispVX += (dx / di) * 900 * dt; e.dispVY += (dy / di) * 900 * dt;   // dragged toward the gate (displacement pull)
+        var pull = Math.min(di, 300 * G.specialR * dt);             // REAL migration toward the gate (px/s, specialR-scaled)
+        e.x += (dx / di) * pull; e.y += (dy / di) * pull;
+        e.dispVX += (dx / di) * 140 * dt; e.dispVY += (dy / di) * 140 * dt;   // modest displacement lean for juice
         killGoldMul = (di < 170 ? 1.5 : 1) * feast;                  // deaths at the gate pay bonus gold
-        if (share > 0) damageEnemy(e, share, false);
+        if (share > 0) damageEnemy(e, share, false);                 // non-boss share stays per-frame (no cap)
         killGoldMul = 1;
-      } else if (share > 0) damageEnemy(e, share, false);           // bosses take the share, immovable
+      } else if (share > 0) {                                         // bosses: immovable, drain clamped per cast
+        var cap = Math.min(0.05 * G.specialR, 0.15) * e.maxhp;
+        var room = cap - e.duatDmg;
+        if (room > 0) { var hit = Math.min(share, room); e.duatDmg += hit; damageEnemy(e, hit, false); }
+      }
     });
   }
   function drawDuat() {
@@ -1658,7 +1667,7 @@
       j.boltT = G.mods.jadeOften ? 0.5 : 0.8;
       j.side ^= 1;                                     // alternate clouds
       var cloud = G.jclouds[j.side];
-      var target = G.mods.jadeMirror ? highestHpEnemy() : randomLiveFoe();   // MIRROR REFLECTION → strongest
+      var target = G.mods.jadeMirror ? highestCurHpEnemy() : randomLiveFoe();   // MIRROR REFLECTION → strongest LIVE foe (current hp)
       if (target && !target.dying) {
         var dmg = LANCE_DMG * 1.2 * G.stats.spDmg * G.specialR;
         if (G.mods.jadeMirror) {   // the zhaoyaojing hangs between the clouds; the bolt banks off it
@@ -1666,7 +1675,8 @@
           arcFx(cloud.x, cloud.y, mx, my, [1, 0.85, 0.4]); arcFx(mx, my, target.x, target.y, [0.6, 0.85, 1]);
           flash(mx, my, [1, 0.9, 0.5], 70, 0.18);
         } else arcFx(cloud.x, cloud.y, target.x, target.y, [0.6, 0.85, 1]);
-        chainLightning(target, dmg, true);            // full Zeus-style chain (inherits +2 storm jumps)
+        damageEnemy(target, dmg, false);              // the AIMED foe always eats the bolt (a surrounded boss no longer gets skipped)
+        chainLightning(target, dmg, true);            // full Zeus-style chain to OTHERS is the bonus (inherits +2 storm jumps)
         if (!target.boss && !target.dying) { target.stunT = Math.max(target.stunT, 0.4); flash(target.x, target.y, [0.7, 0.95, 1], 60, 0.2); }
         if (G.duos.twoThrones && !target.dying) chainLightning(target, dmg * 0.4, false);   // TWO THRONES: extra chain crack
         G.verdictPeachT = 3;                          // PEACH BANQUET: kills within 3s of a bolt feed the gauge
@@ -1827,6 +1837,13 @@
   function highestHpEnemy() {
     var best = null, bm = -1;
     Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; if (e.maxhp > bm) { bm = e.maxhp; best = e; } });
+    return best;
+  }
+  // ranks by CURRENT hp (bosses eligible) — jadeMirror strikes the actually-strongest
+  // LIVE foe, not a near-dead big-maxhp tank.
+  function highestCurHpEnemy() {
+    var best = null, bm = -1;
+    Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; if (e.hp > bm) { bm = e.hp; best = e; } });
     return best;
   }
   function nearestTerrified(x, y) {
@@ -2071,7 +2088,7 @@
     }
     flash(px, py - 36, [0.8, 0.6, 1], 80, 0.14);
   }
-  // Single edict (verify/close-up helper for the edict-style renders).
+  // Fire the full 5-edict JADE fan (verify/render helper; name kept for Game.test API compat).
   function fireEdict() { fireJadeEdicts(G.player.x, G.player.y, false, 1); }
 
   function streamAngles(n, spread) {
@@ -2335,7 +2352,7 @@
     e.terrorT = 0; e.shakenT = 0;
     e.charmMeter = 0; e.charmed = false; e.charmT = 0;
     e.marked = false; e.markT = 0; e.weak = false; e.weakT = 0; e.weakStacks = 0; e.markShimmer = 0; e.ghost = false;
-    e.burnT = 0; e.burnDps = 0; e.trickStacks = 0; e.stunT = 0; e.trickBudget = 0; e.judgeT = 0;
+    e.burnT = 0; e.burnDps = 0; e.trickStacks = 0; e.stunT = 0; e.trickBudget = 0; e.judgeT = 0; e.sealT = 0;
     // ODIN NINE NIGHTS — carved runes (0..9) are PERMANENT for this enemy's life
     // (per-enemy knowledge; reset ONLY here on pool reuse, never by phase transitions).
     e.runes = 0; e.runeHits = 0;
@@ -2343,6 +2360,9 @@
     e.coilQ = 0; e.coilT = 0;
     // ANUBIS THE WEIGHING — per-foe accrued weight on the scales (reset only here).
     e.scaleW = 0;
+    // ANUBIS GATE OF DUAT — per-cast boss drain accumulator (cleared here on pool reuse
+    // AND at each gateOfDuat cast, so a boss loses at most min(0.05·specialR,0.15)·maxhp/cast).
+    e.duatDmg = 0;
     // LOKI MISCHIEF — pickpocket stack (0..3) + decay clock + per-foe pilfer cooldown.
     e.mischief = 0; e.mischiefT = 0; e.pilferCd = 0;
     // §3 PRECISION weak-point node: nodeState 0=none 1=telegraph 2=open; nodeT = phase clock.
@@ -2502,6 +2522,7 @@
       if (e.hp <= 0) { killEnemy(e, true); return; }
     }
     if (e.stunT > 0) e.stunT -= dt;
+    if (e.sealT > 0) e.sealT -= dt;   // JADE edict style-C seal-mark fade (drawn in drawKitOverlays)
     // Ares terror / shaken
     if (e.terrorT > 0) e.terrorT -= dt;
     if (e.shakenT > 0) e.shakenT -= dt;
@@ -3826,8 +3847,8 @@
     if (s.kind === 7) { // JADE imperial edict — Stun the non-boss it condemns
       damageEnemy(e, dmg, isCrit);
       if (!e.boss && !e.dying) { e.stunT = Math.max(e.stunT, 0.9); flash(e.x, e.y, [0.8, 0.6, 1], 70, 0.2); }
-      if (GL.edictStyle === 'C' && !e.dying) {   // seal-stamp chop: a brief glowing seal-mark on hit
-        flash(e.x, e.y, [1, 0.85, 0.4], 90, 0.22); GL.draw(GL.SPR.RING, e.x, e.y, e.scale * 0.9, e.scale * 0.9, 0, 1, 0.3, 0.3, 0.9);
+      if (GL.edictStyle === 'C' && !e.dying) {   // seal-stamp chop: stamp state now, DRAW the ring at render (drawKitOverlays)
+        flash(e.x, e.y, [1, 0.85, 0.4], 90, 0.22); e.sealT = 0.3;
       }
       return;
     }
@@ -4135,7 +4156,7 @@
     // drop one player-faction shot at (x,y) heading up — lets the harness fire at
     // the nail vs the body and confirm the routing (body=0, nail drains) via collideShots.
     testShot: function (x, y, dmg) {
-      var s = allocShot(); if (!s) return;   // allocShot resets ALL per-shot flags (huntHome/loosed/refracted/weave/turn/phase/…) so a recycled slot can't leak state into the verify surface
+      var s = allocShot(); if (!s) return;   // allocShot resets ALL per-shot flags (huntHome/loosed/weave/turn/phase/…) so a recycled slot can't leak state into the verify surface
       s.x = x; s.y = y; s.vx = 0; s.vy = -1200; s.radius = 12; s.damage = dmg || 1000; s.faction = 0;
       s.pierce = 0; s.kind = 0; s.big = false; s.age = 0; s.life = 2.5; s.grazed = false;
     },
@@ -4208,13 +4229,14 @@
     setMod: function (id) { applyMod(id, 1); },
     setCharm: function (id) { applyCharm(id, 1); },
     setDuo: function (id) { G.duos[id] = true; },
+    forceClearBeat: function (kind) { startClearBeat(kind || 'wave'); },   // verify: exercise the wave-boundary state drop
     fireNow: function (focus) { fireShots(!!focus); },
     specialNow: function () { doSpecial(true); },
     huntInfo: function () { var h = G.hunt; return { foeSeq: h.foe ? h.foeSeq : 0, foeIdx: (h.foe ? h.foe._i : -1), stacks: h.stacks, swap: h.swap }; },
     frenzyInfo: function () { return { f: G.frenzy.frenzyF, boost: G.frenzy.boost, pinT: G.frenzy.pinT, stacks: G.frenzy.stacks, prevTier: G.frenzy.prevTier }; },
     setFrenzy: function (f) { G.frenzy.frenzyF = f; G.frenzy.stacks = Math.round(f * 10); },
     addFrenzy: function () { addFrenzy(); },   // cross-kit gravy hook (GODS OF WAR / WILD HUNT feed)
-    enemyKit: function (i) { var e = Engine.enemies.items[i]; if (!e || !e.active) return null; return { runes: e.runes, runeHits: e.runeHits, coilQ: e.coilQ, coilT: e.coilT, mischief: e.mischief, scaleW: e.scaleW, nodeState: e.nodeState, nodeDX: e.nodeDX, nodeDY: e.nodeDY, marked: e.marked, weak: e.weak, weakStacks: e.weakStacks || 0, trickBudget: e.trickBudget || 0, hp: e.hp, maxhp: e.maxhp }; },
+    enemyKit: function (i) { var e = Engine.enemies.items[i]; if (!e || !e.active) return null; return { runes: e.runes, runeHits: e.runeHits, coilQ: e.coilQ, coilT: e.coilT, mischief: e.mischief, scaleW: e.scaleW, nodeState: e.nodeState, nodeDX: e.nodeDX, nodeDY: e.nodeDY, marked: e.marked, weak: e.weak, weakStacks: e.weakStacks || 0, trickBudget: e.trickBudget || 0, hp: e.hp, maxhp: e.maxhp, sealT: e.sealT || 0, duatDmg: e.duatDmg || 0 }; },
     // set per-enemy kit state directly (verify only): runes/coilQ/mischief/weakStacks.
     setKitState: function (i, o) { var e = Engine.enemies.items[i]; if (!e || !e.active) return; if (o.runes != null) e.runes = o.runes; if (o.runeHits != null) e.runeHits = o.runeHits; if (o.coilQ != null) { e.coilQ = o.coilQ; e.coilT = 0.9; } if (o.mischief != null) { e.mischief = o.mischief; e.mischiefT = 2.5; } if (o.weakStacks != null) e.weakStacks = o.weakStacks; },
     // run one PILFER cast off enemy i (adds one cast's trickBudget to the boss, clamped).
@@ -4222,7 +4244,7 @@
     // place enemy i precisely (verify only) — lets the harness build deterministic Ra columns.
     setEnemyPos: function (i, x, y) { var e = Engine.enemies.items[i]; if (e && e.active) { e.x = x; e.y = y; e.vx = 0; e.vy = 0; } },
     // read a shot slot's per-shot flags (verify only) — proves testShot leaks no stale state.
-    shotAt: function (i) { var s = Engine.shots.items[i]; if (!s || !s.active) return null; return { kind: s.kind, homing: !!s.homing, weave: s.weave, turn: s.turn, phase: s.phase, huntHome: !!s.huntHome, loosed: !!s.loosed, refracted: !!s.refracted }; },
+    shotAt: function (i) { var s = Engine.shots.items[i]; if (!s || !s.active) return null; return { kind: s.kind, homing: !!s.homing, weave: s.weave, turn: s.turn, phase: s.phase, huntHome: !!s.huntHome, loosed: !!s.loosed }; },
     openNode: function (i) { var e = Engine.enemies.items[i]; if (e && e.active) openNode(e, 0, -e.scale * 0.2); },
     forceNodeOpen: function (i) { var e = Engine.enemies.items[i]; if (e && e.active) { e.nodeState = 2; e.nodeT = 2.0; e.nodeDX = 0; e.nodeDY = 0; e.nodeX = e.x; e.nodeY = e.y; } },
     setCoil: function (i, q) { var e = Engine.enemies.items[i]; if (e && e.active) { e.coilQ = q; e.coilT = 0.9; } },
@@ -4271,9 +4293,16 @@
     // UNTOUCHED: a normal wave cleared with zero player hits (spellcard-capture homage).
     if (kind === 'wave' && G.waveHits === 0) { skillEvent(W / 2, H * 0.42, 'UNTOUCHED', 40); G.tally.untouched++; }
     cancelBulletsToGold(false); homeAllGold();
-    // drop transient special timers so a pending edict volley / Ra surge / horn
-    // echo / peach window can't freeze through the draft and fire into next wave
-    G.verdict.t = 0; G.raSurgeT = 0; G.hornEchoT = 0; G.verdictPeachT = 0;
+    // drop transient special timers so a pending Ra surge / horn echo / peach window
+    // can't freeze through the draft and fire into next wave
+    G.raSurgeT = 0; G.hornEchoT = 0; G.verdictPeachT = 0;
+    // owned JADE/ANUBIS entities + freeze beats must recall/dissipate too, or they hang
+    // frozen across the draft (updateCombat is skipped) and resume onto the next wave's spawns.
+    if (G.jclouds.length) { for (var jc = 0; jc < G.jclouds.length; jc++) recallFx(G.jclouds[jc].x, G.jclouds[jc].y); G.jclouds.length = 0; }
+    G.judge.active = false; G.judge.boltT = 0;
+    if (G.duat.active) { recallFx(G.duat.x, G.duat.y); G.duat.active = false; }
+    G.bfreeze = 0;
+    if (G.bifrost.active || G.bifrost.seamT > 0) { G.bifrost.active = false; G.bifrost.seamT = 0; G.bifrost.life = 0; }
     G.clearKind = kind; G.clearT = 1.1; G.mode = 'clearing';
   }
 
@@ -4957,6 +4986,10 @@
       GL.draw(GL.SPR.GLOW, e.nodeX, e.nodeY, nr * 2.0, nr * 2.0, 0, col[0], col[1], col[2], (open ? 0.5 : 0.3) * pu);
       GL.draw(GL.SPR.GOLD, e.nodeX, e.nodeY, nr * 1.0, nr * 1.2, t * 3, col[0], col[1], col[2], (open ? 0.95 : 0.6) * pu);
       if (open) GL.draw(GL.SPR.RING, e.nodeX, e.nodeY, nr * 2.4, nr * 2.4, -t * 2, col[0], col[1], col[2], 0.5);
+    }
+    // JADE edict style-C — the seal-mark ring, stamped on hit (e.sealT), drawn here at render.
+    if (e.sealT > 0 && !e.dying) {
+      GL.draw(GL.SPR.RING, e.x, e.y, s * 0.9, s * 0.9, 0, 1, 0.3, 0.3, 0.9 * Math.min(1, e.sealT / 0.3));
     }
     // LOKI — MISCHIEF triskele: 1/2/3 green kunai over the hull (stack = shape).
     if (e.mischief > 0 && !e.dying && G.attackGod === 'loki') {

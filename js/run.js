@@ -196,7 +196,7 @@
     featheredHeart: { name: 'FEATHERED HEART', gods: ['aphrodite', 'quetz'], desc: 'the serpent charms instead of harming', needSlot: { quetz: 'special' } },
     stormfathers: { name: 'STORMFATHERS', gods: ['zeus', 'thor'], desc: 'every hammer impact cracks lightning' },
     ragnarok: { name: 'RAGNARÖK', gods: ['thor', 'loki'], desc: 'the decoy ends in a Mjölnir strike', needSlot: { loki: 'special' } },
-    wildHunt: { name: 'WILD HUNT', gods: ['odin', 'ares'], desc: 'your Huginn & Muninn ravens hunt the Terrified x3, feeding frenzy' },
+    wildHunt: { name: 'WILD HUNT', gods: ['odin', 'ares'], desc: 'doom-bolts and raven dives savage the Terrified, feeding frenzy' },
     fifthSunDawn: { name: 'FIFTH SUN DAWN', gods: ['ra', 'quetz'], desc: 'the serpent burns; eaten bullets ignite', needSlot: { quetz: 'special' } },
     havocInHeaven: { name: 'HAVOC IN HEAVEN', gods: ['wukong', 'zeus'], desc: "clones' shots chain lightning" },
     eternalDevotion: { name: 'ETERNAL DEVOTION', gods: ['anubis', 'aphrodite'], desc: 'the executed rise as charmed ghosts', needSlot: { anubis: 'attack' } },
@@ -326,6 +326,14 @@
     }
     return true;
   }
+  // per-duo custom eligibility for hooks that a single needSlot can't express.
+  // WILD HUNT fires either Odin's attack-rune doom-bolts (Odin in ATTACK) OR the
+  // RAVEN QUILL charm's raven dives (charmOdin) — offer only when a live hook exists,
+  // never as a near-inert duo when Odin sits purely in the SPECIAL slot with no charm.
+  function duoHookOk(did, st) {
+    if (did === 'wildHunt') return st.attackGod === 'odin' || !!st.charms.charmOdin;
+    return true;
+  }
 
   function candidatePool(shop) {
     var st = Game.st();
@@ -346,7 +354,7 @@
       if (st.duos[did]) continue;
       var d = DUOS[did], pr = d.gods;
       var pairOk = (st.attackGod === pr[0] && st.specialGod === pr[1]) || (st.attackGod === pr[1] && st.specialGod === pr[0]);
-      if (pairOk && duoSlotOk(d, st) && investedIn(pr, st)) push(tDuo(did), 3);   // §7 DUO GATING: equipped + invested
+      if (pairOk && duoSlotOk(d, st) && duoHookOk(did, st) && investedIn(pr, st)) push(tDuo(did), 3);   // §7 DUO GATING: equipped + invested + live hook
     }
     // god mods (only for owned gods, in the required slot)
     GOD_KEYS.forEach(function (g) {
