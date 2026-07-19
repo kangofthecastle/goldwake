@@ -643,18 +643,40 @@
     }
   }
   function boltsClear() { for (var i = 0; i < BOLT_MAX; i++) bolts[i].active = false; }
-  // two-pass leg draw: wide soft haze under a thin white-hot core. Returns #segs.
-  function drawBoltLeg(b, arr, n, env, r, g, bb) {
+  // Continuous-ribbon leg draw. Each path SEGMENT becomes a BOLT quad stretched
+  // along the segment (rot = segment angle, length = seg len + joint overlap,
+  // width thin) so the whole leg reads as ONE seamless jagged crack, not a string
+  // of ovals. Two passes both run the full length: a wider soft coloured haze
+  // underlay, then a thin near-white core on top. At every interior vertex a small
+  // round CORE glint is stamped — scaled by how sharply the path kinks there — so
+  // bends stay razor-sharp and joints never gap, while straight runs get no bead.
+  // `taper` (branches) fades width+alpha toward the tip; `wscale` thins the whole
+  // leg (branches are thinner than the trunk). Returns #segs drawn.
+  function drawBoltLeg(b, arr, n, env, r, g, bb, taper, wscale) {
     if (n < 2) return 0;
-    var cw = b.coreW, hw = b.hazeW;
-    var wr = r * 0.35 + 0.65, wg = g * 0.35 + 0.65, wb = bb * 0.35 + 0.65;   // white-hot core
-    var segs = 0;
-    for (var i = 0; i < n - 1; i++) {
+    var ws = wscale || 1, cw = b.coreW * ws, hw = b.hazeW * ws;
+    var wr = r * 0.4 + 0.6, wg = g * 0.4 + 0.6, wb = bb * 0.4 + 0.6;   // near-white hot core
+    var inv = 1 / (n - 1), segs = 0, i;
+    var pux = 0, puy = 0, havePrev = false;   // previous segment's unit direction
+    for (i = 0; i < n - 1; i++) {
       var x0 = arr[i * 2], y0 = arr[i * 2 + 1], x1 = arr[i * 2 + 2], y1 = arr[i * 2 + 3];
       var dx = x1 - x0, dy = y1 - y0, len = Math.sqrt(dx * dx + dy * dy); if (len < 0.5) continue;
-      var mx = (x0 + x1) * 0.5, my = (y0 + y1) * 0.5, rot = Math.atan2(-dx, dy);   // STREAK long axis (local +y) -> segment dir
-      GL.draw(GL.SPR.STREAK, mx, my, hw, len * 1.2, rot, r, g, bb, 0.15 * env);         // soft coloured haze
-      GL.draw(GL.SPR.STREAK, mx, my, cw, len * 1.05, rot, wr, wg, wb, 0.92 * env);      // thin white-hot core
+      var ux = dx / len, uy = dy / len;
+      var mx = (x0 + x1) * 0.5, my = (y0 + y1) * 0.5, rot = Math.atan2(-dx, dy);   // BOLT long axis (local +y) -> segment dir
+      var tf = taper ? (1 - i * inv * 0.8) : 1;                       // width/alpha falloff toward a branch tip
+      var cwi = cw * tf, hwi = hw * (0.55 + 0.45 * tf), af = env * tf;
+      var ov = cwi * 0.4 + 2;                                         // small overlap: fills the kink notch without doubling into beads
+      GL.draw(GL.SPR.BOLT, mx, my, hwi, len + ov, rot, r, g, bb, 0.12 * af);      // soft coloured haze underlay
+      GL.draw(GL.SPR.BOLT, mx, my, cwi, len + ov, rot, wr, wg, wb, 0.95 * af);    // thin white-hot core
+      if (havePrev) {                                                 // subtle notch-fill glint ONLY at sharp kinks (never a bead on a soft run)
+        var bend = 1 - (pux * ux + puy * uy);                        // 0 = straight .. 2 = full reversal
+        if (bend > 0.12) {
+          var gs = cwi * (0.42 + bend * 0.28);                       // ~ ribbon width, not a fat pearl
+          var ga = 0.28 + bend * 0.35; if (ga > 0.7) ga = 0.7;
+          GL.draw(GL.SPR.CORE, x0, y0, gs, gs, 0, wr, wg, wb, ga * af);
+        }
+      }
+      pux = ux; puy = uy; havePrev = true;
       segs++;
     }
     return segs;
@@ -685,7 +707,7 @@
       }
       drawn += drawBoltLeg(b, b.L1, b.L1n, env, b.r1, b.g1, b.b1);
       if (b.legN === 2) drawn += drawBoltLeg(b, b.L2, b.L2n, env, b.r, b.g, b.b);
-      for (var k = 0; k < b.branches; k++) if (b.brN[k] > 1) drawn += drawBoltLeg(b, b.brPts[k], b.brN[k], env * 0.6, b.r, b.g, b.b);
+      for (var k = 0; k < b.branches; k++) if (b.brN[k] > 1) drawn += drawBoltLeg(b, b.brPts[k], b.brN[k], env * 0.6, b.r, b.g, b.b, true, 0.55);
       drawBoltEnds(b, env);
       if (drawn > BOLT_SEG_CAP) break;
     }
@@ -5196,6 +5218,11 @@
     setLightningStyle: function (st) { GL.setLightningStyle(st); Run.meta.lightningStyle = GL.lightningStyle; Run.saveMeta(); },
     lightningStyle: function () { return GL.lightningStyle; },
     boltCount: function () { var n = 0; for (var i = 0; i < BOLT_MAX; i++) if (bolts[i].active) n++; return n; },
+    // headless: fire one deterministic bolt through the SAME boltSpawn path every
+    // gameplay lightning user routes through (no flash/shake side-effects, so a
+    // close-up frames just the bolt). Optional banked two-leg variant for jadeMirror.
+    spawnBolt: function (ax, ay, bx, by, col, big) { boltSpawn(ax, ay, bx, by, col || [0.7, 0.9, 1], { big: !!big }); },
+    spawnBoltBanked: function (ax, ay, jx, jy, bx, by, c1, c2) { boltBanked(ax, ay, jx, jy, bx, by, c1 || [1, 0.85, 0.4], c2 || [0.62, 0.5, 0.95]); },
     ravenKills: function () { return G.ravenKills; },
     setRavenKills: function (n) { G.ravenKills = n; },
     friendlyBulletCount: function () { var n = 0; Engine.bullets.forEach(function (b) { if (b.friendly) n++; }); return n; },

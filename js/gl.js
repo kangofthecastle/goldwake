@@ -30,7 +30,7 @@
   //   'A' CLEAN — single elegant bolt, no branches, thin core, 2 re-strikes.
   //   'B' STORM — thicker core, 2 branches, harder displacement, 3 re-strikes.
   //   'C' SHEET — B plus a fast vertical glow-sheet flash along the bolt column.
-  GL.lightningStyle = 'A';
+  GL.lightningStyle = 'C';   // C = default treatment (loadMeta overrides with any persisted pick)
   GL.setLightningStyle = function (s) { GL.lightningStyle = (s === 'B' || s === 'C') ? s : 'A'; };
 
   // Sprite ids -> atlas region index.
@@ -57,7 +57,12 @@
     KUNAI: 15,      // oriented edged needle with a bright spine
     SHARD: 16,      // oriented diamond / petal
     PELLET: 17,     // small hard dot, bright rim
-    STAR: 18        // 4-point spark (slow spin)
+    STAR: 18,       // 4-point spark (slow spin)
+    // lightning light-ribbon (see buildAtlas). Placed at cell 50 — well clear of
+    // the authored-sprite reservation (cells 19-49) and inside the 8x8/64-cell
+    // atlas. Crisp along its LENGTH, feathered only laterally, so a bolt drawn as
+    // stretched segment-quads reads as one continuous jagged crack, never beads.
+    BOLT: 50
   };
 
   var gl = null;
@@ -534,6 +539,29 @@
       var w = r * 0.34;
       roundRectPath(ctx, -w, -r, w * 2, r * 2, w);
       ctx.fill();
+    });
+
+    // BOLT: lightning light-ribbon. Unlike STREAK (which fades to 0 at BOTH tips
+    // and so reads as a discrete oval when tiled), this cell is FULL alpha along
+    // its whole length (top→bottom of the cell) and feathered only ACROSS its
+    // width — a bright crisp centre spine with soft wings. Drawn per path segment
+    // as a quad (width→cell x, length→cell y, rotated to the segment), a run of
+    // them overlaps into one seamless jagged line with no beading. See
+    // drawBoltLeg. The lateral profile keeps a razor-bright core so thin widths
+    // still register; alpha rides the caller.
+    draw(GL.SPR.BOLT, function (ctx, r) {
+      var g = ctx.createLinearGradient(-r, 0, r, 0);   // falloff across WIDTH only
+      g.addColorStop(0.00, 'rgba(255,255,255,0)');
+      g.addColorStop(0.20, 'rgba(255,255,255,0.02)');
+      g.addColorStop(0.34, 'rgba(255,255,255,0.42)');
+      g.addColorStop(0.46, 'rgba(255,255,255,0.95)');
+      g.addColorStop(0.50, 'rgba(255,255,255,1)');
+      g.addColorStop(0.54, 'rgba(255,255,255,0.95)');
+      g.addColorStop(0.66, 'rgba(255,255,255,0.42)');
+      g.addColorStop(0.80, 'rgba(255,255,255,0.02)');
+      g.addColorStop(1.00, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(-r, -r, r * 2, r * 2);              // full HEIGHT: no length-wise fade
     });
 
     // NEEDLE: thinner, sharper vertical shard for fast aimed shots.
