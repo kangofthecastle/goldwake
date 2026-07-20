@@ -259,6 +259,16 @@
 
   var atlasTex = null;
   var regions = [];      // index -> [u0, v0, du, dv]
+  // Per-cell draw-size COMPENSATION (subject-fraction sizing). Procedural silhouettes
+  // fill their cell edge-to-edge, but authored PNGs (compositeSprite) fit the whole
+  // painted frame — glow halos and transparent margin included — into the cell, so the
+  // actual creature spans only part of it and reads SMALL when drawn at the same
+  // e.scale as the procedural fallback it replaces. compositeSprite measures each
+  // authored cell's alpha bounding box and stores CELL/subjectSpan here (clamped) so
+  // draw sites can scale the quad up until the painted subject fills what e.scale
+  // intends. Default 1 (procedural cells + un-loaded authored cells: no change).
+  // Draw-size ONLY — never touched by collision (hitboxes read e.radius, not this).
+  var sprFill = [];      // index -> draw-size compensation factor (>= 1)
   // Atlas grown to 8x16 = 128 cells (was 8x8 = 64). Width is unchanged (8 cols x
   // 128); height is doubled to 2048 to seat the 2026-07-19 signature/glyph/field
   // batch as cells 51+. Cell PIXEL positions are untouched (cellRect derives x/y
@@ -758,6 +768,31 @@
     'enemy-boss': { spr: GL.SPR.SHIP_BOSS,   rot: Math.PI }
   };
 
+  // Subject-fraction sizing (see `sprFill` above). Scan a freshly-composited CELL x
+  // CELL cell's straight-alpha channel, find the painted subject's alpha bounding box
+  // (ignoring near-transparent fringe so a baked outer glow/AA halo doesn't count as
+  // "subject"), and store CELL/subjectSpan as the draw-size compensation for the cell.
+  // Clamped so an intentional wide glow can't blow the sprite up unboundedly.
+  var SPR_FILL_ALPHA = 24;    // 0..255 — alpha at/under this is fringe, not subject
+  var SPR_FILL_MAX = 1.8;     // hard ceiling on the up-scale (guards glow-halo sprites)
+  function measureSubjectFill(cell, data) {
+    var px = data.data, minX = CELL, minY = CELL, maxX = -1, maxY = -1, x, y, i;
+    for (y = 0; y < CELL; y++) {
+      for (x = 0; x < CELL; x++) {
+        i = (y * CELL + x) * 4 + 3;
+        if (px[i] > SPR_FILL_ALPHA) {
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < minX) { sprFill[cell] = 1; return; }   // empty cell — no compensation
+    // Dominant span (the cell is square and drawn square at e.scale); +1 = inclusive.
+    var span = Math.max(maxX - minX + 1, maxY - minY + 1);
+    var comp = CELL / span;
+    sprFill[cell] = comp < 1 ? 1 : (comp > SPR_FILL_MAX ? SPR_FILL_MAX : comp);
+  }
+
   // Composite one loaded PNG into atlas cell `cell`, rotated by `rot` at paste
   // time (enemy art faces DOWN and is rotated pi to land nose-up in the cell,
   // matching the procedural nose-up convention; player-side art is pasted as-is).
@@ -778,6 +813,7 @@
     // getImageData throws SecurityError here if the image was cross-origin
     // (Chrome file:// probe) — caller catches and keeps the procedural cell.
     var data = oc.getImageData(0, 0, CELL, CELL);
+    measureSubjectFill(cell, data);
     var rc = cellRect(cell);
     gl.bindTexture(gl.TEXTURE_2D, atlasTex);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
@@ -907,6 +943,12 @@
   // has loaded. Callers draw the returned cell with GL.draw and white tint to
   // show the sprite's own colours; -1 means fall back to a generic slot.
   GL.authoredSpr = function (name) { var a = authored[name]; return (a && a.ready) ? a.cell : -1; };
+
+  // Draw-size compensation for a cell (subject-fraction sizing; see `sprFill`). Draw
+  // authored enemy cells at e.scale * GL.sprFill(cell) so the painted subject spans
+  // what e.scale intends, matching the procedural fallback's edge-to-edge fill. Returns
+  // 1 for procedural / un-measured cells. VISUAL ONLY — collision never reads this.
+  GL.sprFill = function (cell) { var f = sprFill[cell]; return f > 0 ? f : 1; };
 
   // ---- drop-in painted backdrop layers --------------------------------------
   // Same doctrine as the sprite overrides: procedural parallax ships now (drawn

@@ -83,6 +83,13 @@
     hitBloomDip: 0.5   // bloom drops to this on a player hit, then lerps back to 1.0
   };
 
+  // Boss DRAW-size multiplier — VISUAL ONLY (hitbox reads e.radius, never this). On
+  // top of subject-fraction compensation (GL.sprFill), bosses get this extra bump so
+  // they read as a commanding presence on the 1080x1920 field rather than a big
+  // popcorn ship. Applied only to the authored boss body + its inner-pulse layer in
+  // drawEnemies; procedural fallback and all collision are untouched.
+  var BOSS_DRAW_MUL = 1.35;
+
   var UI_CYAN = '#5fe6ff', UI_GOLD = '#ffd766', UI_RED = '#ff5a6e';
   var HUBRIS_COL = '#ffc24a';    // hubris gold tint (distinct from loot UI_GOLD)
   function UI_DIM() { return '#6fa9b8'; }
@@ -6050,16 +6057,24 @@
       var er = e.r, eg = e.g, eb = e.b;
       if (e.charmed) { er = 0.7; eg = 0.95; eb = 1; }   // §4 CHARMED: body recolors player-cyan (faction law)
       var r = er + (1 - er) * f, g = eg + (1 - eg) * f, bl = eb + (1 - eb) * f;
-      GL.draw(GL.SPR.GLOW, e.x, e.y, e.scale * 1.5, e.scale * 1.5, 0, er, eg, eb, e.boss ? 0.5 : 0.35);
       var cell = enemyDrawCell(e);
-      if (cell !== e.spr) {
+      // Subject-fraction sizing: authored cells (compositeSprite) fit the whole PNG —
+      // margin + halo included — into the atlas cell, so the painted body reads smaller
+      // than the edge-to-edge procedural fallback at the same e.scale. GL.sprFill(cell)
+      // scales the DRAW quad up so the subject spans what e.scale intends; bosses get an
+      // extra BOSS_DRAW_MUL presence bump. dsc is DRAW-ONLY — collision reads e.radius.
+      var authored = cell !== e.spr;
+      var dsc = authored ? GL.sprFill(cell) * (e.boss ? BOSS_DRAW_MUL : 1) : 1;
+      var ds = e.scale * dsc;   // compensated draw size (procedural: dsc == 1 == e.scale)
+      GL.draw(GL.SPR.GLOW, e.x, e.y, ds * 1.5, ds * 1.5, 0, er, eg, eb, e.boss ? 0.5 : 0.35);
+      if (authored) {
         // authored sprite carries its own faction-correct colour: draw near-white
         // so it shows true, punch toward white on hit-flash, flip cyan when charmed.
         var tr = 1, tg = 1, tb = 1;
         if (e.charmed) { tr = 0.7; tg = 0.95; tb = 1; }
         else if (f) { tr = tg = tb = 1 + 0.7 * f; }
-        GL.draw(cell, e.x, e.y, e.scale, e.scale, e.rot, tr, tg, tb, 1);
-        if (e.boss) GL.draw(cell, e.x, e.y, e.scale * 0.6, e.scale * 0.6, e.rot, 1, 1, 1, 0.4 + 0.2 * Math.sin(G.time * 4));
+        GL.draw(cell, e.x, e.y, ds, ds, e.rot, tr, tg, tb, 1);
+        if (e.boss) GL.draw(cell, e.x, e.y, ds * 0.6, ds * 0.6, e.rot, 1, 1, 1, 0.4 + 0.2 * Math.sin(G.time * 4));
       } else {
       GL.draw(e.spr, e.x, e.y, e.scale, e.scale, e.rot, r, g, bl, 1);
       if (e.boss) GL.draw(e.spr, e.x, e.y, e.scale * 0.6, e.scale * 0.6, e.rot, 1, 1, 1, 0.4 + 0.2 * Math.sin(G.time * 4));
@@ -6069,7 +6084,7 @@
       // in loot-gold; procedural mound (GOLD shards) on miss so it never vanishes.
       if (e.isMidas && !e.dying) {
         var hv = e.hoard || 0, hw = Math.min(170, 74 + hv * 1.2);
-        var hx = e.x, hy = e.y + e.scale * 0.52, hp2 = 0.85 + 0.15 * Math.sin(G.time * 2.5);
+        var hx = e.x, hy = e.y + ds * 0.52, hp2 = 0.85 + 0.15 * Math.sin(G.time * 2.5);   // ds: sit at the enlarged body's feet
         var hoardC = authCell('34d-3-the-hoard');
         GL.draw(GL.SPR.GLOW, hx, hy, hw * 1.25, hw * 0.7, 0, 1, 0.82, 0.3, 0.4 * hp2);
         if (hoardC >= 0) {
