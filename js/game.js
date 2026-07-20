@@ -88,6 +88,19 @@
   // fraction compensation (GL.sprFill), bosses get this extra bump so they read as a
   // commanding presence on the 1080x1920 field rather than a big popcorn ship.
   var BOSS_DRAW_MUL = 1.6;
+  // Player-ship VISUAL multiplier (owner: "ship is way too small, ~1.5×"). Applied to
+  // the DRAW size ONLY (×GL.sprFill subject-fraction comp, like bosses) — the player
+  // HURTBOX stays PLAYER_R=4 (danmaku law: the dodge game depends on the tiny hitbox).
+  var SHIP_DRAW_MUL = 1.5;
+  // HEIMDALL THE BIFRÖST — ONE width source of truth (owner: "the bridge is so thin").
+  // A proper bridge on the 1080 field: full band width + half. Both the drawn strips
+  // AND the gameplay geometry (inside-band lance check, foe-overlap Mark check) read
+  // from these — interaction geometry matches the visual.
+  var BIFROST_W = 156, BIFROST_HW = BIFROST_W / 2;
+  // Classic rainbow, red→violet. The bridge lays these out symmetric-mirrored around
+  // the player-x seam (R O Y G B V | V B G Y O R) so violet is the innermost lane and
+  // red the outermost on each side — reads as a bridge, not a hue-cycling smear.
+  var BIFROST_HUES = [[1, 0.15, 0.15], [1, 0.55, 0.12], [1, 0.9, 0.2], [0.25, 1, 0.35], [0.25, 0.55, 1], [0.65, 0.3, 1]];
   // Popcorn floor: minimum on-screen body size for any NON-boss enemy AFTER sprite-fill
   // compensation. The smallest archetypes (mimic-dormant 40, gen2 splitter 48, escort
   // 58, moth 60) read as illegible specks otherwise; this lifts them so popcorn reads at
@@ -699,12 +712,17 @@
       var ov = cwi * 0.4 + 2;                                         // small overlap: fills the kink notch without doubling into beads
       GL.draw(GL.SPR.BOLT, mx, my, hwi, len + ov, rot, r, g, bb, 0.15 * af);      // soft coloured haze underlay
       GL.draw(GL.SPR.BOLT, mx, my, cwi, len + ov, rot, wr, wg, wb, 0.98 * af);    // thin white-hot core
-      if (havePrev) {                                                 // subtle notch-fill glint ONLY at sharp kinks (never a bead on a soft run)
+      if (havePrev) {                                                 // fill the kink miter with a SHORT feathered BOLT ribbon along the bisector — NEVER a round bead
         var bend = 1 - (pux * ux + puy * uy);                        // 0 = straight .. 2 = full reversal
         if (bend > 0.12) {
-          var gs = cwi * (0.42 + bend * 0.28);                       // ~ ribbon width, not a fat pearl
-          var ga = 0.28 + bend * 0.35; if (ga > 0.7) ga = 0.7;
-          GL.draw(GL.SPR.CORE, x0, y0, gs, gs, 0, wr, wg, wb, ga * af);
+          var bxs = pux + ux, bys = puy + uy, bl = Math.sqrt(bxs * bxs + bys * bys);
+          if (bl > 0.001) {
+            bxs /= bl; bys /= bl;                                     // outgoing angle bisector = miter (notch) axis
+            var jl = cwi * (0.55 + bend * 0.6);                      // notch depth ~ ribbon width, grows with sharpness
+            var ja = 0.55 + bend * 0.30; if (ja > 0.85) ja = 0.85;
+            var jrot = Math.atan2(-bxs, bys);                        // BOLT long axis -> bisector dir (feathered laterally, hot lengthwise)
+            GL.draw(GL.SPR.BOLT, x0, y0, cwi, jl, jrot, wr, wg, wb, ja * af);
+          }
         }
       }
       pux = ux; puy = uy; havePrev = true;
@@ -1608,7 +1626,7 @@
     var tier = G.ra.hold >= THR[3] ? 3 : G.ra.hold >= THR[2] ? 2 : G.ra.hold >= THR[1] ? 1 : 0;
     if (G.raSurgeT > 0) { tier = 3; G.ra.hold = Math.max(G.ra.hold, THR[3]); }   // APOTHEOSIS forces CORONA
     G.ra.tier = tier; G.ra.ramp = Math.min(1, G.ra.hold / THR[3]);
-    G.ra.active = true; G.ra.tx = p.x; G.ra.ty0 = p.y - 24; G.ra.ty1 = target ? target.y : 30;
+    G.ra.active = true; G.ra.tx = p.x; G.ra.ty0 = p.y - 24; G.ra.ty1 = target ? aimTargetY(target) : 30;   // beam reaches the nail while THE NAIL is up
     if (target) {
       var mult = MUL[tier];
       var tick = BEAM_DPS * mult * G.stats.atkDmg * dt;
@@ -1646,23 +1664,35 @@
       GL.draw(GL.SPR.GOLD, x, ny, 20, 26, 0, 1, 0.85, 0.4, 0.9);
     }
   }
-  // HEIMDALL THE BIFRÖST v2 — a full-HEIGHT VERTICAL rainbow band (~32px) once solid;
-  // a dotted dawn-seam tracing BOTTOM→TOP at the frozen x during the telegraph.
+  // HEIMDALL THE BIFRÖST v2 — a full-HEIGHT VERTICAL rainbow BRIDGE (BIFROST_W wide)
+  // built from discrete parallel colour STRIPS (owner: "every color should be a strip"),
+  // mirrored around the player-x seam; a dotted dawn-seam rises BOTTOM→TOP in telegraph.
+  // Colours stay in their lanes (subtle per-strip alpha shimmer, never hue-cycling).
   function drawBifrost() {
     var bf = G.bifrost;
-    if (bf.seamT > 0) {   // telegraph: dotted seam rising bottom→top
+    if (bf.seamT > 0) {   // telegraph: dotted seam rising bottom→top, blooms into the striped bridge
       var prog = 1 - bf.seamT / 0.5, sy = H - (H + 80) * prog;
       for (var dy = H; dy > sy; dy -= 34) GL.draw(GL.SPR.CORE, bf.x, dy, 6, 10, 0, 1, 0.95, 0.8, 0.7);
       GL.draw(GL.SPR.GLOW, bf.x, sy, 30, 60, 0, 1, 0.95, 0.85, 0.6);
       return;
     }
-    if (bf.active) {
-      var fade = Math.min(1, bf.life);
-      for (var y = 20; y < H; y += 44) {
-        var col = Patterns.hue((y / H) + G.time * 0.25);
-        GL.draw(GL.SPR.GLOW, bf.x, y, 34, 60, 0, col[0], col[1], col[2], 0.5 * fade);
-        GL.draw(GL.SPR.CORE, bf.x, y, 14, 30, 0, col[0], col[1], col[2], 0.85 * fade);
-      }
+    if (bf.active) drawBifrostStrips(bf.x, Math.min(1, bf.life));
+  }
+  // Render the mirrored ROYGBV strip bridge at seam-x `sx` (shared by DAWNBREAK if it
+  // ever draws a fixed bridge). 12 full-height lanes: R O Y G B V | V B G Y O R.
+  function drawBifrostStrips(sx, fade) {
+    var n = BIFROST_HUES.length, lanes = n * 2, lw = BIFROST_W / lanes;
+    for (var j = 0; j < lanes; j++) {
+      var hue = j < n ? BIFROST_HUES[j] : BIFROST_HUES[lanes - 1 - j];   // mirror: violet innermost, red outermost
+      var lx = sx - BIFROST_HW + (j + 0.5) * lw;
+      var shim = 0.85 + 0.15 * Math.sin(G.time * 3 + j * 0.9);            // per-strip alpha wave; colour stays in lane
+      GL.draw(GL.SPR.GLOW, lx, H / 2, lw * 1.5, H, 0, hue[0], hue[1], hue[2], 0.32 * fade * shim);   // soft strip bloom
+      GL.draw(GL.SPR.CORE, lx, H / 2, lw * 0.82, H, 0, hue[0], hue[1], hue[2], 0.8 * fade * shim);   // crisp colour strip, full height
+    }
+    // thin bright seams between strips (definition, art-doctrine neon)
+    for (var k = 1; k < lanes; k++) {
+      var kx = sx - BIFROST_HW + k * lw;
+      GL.draw(GL.SPR.CORE, kx, H / 2, 2.5, H, 0, 1, 1, 1, 0.28 * fade);
     }
   }
   // ZEUS SKYFALL — the column IS a multi-strand bolt now (spawned in skyfallColumn,
@@ -1690,6 +1720,10 @@
   // enemies just report their center.
   function aimTargetX(e) { return (e && e.nailActive) ? e.nailX : (e ? e.x : 0); }
   function aimTargetY(e) { return (e && e.nailActive) ? e.nailY : (e ? e.y : 0); }
+  // Impact/hit radius for a picked target: the tiny nail hitbox while THE NAIL is up,
+  // else the body radius. Homing riders (hammers/wraiths) that seek the nail gate on
+  // this + their own pad so they land AT the nail instead of the immune torso edge.
+  function aimTargetR(e) { return (e && e.nailActive) ? e.nailR : (e ? e.radius : 0); }
 
   // ODIN — HUGINN & MUNINN. Re-anchored to a CHARM (RAVEN QUILL / G.charms.charmOdin):
   // the ravens fly with ANY attack god, not just Odin. MEMORY: +1 dive dmg / 8 kills
@@ -2044,11 +2078,12 @@
         var dmg = LANCE_DMG * 1.2 * G.stats.spDmg * G.specialR;
         if (G.mods.jadeMirror) {   // the zhaoyaojing hangs between the clouds; the bolt banks off it
           var mx = (G.jclouds[0].x + G.jclouds[1].x) / 2, my = (G.jclouds[0].y + G.jclouds[1].y) / 2 + 46;
-          // banked bolt: cloud->mirror (gold leg) banks off the zhaoyaojing to the target (violet-white leg)
-          boltBanked(cloud.x, cloud.y, mx, my, target.x, target.y, [1, 0.85, 0.4], [0.62, 0.5, 0.95]);
+          // banked bolt: cloud->mirror (gold leg) banks off the zhaoyaojing to the target (violet-white leg).
+          // Terminus routes to the nail while THE NAIL is up so the bolt strikes the weak point, not the immune torso.
+          boltBanked(cloud.x, cloud.y, mx, my, aimTargetX(target), aimTargetY(target), [1, 0.85, 0.4], [0.62, 0.5, 0.95]);
           flash(mx, my, [1, 0.9, 0.5], 70, 0.18);
           if (SFX.mirrorTing) SFX.mirrorTing();   // Pass4: MIRROR REFLECTION bolt banks off the zhaoyaojing
-        } else arcFx(cloud.x, cloud.y, target.x, target.y, [0.62, 0.5, 0.95]);   // JUDGEMENT: darker violet-white (bolts pitched -4 semitones)
+        } else arcFx(cloud.x, cloud.y, aimTargetX(target), aimTargetY(target), [0.62, 0.5, 0.95]);   // JUDGEMENT: darker violet-white; strikes the nail, not the immune body
         damageEnemy(target, dmg, false);              // the AIMED foe always eats the bolt (a surrounded boss no longer gets skipped)
         chainLightning(target, dmg, true);            // full Zeus-style chain to OTHERS is the bonus (inherits +2 storm jumps)
         if (!target.boss && !target.dying) { target.stunT = Math.max(target.stunT, 0.4); flash(target.x, target.y, [0.7, 0.95, 1], 60, 0.2); }
@@ -2192,9 +2227,10 @@
       } else {                                   // dive
         var tg = w.target;
         if (!tg || !tg.active || tg.dying || tg.charmed || tg.seq !== w.targetSeq) { w.state = 0; w.cd = 0.2; continue; }
-        var dx = tg.x - w.x, dy = tg.y - w.y, d = Math.hypot(dx, dy) || 1;
+        var wtx = aimTargetX(tg), wty = aimTargetY(tg);   // dive onto the nail while THE NAIL is up, not the immune body
+        var dx = wtx - w.x, dy = wty - w.y, d = Math.hypot(dx, dy) || 1;
         w.x += dx / d * 1150 * dt; w.y += dy / d * 1150 * dt;
-        if (d < tg.radius + 26) {
+        if (d < aimTargetR(tg) + 26) {
           damageEnemy(tg, diveDmg, false);
           if (!tg.dying) terrify(tg, w.x, w.y);  // terrify → Shaken on bosses
           spark(w.x, w.y, [0.9, 0.1, 0.15], 8, 340, 26); addShake(3);
@@ -2283,9 +2319,10 @@
       var h = G.hammers[i]; h.spin += dt * 16; h.t += dt;
       if (h.state === 'out') {
         if (h.big && h.target && !h.target.dying && h.target.seq === h.targetSeq) {
-          var dx = h.target.x - h.x, dy = h.target.y - h.y, d = Math.hypot(dx, dy) || 1;
+          var htx = aimTargetX(h.target), hty = aimTargetY(h.target);   // seek the nail, not the immune torso
+          var dx = htx - h.x, dy = hty - h.y, d = Math.hypot(dx, dy) || 1;
           h.x += dx / d * 1400 * dt; h.y += dy / d * 1400 * dt;
-          if (d < h.target.radius + 44) { hammerImpact(h, h.target.x, h.target.y, true, h.target); h.state = 'return'; h.hit = []; }
+          if (d < aimTargetR(h.target) + 44) { hammerImpact(h, htx, hty, true, h.target); h.state = 'return'; h.hit = []; }
         } else {
           h.y += h.vy * dt;
           var apexY = h.big ? 180 : Math.max(220, G.player.y - 780);
@@ -2461,7 +2498,8 @@
       if (!e.huntTag) return;
       e.huntTag = false;
       if (e.dying || e.charmed) return;
-      spark(e.x, e.y, [0.85, 0.9, 1], 6, 320, 24); flash(e.x, e.y, [0.85, 0.9, 1], 90, 0.2);
+      var ghx = aimTargetX(e), ghy = aimTargetY(e);   // loose onto the nail while THE NAIL is up
+      spark(ghx, ghy, [0.85, 0.9, 1], 6, 320, 24); flash(ghx, ghy, [0.85, 0.9, 1], 90, 0.2);
       markEnemy(e); damageEnemy(e, LANCE_DMG * 2.5 * D, true);   // forceCrit-class precise arrow
     });
   }
@@ -2927,7 +2965,7 @@
 
     // HEIMDALL SPECTRUM LANCE — firing while standing INSIDE the rainbow band turns your
     // shot into a single prismatic lance (×1.6 dmg, pierce +2, no split, rainbow streak).
-    if (G.attackGod === 'heimdall' && !isClone && G.bifrost.active && Math.abs(px - G.bifrost.x) < 20) {
+    if (G.attackGod === 'heimdall' && !isClone && G.bifrost.active && Math.abs(px - G.bifrost.x) < BIFROST_HW) {
       fireSpectrumLance(px, py, dmgScale); return;
     }
 
@@ -3000,8 +3038,8 @@
     var bf = G.bifrost;
     if (G.attackGod !== 'heimdall') { if (bf.active || bf.seamT > 0) { bf.active = false; bf.seamT = 0; bf.life = 0; bf.t = 0; } return; }
     if (bf.life > 0) {
-      // solid VERTICAL band: Mark any foe whose hull overlaps the ~32px-wide lane.
-      Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; if (Math.abs(e.x - bf.x) < 16 + e.radius) { markEnemy(e); if (!e.markShimmer) { e.markShimmer = 1; flash(e.x, e.y, [1, 0.95, 0.85], 60, 0.2); } } else e.markShimmer = 0; });
+      // solid VERTICAL band: Mark any foe whose hull overlaps the BIFROST_W-wide lane.
+      Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; if (Math.abs(e.x - bf.x) < BIFROST_HW + e.radius) { markEnemy(e); if (!e.markShimmer) { e.markShimmer = 1; flash(e.x, e.y, [1, 0.95, 0.85], 60, 0.2); } } else e.markShimmer = 0; });
       bf.life -= dt; if (bf.life <= 0) { bf.active = false; if (SFX.bridgeFade) SFX.bridgeFade(); else (SFX.bell && SFX.bell()); }   // Pass4: descending bridge-fade pair
       return;
     }
@@ -4247,11 +4285,14 @@
       // RIVETS (TALOS THE NAIL): orbit the immune body r180, an 8-ring/1.5s. The ONLY
       // kill/damage feed through the immune finale — so they persist & respawn.
       e.retFire = 1.5;
+      // Orbit must CLEAR the ×1.6-baked immune body (TALOS half ~224), not sit inside it.
+      // boss.scale is final here (armed at phase-V onEnter, long after sizeEnemy baked it).
+      e.retOrbR = Math.max(180, boss.scale * 0.5 + 50);
       e.onUpdate = function (r, dt) {
         var b = G.boss;
         if (!b || b.seq !== r.retLinkSeq) { r.y += 130 * dt; if (r.y > H + 90) killEnemy(r, false); return; }
         r.s0 += dt * 1.4 * r.s3;
-        r.x = b.x + Math.cos(r.s0) * 180; r.y = b.y + Math.sin(r.s0) * 180;
+        r.x = b.x + Math.cos(r.s0) * r.retOrbR; r.y = b.y + Math.sin(r.s0) * r.retOrbR;
         r.retFire -= dt;
         if (r.retFire <= 0) { r.retFire = 1.5; P.ring(r.x, r.y, 8, rankSpd(P.SPD.slow), { fam: P.FAM.ORB, tier: 'S', color: col }); }
       };
@@ -4260,11 +4301,13 @@
       // emitters (orbitPoint r~110) each firing 21 (=42 together). Killed side gilds
       // to coins; the survivor keeps its lopsided 21 with a drifting gap.
       e.retFire = 0.6 + idx * 0.95;
+      // Orbit clears the ×1.6-baked AMMIT body (half ~245) instead of emitting from inside it.
+      e.retOrbR = Math.max(110, boss.scale * 0.5 + 50);
       e.onUpdate = function (r, dt) {
         var b = G.boss;
         if (!b || b.seq !== r.retLinkSeq) { r.y += 130 * dt; if (r.y > H + 90) killEnemy(r, false); return; }
         r.s0 += dt * 1.1 * r.s3;
-        r.x = b.x + Math.cos(r.s0) * 110; r.y = b.y + 40 + Math.sin(r.s0) * 110;
+        r.x = b.x + Math.cos(r.s0) * r.retOrbR; r.y = b.y + 40 + Math.sin(r.s0) * r.retOrbR;
         r.retFire -= dt;
         if (r.retFire <= 0) { r.retFire = 1.9; P.ringGap(r.x, r.y, 21, rankSpd(P.SPD.slow), { gaps: 1, gapWidth: 3.0, offset: r.s0, fam: P.FAM.ORB, tier: 'S', color: col }); }
       };
@@ -4278,12 +4321,16 @@
       // TRIBUTE BEARERS (MIDAS THE TRIBUTE): amber bearers that vacuum a share into
       // the hoard; killing one drops 3 REAL gold AND starves the king (subtracts its
       // vacuumed share from e.hoard). Warm-amber body, never loot-gold.
-      e.retinueOff = (idx === 0 ? -220 : idx === 1 ? 220 : 0);
+      // Side station clears the ×1.6-baked MIDAS body (half ~307): with the +210 vertical
+      // drop, an x-offset of max(220, scale*0.5+50) puts each bearer outside the hoard-king.
+      var tOff = Math.max(220, boss.scale * 0.5 + 50);
+      e.retinueOff = (idx === 0 ? -tOff : idx === 1 ? tOff : 0);
       e.onUpdate = function (r, dt) {
         var b = G.boss;
         if (!b || b.seq !== r.retLinkSeq) { r.y += 130 * dt; if (r.y > H + 90) killEnemy(r, false); return; }
         r.t += dt;
-        var tx = b.x + r.retinueOff, ty = b.y + 210 + Math.sin(r.t * 2) * 14;
+        // clamp on-field at strafe extremes — bearers vacuum gold, so they must stay reachable.
+        var tx = clampX(b.x + r.retinueOff, 100), ty = b.y + 210 + Math.sin(r.t * 2) * 14;
         r.x += (tx - r.x) * Math.min(1, dt * 3); r.y += (ty - r.y) * Math.min(1, dt * 3);
         if (b.isMidas) { var v = 26 * dt; r.retVac += v; b.hoard += v; }   // vacuum a share into the hoard
       };
@@ -5237,6 +5284,10 @@
     fireEdict: function () { fireEdict(); },
     setPlayer: function (x, y) { G.player.x = x; G.player.y = y; },
     playerPos: function () { return { x: G.player.x, y: G.player.y }; },
+    playerHurtR: function () { return PLAYER_R * (G.up.hitboxMul || 1); },   // TRUE collision radius (unaffected by ship draw scale)
+    shipDrawMul: function () { return SHIP_DRAW_MUL; },
+    bifrostW: function () { return { w: BIFROST_W, hw: BIFROST_HW }; },   // ONE width source (draw + mark + lance checks)
+    aimPoint: function (i) { var e = Engine.enemies.items[i]; return e ? { x: aimTargetX(e), y: aimTargetY(e), r: aimTargetR(e) } : null; },   // where targeting resolves (nail while nailActive)
     invuln: function () { return G.player.invuln; },
     setCharge: function (n) { G.sp.charge = n; },
     spCharge: function () { return G.sp.charge; },
@@ -6107,18 +6158,21 @@
       // at spawn by sizeEnemy, so DRAW and COLLISION agree — no per-draw re-scaling here.
       var authored = cell !== e.spr;
       var ds = e.scale;
-      GL.draw(GL.SPR.GLOW, e.x, e.y, ds * 1.5, ds * 1.5, 0, er, eg, eb, e.boss ? 0.5 : 0.35);
+      // TALOS THE NAIL: the torso is IMMUNE — desaturate it to ~0.55 luminance so the
+      // eye tracks straight to the bright ankle weak point drawn below.
+      var dim = e.nailActive ? 0.55 : 1;
+      GL.draw(GL.SPR.GLOW, e.x, e.y, ds * 1.5, ds * 1.5, 0, er, eg, eb, (e.boss ? 0.5 : 0.35) * dim);
       if (authored) {
         // authored sprite carries its own faction-correct colour: draw near-white
         // so it shows true, punch toward white on hit-flash, flip cyan when charmed.
         var tr = 1, tg = 1, tb = 1;
         if (e.charmed) { tr = 0.7; tg = 0.95; tb = 1; }
         else if (f) { tr = tg = tb = 1 + 0.7 * f; }
-        GL.draw(cell, e.x, e.y, ds, ds, e.rot, tr, tg, tb, 1);
-        if (e.boss) GL.draw(cell, e.x, e.y, ds * 0.6, ds * 0.6, e.rot, 1, 1, 1, 0.4 + 0.2 * Math.sin(G.time * 4));
+        GL.draw(cell, e.x, e.y, ds, ds, e.rot, tr * dim, tg * dim, tb * dim, 1);
+        if (e.boss) GL.draw(cell, e.x, e.y, ds * 0.6, ds * 0.6, e.rot, dim, dim, dim, (0.4 + 0.2 * Math.sin(G.time * 4)) * dim);
       } else {
-      GL.draw(e.spr, e.x, e.y, e.scale, e.scale, e.rot, r, g, bl, 1);
-      if (e.boss) GL.draw(e.spr, e.x, e.y, e.scale * 0.6, e.scale * 0.6, e.rot, 1, 1, 1, 0.4 + 0.2 * Math.sin(G.time * 4));
+      GL.draw(e.spr, e.x, e.y, e.scale, e.scale, e.rot, r * dim, g * dim, bl * dim, 1);
+      if (e.boss) GL.draw(e.spr, e.x, e.y, e.scale * 0.6, e.scale * 0.6, e.rot, dim, dim, dim, (0.4 + 0.2 * Math.sin(G.time * 4)) * dim);
       }
       // MIDAS THE HOARD — the heaped mound of stolen gold at the king's feet, growing
       // with e.hoard (the gold-theft loop). §34d the ONE enemy-adjacent loot-gold. Drawn
@@ -6139,16 +6193,20 @@
       // TALOS THE NAIL — the glowing ankle weak point (the only thing that can be
       // hurt in the final phase): a green-gold ichor node, pulsing so it reads.
       if (e.nailActive) {
-        var np = 0.6 + 0.4 * Math.sin(G.time * 8);
+        // THE TARGET: hitbox stays nailR=30, but the READ is big and hot (~84px sprite,
+        // wide halo, double pulse ring) so against the dimmed torso the eye locks on it.
+        var np = 0.6 + 0.4 * Math.sin(G.time * 8), np2 = 0.5 + 0.5 * Math.sin(G.time * 5.3);
         var nailC = authCell('34d-1-the-nail');   // §34d THE NAIL — the finale weak point
-        GL.draw(GL.SPR.GLOW, e.nailX, e.nailY, 78, 78, 0, 0.7, 1, 0.45, 0.5 * np);
+        GL.draw(GL.SPR.GLOW, e.nailX, e.nailY, 128, 128, 0, 0.55, 1, 0.4, 0.42 * np2);       // wide green-gold aura draws the eye
+        GL.draw(GL.SPR.GLOW, e.nailX, e.nailY, 88 + 12 * np, 88 + 12 * np, 0, 0.75, 1, 0.5, 0.6 * np);
         if (nailC >= 0) {
-          GL.draw(nailC, e.nailX, e.nailY, 60, 60, 0, 1, 1, 1, 0.95);
+          GL.draw(nailC, e.nailX, e.nailY, 84 + 6 * np, 84 + 6 * np, 0, 1, 1, 1, 0.98);
         } else {
-          GL.draw(GL.SPR.NEEDLE, e.nailX, e.nailY, 22, 50, 0, 1, 0.95, 0.6, 0.95);
-          GL.draw(GL.SPR.CORE, e.nailX, e.nailY, 24, 24, 0, 0.7, 1, 0.5, 0.7 + 0.3 * np);
+          GL.draw(GL.SPR.NEEDLE, e.nailX, e.nailY, 30, 70, 0, 1, 0.95, 0.6, 0.95);
+          GL.draw(GL.SPR.CORE, e.nailX, e.nailY, 32, 32, 0, 0.7, 1, 0.5, 0.7 + 0.3 * np);
         }
-        GL.draw(GL.SPR.RING, e.nailX, e.nailY, 58, 58, G.time * 3, 0.6, 1, 0.5, 0.75);
+        GL.draw(GL.SPR.RING, e.nailX, e.nailY, 72 + 10 * np, 72 + 10 * np, G.time * 3, 0.6, 1, 0.5, 0.8);   // pulsing target reticle
+        GL.draw(GL.SPR.RING, e.nailX, e.nailY, 100 + 24 * np2, 100 + 24 * np2, -G.time * 1.6, 0.5, 1, 0.55, 0.4 * (1 - np2));   // outward lock-on pulse
       }
       // elite aura rings
       if (e.aura === 'gilded') GL.draw(GL.SPR.RING, e.x, e.y, e.scale * 1.7, e.scale * 1.7, G.time * 1.5, 1, 0.82, 0.3, 0.8);
@@ -6670,13 +6728,30 @@
       GL.draw(p.spr, p.x, p.y, p.size, p.size, p.rot, p.r, p.g, p.b, a);
     });
   }
+  // Ship draw size: base × subject-fill comp (authored 31-player-ship carries margin)
+  // × SHIP_DRAW_MUL. Collision NEVER reads this (PLAYER_R stays 4).
+  function shipDrawSize(base) { return base * GL.sprFill(GL.SPR.SHIP_PLAYER) * SHIP_DRAW_MUL; }
   function drawDashGhosts() {
     var arr = G.dash.ghosts;
+    var gs = shipDrawSize(74);
     for (var i = 0; i < arr.length; i++) {
       var gh = arr[i], a = Math.max(0, 1 - gh.age / 0.28) * 0.5;
-      GL.draw(GL.SPR.SHIP_PLAYER, gh.x, gh.y, 74, 74, 0, 0.5, 0.9, 1.0, a);
-      GL.draw(GL.SPR.GLOW, gh.x, gh.y, 42, 42, 0, 0.4, 0.85, 1.0, a * 0.6);
+      GL.draw(GL.SPR.SHIP_PLAYER, gh.x, gh.y, gs, gs, 0, 0.5, 0.9, 1.0, a);
+      GL.draw(GL.SPR.GLOW, gh.x, gh.y, shipDrawSize(42), shipDrawSize(42), 0, 0.4, 0.85, 1.0, a * 0.6);
     }
+  }
+  // The honest hurtbox read (danmaku convention): a crisp white-hot core at the TRUE
+  // collision size (PLAYER_R) with a thin cyan ring for findability, drawn ABOVE the
+  // ship and (via render Pass C) OVER the bullet field. Steadier/brighter under Focus.
+  // No pulsing — it must never read as a chargeable power state.
+  function drawHurtboxRead(p, dim) {
+    var focus = Engine.focusHeld();
+    var hr = PLAYER_R * (G.up.hitboxMul || 1);   // TRUE collision radius (honest dot)
+    var ca = (focus ? 1 : 0.85) * dim;           // brighter + steadier when focused
+    // faint grounding disc so the dot never vanishes under dense cover (ground #05080b hue)
+    GL.draw(GL.SPR.GLOW, p.x, p.y, 26, 26, 0, 0.2, 0.55, 0.7, 0.5 * dim);
+    GL.draw(GL.SPR.RING, p.x, p.y, hr * 3.4 + 12, hr * 3.4 + 12, 0, 0.55, 1, 1, (focus ? 0.95 : 0.6) * dim);   // thin cyan findability ring
+    GL.draw(GL.SPR.CORE, p.x, p.y, hr * 2.4, hr * 2.4, 0, 1, 1, 1, ca);                                        // white-hot core AT the hurtbox
   }
   function drawPlayer() {
     var p = G.player;
@@ -6685,22 +6760,21 @@
     // CURSED-GOLD gild: a gold statue. Render the ship in solid gold with a
     // shimmer ring so the freeze reads at a glance (no blink; it's frozen, not hit).
     if (G.freeze.t > 0) {
-      GL.draw(GL.SPR.GLOW, p.x, p.y, 120, 120, 0, 1, 0.78, 0.28, 0.55);
-      GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, 104, 104, 0, 1, 0.82, 0.32, 1);
-      GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, 62, 62, 0, 1, 0.92, 0.55, 0.9);
-      GL.draw(GL.SPR.RING, p.x, p.y, 96, 96, G.time * 1.5, 1, 0.85, 0.4, 0.6 + 0.3 * Math.sin(G.time * 12));
-      GL.draw(GL.SPR.CORE, p.x, p.y, 13, 13, 0, 1, 0.95, 0.7, 1);
+      GL.draw(GL.SPR.GLOW, p.x, p.y, shipDrawSize(120), shipDrawSize(120), 0, 1, 0.78, 0.28, 0.55);
+      GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, shipDrawSize(104), shipDrawSize(104), 0, 1, 0.82, 0.32, 1);
+      GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, shipDrawSize(62), shipDrawSize(62), 0, 1, 0.92, 0.55, 0.9);
+      GL.draw(GL.SPR.RING, p.x, p.y, shipDrawSize(96), shipDrawSize(96), G.time * 1.5, 1, 0.85, 0.4, 0.6 + 0.3 * Math.sin(G.time * 12));
+      drawHurtboxRead(p, 1);   // the honest dot still reads through the freeze
       return;
     }
-    // Ship visual ~100px (a presence). Hitbox is UNCHANGED and tiny (PLAYER_R=4)
-    // — the bright core gem below is drawn separately so the player learns what
-    // actually collides.
-    GL.draw(GL.SPR.GLOW, p.x, p.y + 42 + kick, 78, 118 + kick * 2, 0, 0.3, 0.8, 1.0, 0.5 * dim + (p.recoil > 0 ? 0.4 : 0));
-    GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, 100, 100, 0, 0.7, 0.95, 1.0, dim);
-    GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, 62, 62, 0, 1, 1, 1, 0.8 * dim);
-    GL.draw(GL.SPR.GLOW, p.x, p.y, 30, 30, 0, 1, 1, 1, 0.9 * dim);
-    GL.draw(GL.SPR.CORE, p.x, p.y, 13, 13, 0, 1, 1, 1, dim);           // the hitbox gem — read this
-    if (Engine.focusHeld()) GL.draw(GL.SPR.RING, p.x, p.y, 78, 78, G.time * 2, 0.6, 1, 1, G.dash.cd > 0 ? 0.4 : 0.9); // dimmer ring = dash on cooldown
+    // Ship visual ×SHIP_DRAW_MUL (a real presence). Hurtbox stays PLAYER_R=4 — the
+    // bright core dot (drawHurtboxRead) is drawn separately so the player reads what collides.
+    var engSz = shipDrawSize(78);
+    GL.draw(GL.SPR.GLOW, p.x, p.y + 42 + kick, engSz, shipDrawSize(118) + kick * 2, 0, 0.3, 0.8, 1.0, 0.5 * dim + (p.recoil > 0 ? 0.4 : 0));
+    GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, shipDrawSize(100), shipDrawSize(100), 0, 0.7, 0.95, 1.0, dim);
+    GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, shipDrawSize(62), shipDrawSize(62), 0, 1, 1, 1, 0.8 * dim);
+    if (Engine.focusHeld()) GL.draw(GL.SPR.RING, p.x, p.y, shipDrawSize(78), shipDrawSize(78), G.time * 2, 0.6, 1, 1, G.dash.cd > 0 ? 0.4 : 0.9); // dimmer ring = dash on cooldown
+    drawHurtboxRead(p, dim);   // ABOVE the ship, honest to the true collision radius
   }
 
   // ---------------------------------------------------------------------
