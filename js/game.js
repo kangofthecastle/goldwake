@@ -83,12 +83,20 @@
     hitBloomDip: 0.5   // bloom drops to this on a player hit, then lerps back to 1.0
   };
 
-  // Boss DRAW-size multiplier — VISUAL ONLY (hitbox reads e.radius, never this). On
-  // top of subject-fraction compensation (GL.sprFill), bosses get this extra bump so
-  // they read as a commanding presence on the 1080x1920 field rather than a big
-  // popcorn ship. Applied only to the authored boss body + its inner-pulse layer in
-  // drawEnemies; procedural fallback and all collision are untouched.
-  var BOSS_DRAW_MUL = 1.35;
+  // Boss size multiplier — now baked into BOTH e.scale AND e.radius at spawn (sizeEnemy)
+  // so draw and collision agree by construction (was draw-only). On top of subject-
+  // fraction compensation (GL.sprFill), bosses get this extra bump so they read as a
+  // commanding presence on the 1080x1920 field rather than a big popcorn ship.
+  var BOSS_DRAW_MUL = 1.6;
+  // Popcorn floor: minimum on-screen body size for any NON-boss enemy AFTER sprite-fill
+  // compensation. The smallest archetypes (mimic-dormant 40, gen2 splitter 48, escort
+  // 58, moth 60) read as illegible specks otherwise; this lifts them so popcorn reads at
+  // a glance while staying well under midship (270) — the size hierarchy popcorn <
+  // midship < boss is preserved. Radius is scaled by the same floor factor (hitbox
+  // tracks visuals). NOTE: authored small enemies are already lifted past this by their
+  // sprite-fill comp (moth 60→89, acolyte 64→89); the floor's real job is the genuinely
+  // tiny stragglers — escort (58, procedural, no comp) and gen-2 splitter (48→69).
+  var MIN_ENEMY_DRAW = 72;
 
   var UI_CYAN = '#5fe6ff', UI_GOLD = '#ffd766', UI_RED = '#ff5a6e';
   var HUBRIS_COL = '#ffc24a';    // hubris gold tint (distinct from loot UI_GOLD)
@@ -3093,6 +3101,9 @@
     e.lastHitFireId = 0;   // §9a pierce-dedup: reset so a recycled slot isn't "already bitten"
     e.type = type; e.x = x; e.y = y; e.vx = 0; e.vy = 0;
     e.hp = hp * G.aff.hpMul; e.maxhp = e.hp; e.spr = spr; e.scale = scale; e.radius = radius;
+    // sprite-fill sizing state (sizeEnemy): baked once, first frame the mapped PNG is
+    // ready, into e.scale + e.radius. szDone gates the one-shot; szComp is the applied factor.
+    e.szDone = false; e.szComp = 1;
     e.r = col[0]; e.g = col[1]; e.b = col[2];
     e.t = 0; e.fireT = 0; e.fireCd = 1;
     e.s0 = 0; e.s1 = 0; e.s2 = 0; e.s3 = 0;
@@ -3783,7 +3794,7 @@
       e.x += Math.sin(e.t) * 22 * dt; e.y += 22 * dt;
       if (d2 < 200 * 200 && G.player.alive) {
         e.s0 = 1; var d = Math.sqrt(d2) || 1; e.vx = dx / d * 420; e.vy = dy / d * 420;
-        e.spr = GL.SPR.SHIP_POP; e.r = 1; e.g = 0.5; e.b = 0.2; e.scale = 62; e.radius = 26;
+        e.spr = GL.SPR.SHIP_POP; e.r = 1; e.g = 0.5; e.b = 0.2; e.scale = 62; e.radius = 26; e.szDone = false;   // reveal resets size → re-apply popcorn floor as generic popcorn
         Patterns.spray(e.x, e.y, Patterns.aimAngle(e.x, e.y, AIMX(e), AIMY(e)), 1.2, 8, 220 * G.rank, 340 * G.rank, { color: Patterns.ORANGE, radius: 11 });
         spark(e.x, e.y, [1, 0.6, 0.2], 14, 320, 26);
       } else if (e.y > H + 100) killEnemy(e, false);
@@ -4608,6 +4619,7 @@
 
   function updateEnemies(dt) {
     Engine.enemies.forEach(function (e) {
+      sizeEnemy(e);   // spawn-time sprite sizing (before collision this frame; one-shot via e.szDone)
       if (e.hitFlash > 0) e.hitFlash -= dt;
       updateStatus(e, dt);
       if (e.dying) return;
@@ -5348,7 +5360,10 @@
     resetSpriteStats: function () { spriteUse = {}; trackSprites = true; },   // #15: enables the verify-only per-name draw counter
     // set an enemy's archetype (and boss name) so the per-archetype sprite path can
     // be exercised; s0=0 keeps a mimic in its authored gold-loot disguise.
-    setArch: function (i, arch, name) { var e = Engine.enemies.items[i]; if (e && e.active) { e.arch = arch; if (name) e.name = name; if (arch === 'mimic') e.s0 = 0; } },
+    setArch: function (i, arch, name) { var e = Engine.enemies.items[i]; if (e && e.active) { e.arch = arch; if (name) e.name = name; if (arch === 'mimic') e.s0 = 0; e.szDone = false; } },
+    // verify surface: force one-shot sprite sizing NOW (frozen harness measurement) and
+    // report the applied factor + resulting scale/radius for enemy slot i.
+    forceSize: function (i) { var e = Engine.enemies.items[i]; if (!e || !e.active) return null; sizeEnemy(e); return { szDone: !!e.szDone, szComp: e.szComp, scale: e.scale, radius: e.radius, boss: !!e.boss, arch: e.arch, name: e.name }; },
     // drop an inert signature player shot of `kind` for a render (labrys 14, akontia
     // 11, xiphos 12, doru 13, edict 7, loosed arrow 4) — faction 1 so it just draws.
     spawnSigShot: function (kind, x, y) {
@@ -6037,6 +6052,35 @@
     if (name) { var c = authCell(name); if (c >= 0) return c; }
     return e.spr;
   }
+  // The authored-sprite name an enemy sizes/draws to (null = procedural generic slot;
+  // mirrors enemyDrawCell's boss-name-then-archetype resolution, incl. the mimic-reveal
+  // fallback to its hostile popcorn read).
+  function enemySpriteName(e) {
+    if (e.arch === 'mimic' && e.s0 !== 0) return null;
+    return ENEMY_SPR_NAME[e.name] || ENEMY_SPR_ARCH[e.arch] || null;
+  }
+  // SPAWN-TIME sprite sizing (was draw-time-only, commit 3534cd6). An authored sprite
+  // fits the whole PNG — margin + baked halo — into its atlas cell, so the painted body
+  // reads smaller than the procedural fallback at the same e.scale. Bake GL.sprFill(cell)
+  // into BOTH e.scale AND e.radius (bosses ×BOSS_DRAW_MUL) so DRAW and COLLISION agree by
+  // construction, then enforce the popcorn floor. One-shot per enemy (e.szDone); until the
+  // mapped PNG has decoded (async) the lookup returns -1 and we retry next frame — so a
+  // spawn that precedes atlas readiness self-heals. drawEnemies no longer re-compensates.
+  function sizeEnemy(e) {
+    if (e.szDone) return;
+    var name = enemySpriteName(e), comp = 1;
+    if (name) {
+      var cell = GL.authoredSpr(name);
+      if (cell < 0) return;              // mapped but PNG not decoded yet — retry next frame
+      comp = GL.sprFill(cell);
+    }
+    if (e.boss) comp *= BOSS_DRAW_MUL;
+    e.scale *= comp; e.radius *= comp;
+    if (!e.boss && e.scale < MIN_ENEMY_DRAW) {   // popcorn floor — radius tracks the lift
+      var f = MIN_ENEMY_DRAW / e.scale; e.scale *= f; e.radius *= f; comp *= f;
+    }
+    e.szComp = comp; e.szDone = true;
+  }
 
   // §35/§37 authored glyph cells hoisted OUT of the per-enemy draw loop: the 9 rune
   // and 6 flame names are static, so resolve them ONCE per frame into these reused
@@ -6053,19 +6097,16 @@
   function drawEnemies() {
     resolveGlyphCells();   // per-frame glyph-cell resolve (feeds drawKitOverlays runes + drawStatus flames)
     Engine.enemies.forEach(function (e) {
+      sizeEnemy(e);   // one-shot spawn-time sizing (also covers a frozen-test spawn that never ticked update)
       var f = e.hitFlash > 0 ? 1 : 0;
       var er = e.r, eg = e.g, eb = e.b;
       if (e.charmed) { er = 0.7; eg = 0.95; eb = 1; }   // §4 CHARMED: body recolors player-cyan (faction law)
       var r = er + (1 - er) * f, g = eg + (1 - eg) * f, bl = eb + (1 - eb) * f;
       var cell = enemyDrawCell(e);
-      // Subject-fraction sizing: authored cells (compositeSprite) fit the whole PNG —
-      // margin + halo included — into the atlas cell, so the painted body reads smaller
-      // than the edge-to-edge procedural fallback at the same e.scale. GL.sprFill(cell)
-      // scales the DRAW quad up so the subject spans what e.scale intends; bosses get an
-      // extra BOSS_DRAW_MUL presence bump. dsc is DRAW-ONLY — collision reads e.radius.
+      // Sprite-fill compensation + boss bump are now baked into e.scale (and e.radius)
+      // at spawn by sizeEnemy, so DRAW and COLLISION agree — no per-draw re-scaling here.
       var authored = cell !== e.spr;
-      var dsc = authored ? GL.sprFill(cell) * (e.boss ? BOSS_DRAW_MUL : 1) : 1;
-      var ds = e.scale * dsc;   // compensated draw size (procedural: dsc == 1 == e.scale)
+      var ds = e.scale;
       GL.draw(GL.SPR.GLOW, e.x, e.y, ds * 1.5, ds * 1.5, 0, er, eg, eb, e.boss ? 0.5 : 0.35);
       if (authored) {
         // authored sprite carries its own faction-correct colour: draw near-white
