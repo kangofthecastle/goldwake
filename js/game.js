@@ -5373,6 +5373,9 @@
     // LIGHTNING treatment switch — sets the live flag AND persists in goldwake_meta.
     setLightningStyle: function (st) { GL.setLightningStyle(st); Run.meta.lightningStyle = GL.lightningStyle; Run.saveMeta(); },
     lightningStyle: function () { return GL.lightningStyle; },
+    // HURTBOX rim switch — sets the live flag AND persists in goldwake_meta.
+    setHitboxStyle: function (st) { GL.setHitboxStyle(st); Run.meta.hitboxStyle = GL.hitboxStyle; Run.saveMeta(); },
+    hitboxStyle: function () { return GL.hitboxStyle; },
     boltCount: function () { var n = 0; for (var i = 0; i < BOLT_MAX; i++) if (bolts[i].active) n++; return n; },
     // headless: fire one deterministic bolt through the SAME boltSpawn path every
     // gameplay lightning user routes through (no flash/shake side-effects, so a
@@ -6748,10 +6751,19 @@
     var focus = Engine.focusHeld();
     var hr = PLAYER_R * (G.up.hitboxMul || 1);   // TRUE collision radius (honest dot)
     var ca = (focus ? 1 : 0.85) * dim;           // brighter + steadier when focused
-    // faint grounding disc so the dot never vanishes under dense cover (ground #05080b hue)
-    GL.draw(GL.SPR.GLOW, p.x, p.y, 26, 26, 0, 0.2, 0.55, 0.7, 0.5 * dim);
-    GL.draw(GL.SPR.RING, p.x, p.y, hr * 3.4 + 12, hr * 3.4 + 12, 0, 0.55, 1, 1, (focus ? 0.95 : 0.6) * dim);   // thin cyan findability ring
-    GL.draw(GL.SPR.CORE, p.x, p.y, hr * 2.4, hr * 2.4, 0, 1, 1, 1, ca);                                        // white-hot core AT the hurtbox
+    var B = GL.hitboxStyle === 'B';              // rim colour pick (A cyan / B crimson)
+    var rr = B ? 1.0 : 0.45, rg = B ? 0.12 : 1.0, rb = B ? 0.26 : 1.0;
+    // PUNCH-OUT WELL — the ship sprite has a white-hot centre, so a white dot washes
+    // out against it. Sink the dot into its own dark well first: a near-ground
+    // (#05080b-family) disc drawn PREMULTIPLIED-OVER (ONE, ONE_MINUS_SRC_ALPHA) — the
+    // one darkening path in the playfield pass (same blend PASS B uses for opaque
+    // bullet bodies) — so it occludes whatever is behind it regardless of brightness.
+    // Blend is restored to additive immediately so the bright dot + rim glow on top.
+    GL.blendPremult();
+    GL.draw(GL.SPR.CORE, p.x, p.y, hr * 7.4, hr * 7.4, 0, 0.02, 0.03, 0.043, 0.94 * dim);   // dark well, ~3× the dot
+    GL.blendAdditive();
+    GL.draw(GL.SPR.RING, p.x, p.y, hr * 6.6, hr * 6.6, 0, rr, rg, rb, (focus ? 1 : 0.8) * dim);   // crisp findability rim at the well edge
+    GL.draw(GL.SPR.CORE, p.x, p.y, hr * 2.4, hr * 2.4, 0, 1, 1, 1, ca);                            // white-hot core AT the true hurtbox (4px-honest)
   }
   function drawPlayer() {
     var p = G.player;

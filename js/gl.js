@@ -33,6 +33,14 @@
   GL.lightningStyle = 'C';   // C = default treatment (loadMeta overrides with any persisted pick)
   GL.setLightningStyle = function (s) { GL.lightningStyle = (s === 'B' || s === 'C') ? s : 'A'; };
 
+  // HURTBOX RIM treatment (owner-pickable; drawHurtboxRead in game.js reads this).
+  // The honest kill-dot is a white-hot core in a dark punch-out well; only the RIM
+  // colour changes. Persisted in goldwake_meta (see run.js), applied on load.
+  //   'A' CYAN  — hot white core + crisp cyan rim (HUBRIS house family).
+  //   'B' CRIMSON — hot white core + crisp magenta-red rim (Touhou convention).
+  GL.hitboxStyle = 'A';
+  GL.setHitboxStyle = function (s) { GL.hitboxStyle = (s === 'B') ? 'B' : 'A'; };
+
   // Sprite ids -> atlas region index.
   GL.SPR = {
     GLOW: 0,        // soft radial glow disc

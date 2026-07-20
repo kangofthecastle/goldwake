@@ -91,7 +91,7 @@
   // ---------------------------------------------------------------------
   // peakHubris = best HUBRIS multiplier ever reached (additive field; legacy blobs
   // without it fall back to 1.0). Key stays 'goldwake_meta' — never rename.
-  Run.meta = { hi: 0, bestSector: 0, careerGold: 0, killedWarden: false, completedRun: false, peakHubris: 1, autoFire: false, lightningStyle: 'C' };
+  Run.meta = { hi: 0, bestSector: 0, careerGold: 0, killedWarden: false, completedRun: false, peakHubris: 1, autoFire: false, lightningStyle: 'C', hitboxStyle: 'A' };
   Run.loadMeta = function () {
     try {
       var raw = localStorage.getItem('goldwake_meta');
@@ -104,9 +104,12 @@
         // respect any explicit persisted pick (A/B/C); a legacy blob missing the
         // field keeps the current default ('C') rather than being forced to 'A'.
         Run.meta.lightningStyle = (m.lightningStyle === 'A' || m.lightningStyle === 'B' || m.lightningStyle === 'C') ? m.lightningStyle : Run.meta.lightningStyle;
+        // hurtbox rim pick (A cyan / B crimson); legacy blob missing it keeps default 'A'.
+        Run.meta.hitboxStyle = (m.hitboxStyle === 'A' || m.hitboxStyle === 'B') ? m.hitboxStyle : Run.meta.hitboxStyle;
       }
     } catch (e) {}
     if (window.GL) GL.setLightningStyle(Run.meta.lightningStyle);   // apply persisted bolt treatment
+    if (window.GL) GL.setHitboxStyle(Run.meta.hitboxStyle);         // apply persisted hurtbox rim
   };
   // HUBRIS multiplier from a peak step index — read the Game-side table so there's
   // a single source of truth; fall back to the linear form for a legacy/absent table.
