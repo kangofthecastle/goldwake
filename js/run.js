@@ -699,6 +699,7 @@
     if (window.MUSIC) MUSIC.setSeed(Run.seed);   // deterministic score per run seed
     var un = Run.unlocks();
     Game.resetRun({ lives: 3 + (un.startLife ? 1 : 0), gaugePct: un.startGauge ? 0.25 : 0, baseDmg: un.baseDamage ? 1.1 : 1.0 });
+    if (Game.sanitizeRemovedGods) Game.sanitizeRemovedGods();   // scrub any retired-god slot a restored loadout reinstated, before combat/castUltimate can touch it
     enterSector(0);
   };
   function buildSectors() {

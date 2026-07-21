@@ -557,7 +557,14 @@
   // the enemy-bullet bodies (drawn in render Pass A) and capped so player FX
   // never obscures danmaku (DANMAKU.md readability law).
   // ---------------------------------------------------------------------
-  var BOLT_MAX = 40;         // simultaneous bolts (readability cap)
+  var BOLT_MAX = 64;         // simultaneous bolts (readability cap; raised 40→64 — pooled fixed cost, ~1KB/bolt Float32 buffers)
+  // BOLT PRIORITY (pool-saturation policy). A hop bolt lives ~0.34s across 3 restrikes, so a
+  // 30-foe apotheosis + two 0.2s-cadence zap fields can exhaust the pool and silently drop arcs
+  // (boltSpawn returning null). Fix: when full, boltSpawn EVICTS the lowest-priority, oldest active
+  // bolt instead of dropping the newcomer — so player-visible attack chains never vanish. Ambient
+  // field crackle is the first to yield; a chain can also replace the oldest (most-faded) chain.
+  var BOLT_PRI_AMBIENT = 0;  // decorative field crackle — expendable
+  var BOLT_PRI_CHAIN = 1;    // player attack chains + boss-originated arcs — protected (default)
   var BOLT_PTS = 40;         // max points per leg (<=5 subdivisions -> 33)
   var BOLT_BRPTS = 12;       // max points per side-branch
   var BOLT_SEG_CAP = 640;    // hard per-frame drawn-segment cap (readability)
@@ -585,7 +592,7 @@
   (function initBolts() {
     for (var i = 0; i < BOLT_MAX; i++) {
       bolts.push({
-        active: false, legN: 1, bank: false, sheet: false,
+        active: false, legN: 1, bank: false, sheet: false, pri: BOLT_PRI_CHAIN,
         ax: 0, ay: 0, jx: 0, jy: 0, bx: 0, by: 0,
         r: 0.7, g: 0.9, b: 1, r1: 1, g1: 0.85, b1: 0.4,
         coreW: 7, hazeW: 22, rough: 0.22, levels: 4, branches: 0, impact: 1,
@@ -662,11 +669,24 @@
     if (hop) b.strikeDur = Math.max(b.strikeDur, HOP_MIN_LIFE / (b.strikesLeft + 1));
   }
   // Spawn a single-leg bolt A->B tinted `col`. opts: {big, delay}. Pooled.
+  var _boltDrop = { chain: 0, ambient: 0 };   // saturation telemetry (verify seam): bolts that could not be placed
   function boltSpawn(ax, ay, bx, by, col, opts) {
+    var pri = (opts && opts.pri != null) ? opts.pri : BOLT_PRI_CHAIN;
     var b = null;
     for (var i = 0; i < BOLT_MAX; i++) if (!bolts[i].active) { b = bolts[i]; break; }
-    if (!b) return null;
-    b.active = true; b.legN = 1; b.bank = false;
+    if (!b) {
+      // pool saturated: evict the lowest-priority, then oldest (most-decayed, highest age0) active
+      // bolt — but only one whose priority is <= the newcomer's, so an expendable ambient (or an
+      // already-faded same-tier chain) yields to a fresh chain, while ambient never displaces a chain.
+      var victim = null, vScore = Infinity;
+      for (var j = 0; j < BOLT_MAX; j++) {
+        var c = bolts[j], sc = c.pri * 1e6 - c.age0;   // lower pri dominates; older (larger age0) breaks ties
+        if (sc < vScore) { vScore = sc; victim = c; }
+      }
+      if (victim && victim.pri <= pri) b = victim;
+      else { if (pri >= BOLT_PRI_CHAIN) _boltDrop.chain++; else _boltDrop.ambient++; return null; }
+    }
+    b.active = true; b.legN = 1; b.bank = false; b.pri = pri;
     b.ax = ax; b.ay = ay; b.bx = bx; b.by = by;
     b.r = col[0]; b.g = col[1]; b.b = col[2]; b.r1 = b.r; b.g1 = b.g; b.b1 = b.b;
     applyBoltStyle(b, opts);
@@ -689,7 +709,12 @@
   function arcFx(x1, y1, x2, y2, col) { boltSpawn(x1, y1, x2, y2, col, 0); }
   // A CHAIN HOP is an event, not a hairline: bold core, wider haze, big impact pop,
   // ~0.36s life across restrikes. Used by chainLightning's jumps + collapses.
-  function arcHop(x1, y1, x2, y2, col) { return boltSpawn(x1, y1, x2, y2, col, { hop: true }); }
+  // Shared opts objects (hoisted — boltSpawn/applyBoltStyle only READ opts, never mutate, so
+  // one shared object per tier is safe and drops the per-call {hop:true} allocation).
+  var HOP_OPTS = { hop: true, pri: BOLT_PRI_CHAIN };            // player attack chain — protected from eviction
+  var HOP_AMBIENT_OPTS = { hop: true, pri: BOLT_PRI_AMBIENT };  // decorative field crackle — yields first when saturated
+  function arcHop(x1, y1, x2, y2, col) { return boltSpawn(x1, y1, x2, y2, col, HOP_OPTS); }
+  function arcHopAmbient(x1, y1, x2, y2, col) { return boltSpawn(x1, y1, x2, y2, col, HOP_AMBIENT_OPTS); }
   function updateBolts(dt) {
     for (var i = 0; i < BOLT_MAX; i++) {
       var b = bolts[i]; if (!b.active) continue;
@@ -1402,8 +1427,9 @@
           hz.tick = 0.2;
           Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; var dx = hz.x - e.x, dy = hz.y - e.y; if (dx * dx + dy * dy < hz.r * hz.r) { damageEnemy(e, hz.dmg, false); arcHop(hz.x, hz.y, e.x, e.y, [0.7, 0.9, 1.0]); } });   // T2: zap-field arcs to the hop-presence standard
           // ambient internal crackle so the field reads as live lightning even with no target in reach
+          // (BOLT_PRI_AMBIENT: decorative, so it yields the pool first and never crowds out attack chains)
           var zaa = Math.random() * TAU, zar = hz.r * (0.5 + Math.random() * 0.5);
-          arcHop(hz.x, hz.y, hz.x + Math.cos(zaa) * zar, hz.y + Math.sin(zaa) * zar, [0.7, 0.9, 1.0]);
+          arcHopAmbient(hz.x, hz.y, hz.x + Math.cos(zaa) * zar, hz.y + Math.sin(zaa) * zar, [0.7, 0.9, 1.0]);
         }
         if (hz.timer <= 0) hz.active = false;
       }
@@ -1527,11 +1553,12 @@
           // T4 (owner 2026-07-21: "the blade needs to be aligned with the arc of the special").
           // The blade must cleave with its CONVEX leading edge along the sweep's travel —
           // matching the convex-up damage arc `by = hz.y + fe²·110` (center leads, edges lag).
-          // The authored crescent's natural orientation (rot 0) is the projectile "horns-leading"
-          // pose, which for upward travel points the convex edge DOWN (inverted against the arc,
-          // the "goofy" read). Orient it tangent to travel (same atan2(dir)+π/2 convention as the
-          // crescent shots / GREEN DRAGON ASCENDS) and add the half-turn so the bulge leads up.
-          var swAng = Math.atan2(hz.vy || -1, 0) + Math.PI / 2 + SWEEP_BLADE_FLIP;
+          // The sweep ALWAYS travels straight up, so the tangent-to-travel base angle
+          // (atan2(up-dir)+π/2 — the same convention as the crescent shots / GREEN DRAGON ASCENDS)
+          // is a constant 0. The only real rotation left is the convex-up half-turn, so the honest
+          // orientation is just SWEEP_BLADE_FLIP — blade tangent, convex edge leading up. (The old
+          // atan2(hz.vy,0) was inert dressing: hz.vy is always negative and the x-arg was hardcoded 0.)
+          var swAng = SWEEP_BLADE_FLIP;
           GL.draw(GL.SPR.GLOW, W / 2, hz.y, W * 1.05, hz.r * 3.0, 0, 0.3, 0.95, 0.55, 0.4);
           GL.draw(swc, W / 2, hz.y, W * 1.15, W * 1.15, swAng, 1, 1, 1, 0.98);
           continue;
@@ -1922,6 +1949,7 @@
   function gateOfDuat() {
     var d = G.duat, p = G.player;
     d.active = true; d.x = p.x; d.y = p.y; d.dur = 2.5; d.timer = 2.5;   // open at the player's position at cast
+    d.r = DUAT_PULL_RADIUS * G.specialR;   // pull/seize radius — only foes inside are dragged (scales with the special tier)
     // fresh per-cast boss cap: zero every live foe's gate-drain accumulator so a recast
     // (or a boss that survived a prior gate) gets its own min(0.05·specialR,0.15)·maxhp ceiling.
     Engine.enemies.forEach(function (e) { e.duatDmg = 0; });
@@ -1933,13 +1961,17 @@
   // Root cause: updateDuat moved e.x/e.y directly but ran BEFORE updateEnemies, whose
   // scripted onUpdate re-set the foe's position — the pull was silently overwritten every
   // frame, so any moving foe barely budged. Fix: flag gated non-bosses so updateEnemies
-  // SUSPENDS their pathing (the drag owns their motion), pull harder + accelerate into the
-  // maw, and add real feedback — a life-drain wisp stream toward the gate and a gold burst
-  // on a gate-kill. Bosses keep the per-cast cap but now visibly bleed a wisp too.
+  // SUSPENDS their pathing (the drag owns their motion) — but ONLY their scripted MOVEMENT,
+  // never their firing (a foe hauled into the maw keeps shooting: desperate struggle, not a
+  // crowd-control off-switch). Pull harder + accelerate into the maw, add real feedback —
+  // a life-drain wisp stream and a gold burst on a gate-kill. Bosses keep the per-cast cap
+  // but now visibly bleed a wisp too. The seize is bounded to d.r (DUAT_PULL_RADIUS·specialR):
+  // foes outside the radius are untouched — they path + fire normally.
+  var DUAT_PULL_RADIUS = 560;  // px base seize radius at specialR=1 (a foe beyond it is never gated/drained)
   var DUAT_PULL_SPEED = 480;   // px/s base inward drag at specialR=1 (was 300; now unopposed by pathing)
   var DUAT_PULL_CLOSE = 1.1;   // extra fraction of pull speed as a foe nears the maw (accel-into-gate)
   var DUAT_PULL_REF = 520;     // px reference distance for the close-in acceleration falloff
-  var DUAT_GATE_HOLD = 0.08;   // s a foe stays flagged "gated" (pathing suspended) after the last pull tick
+  var DUAT_GATE_HOLD = 0.08;   // s a foe stays flagged "gated" (scripted MOVEMENT suspended; firing continues) after the last pull tick
   var DUAT_KILL_RADIUS = 230;  // px within which a gate-kill throws a gold burst
   function updateDuat(dt) {
     var d = G.duat; if (!d.active) return;
@@ -1948,10 +1980,12 @@
     var feast = G.mods.anubisFeast ? 1.5 : 1;
     Engine.enemies.forEach(function (e) {
       if (e.dying || e.charmed || e.hp >= e.maxhp) return;          // only the wounded
-      var share = (e.maxhp - e.hp) * (dt / d.dur) * 0.4 * G.specialR;   // missing-HP share over the duration
       var dx = d.x - e.x, dy = d.y - e.y, di = Math.hypot(dx, dy) || 1;
+      if (di > d.r) return;                                         // outside the seize radius: not gated, not drained (paths + fires normally)
+      var share = (e.maxhp - e.hp) * (dt / d.dur) * 0.4 * G.specialR;   // missing-HP share over the duration
       if (!e.boss) {
-        // flag gated so updateEnemies suspends this foe's scripted move+fire — the drag wins.
+        // flag gated so updateEnemies/pathEnemyUpdate suspend this foe's scripted MOVEMENT — the drag
+        // wins — while its firing keeps running (gateT gates pathTick, never scriptTick).
         e.gateT = DUAT_GATE_HOLD;
         var near = 1 - Math.min(1, di / DUAT_PULL_REF);                              // 0 far .. 1 at the maw
         var pullSpeed = DUAT_PULL_SPEED * G.specialR * (1 + DUAT_PULL_CLOSE * near); // accelerate inward
@@ -2395,9 +2429,15 @@
   // Enumerate live, non-charmed foes for the instant ultimates (ZEUS / ANUBIS).
   function eachFoe(fn) { Engine.enemies.forEach(function (e) { if (!e.dying && !e.charmed) fn(e); }); }
 
+  // The gods that actually resolve a burst below (JADE MANDATE is handled inline in tryVaunt).
+  // Anything not in here — a retired god (POSEIDON) reinstated by a restored loadout, or a typo —
+  // is an unknown ultimate: bail BEFORE spending the gauge (no silent no-op that eats the burst).
+  var ULT_GODS = { zeus: 1, anubis: 1, wukong: 1, artemis: 1, aphrodite: 1, ares: 1, ra: 1,
+    loki: 1, odin: 1, thor: 1, heimdall: 1, guanyu: 1, quetz: 1 };
   // Dispatch a NON-default ultimate (JADE MANDATE is handled inline in tryVaunt).
   function castUltimate(g) {
     var v = G.vaunt, p = G.player, i;
+    if (!g || !ULT_GODS[g] || (Run && Run.isRemovedGod && Run.isRemovedGod(g))) { if (SFX.hit) SFX.hit(); return; }   // unknown/retired ult: never zero the gauge
     endUltimate();                                               // drop any prior live ultimate FIRST (frees its pooled hazards before the pre-check)
     // #7 fix: THE WORLD-PILLAR places a pooled hazard. If the 8-slot pool is saturated,
     // allocHazard would return null and the cast is a silent no-op — so bail BEFORE
@@ -3494,9 +3534,13 @@
   function pathEnemyUpdate(e, dt) {
     e.t += dt;                        // drives hold-segment bob sway (Math.sin(e.t*…))
     if (e.retreatAt > 0 && !e.didRetreat && e.hp < e.maxhp * e.retreatAt) { e.didRetreat = true; triggerRetreat(e); }
-    pathTick(e, dt);
+    // GATE OF DUAT: while dragged, the pull owns the foe's position — skip scripted MOVEMENT
+    // but re-anchor the current path segment to the dragged spot so, when the gate lets go, the
+    // path resumes from here rather than snapping back to its old interpolation base (no teleport).
+    if (e.gateT > 0) { e.sx = e.x; e.sy = e.y; }
+    else pathTick(e, dt);
     e.rot = Math.PI;
-    scriptTick(e, dt);
+    scriptTick(e, dt);               // firing runs every frame — gated or not (the maw doesn't silence the guns)
   }
 
   // --- the 8 named paths ---
@@ -4661,8 +4705,10 @@
       // strip prior displacement so scripted movement runs from a clean base
       e.x -= e.dispX; e.y -= e.dispY;
       var terrified = e.terrorT > 0 && !e.boss;
-      var gated = e.gateT > 0 && !e.boss;              // GATE OF DUAT (T5): the drag owns a wounded non-boss's motion
-      if (!terrified && e.stunT <= 0 && !gated) {       // Stun / Terror / GATE drag: no scripted move / fire
+      // GATE OF DUAT (T5): the drag is NOT suppressed here — onUpdate still runs so the foe keeps
+      // FIRING while hauled in. pathEnemyUpdate skips only its scripted pathTick when e.gateT>0;
+      // velocity-driven arch foes keep moving but the pull (updateDuat) adds on top and wins.
+      if (!terrified && e.stunT <= 0) {                 // Stun / Terror: fully frozen (no move, no fire)
         Patterns.setSource(e);
         var fr = e.aura === 'frenzied' ? 1.3 : 1;       // FRENZIED aura
         if (e.onUpdate) e.onUpdate(e, dt * fr);
@@ -5377,6 +5423,9 @@
     setHitboxStyle: function (st) { GL.setHitboxStyle(st); Run.meta.hitboxStyle = GL.hitboxStyle; Run.saveMeta(); },
     hitboxStyle: function () { return GL.hitboxStyle; },
     boltCount: function () { var n = 0; for (var i = 0; i < BOLT_MAX; i++) if (bolts[i].active) n++; return n; },
+    boltMax: function () { return BOLT_MAX; },
+    boltDrops: function () { return { chain: _boltDrop.chain, ambient: _boltDrop.ambient }; },   // saturation telemetry (chain==0 is the invariant)
+    resetBoltDrops: function () { _boltDrop.chain = 0; _boltDrop.ambient = 0; },
     // headless: fire one deterministic bolt through the SAME boltSpawn path every
     // gameplay lightning user routes through (no flash/shake side-effects, so a
     // close-up frames just the bolt). Optional banked two-leg variant for jadeMirror.
@@ -5390,6 +5439,15 @@
     spawnBulletAt: function (x, y, dir, spd) { var b = Patterns.bullet(x, y, dir == null ? Math.PI / 2 : dir, spd == null ? 120 : spd, { fam: Patterns.FAM.ORB, tier: 'M', color: Patterns.MAGENTA }); return b ? b._i : -1; },
     // spawn a plain trash enemy (verify only) — returns its pool index.
     spawnDummy: function (x, y, hp, elite) { var e = newEnemy(1, x, y, hp || 10, GL.SPR.SHIP_POP, 80, 30, [1, 0.5, 0.3], 5, 500, !!elite); if (e) { e.vx = 0; e.vy = 0; e.onUpdate = null; e.pathSegs = null; } return e ? e._i : -1; },
+    // verify-only: fabricate a live zeusField zap hazard (0.2s-tick lightning field) without a kill.
+    spawnZap: function (x, y) { spawnZapField(x, y); },
+    // verify-only: turn a dummy into a real path+script enemy — travels DOWN over 6s (movement)
+    // and fires an aimed shot every 0.12s (firing), so the GATE-firing/movement split is testable.
+    armFiringEnemy: function (i) {
+      var e = Engine.enemies.items[i]; if (!e || !e.active) return;
+      e.pathSegs = [{ k: 'line', dur: 6, ex: e.x, ey: e.y + 300 }]; initPath(e); e.onUpdate = pathEnemyUpdate;
+      setScript(e, [{ t: 0, fn: function (en) { Patterns.aimed(en.x, en.y, en.x, en.y + 120, 200, { color: Patterns.CYAN, radius: 9 }); } }], 0.12, 0);
+    },
     // ---- §2.5 ULTIMATES verify surface (zero cost unless called) ----
     setUltimate: function (g) { Game.setUltimate(g); },
     ultimateGod: function () { return G.ultimateGod; },
@@ -5402,8 +5460,8 @@
     setHp: function (i, hp) { var e = Engine.enemies.items[i]; if (e && e.active) { e.hp = hp; if (hp > e.maxhp) e.maxhp = hp; } },
     hazTypeCount: function (type) { var n = 0; for (var i = 0; i < hazards.length; i++) if (hazards[i].active && hazards[i].type === type) n++; return n; },
     hazPos: function (type) { for (var i = 0; i < hazards.length; i++) if (hazards[i].active && hazards[i].type === type) return { x: hazards[i].x, y: hazards[i].y, r: hazards[i].r, halfW: hazards[i].halfW, timer: hazards[i].timer }; return null; },
-    // per-foe ultimate state (verify only): great-hunt tag, adoration dwell, mire slow.
-    enemyUlt: function (i) { var e = Engine.enemies.items[i]; if (!e || !e.active) return null; return { huntTag: !!e.huntTag, adoreT: e.adoreT || 0, mireT: e.mireT || 0, stunT: e.stunT || 0, shakenT: e.shakenT || 0, weakStacks: e.weakStacks || 0, charmed: !!e.charmed, hp: e.hp, maxhp: e.maxhp, runes: e.runes || 0 }; },
+    // per-foe ultimate state (verify only): great-hunt tag, adoration dwell.
+    enemyUlt: function (i) { var e = Engine.enemies.items[i]; if (!e || !e.active) return null; return { huntTag: !!e.huntTag, adoreT: e.adoreT || 0, stunT: e.stunT || 0, shakenT: e.shakenT || 0, weakStacks: e.weakStacks || 0, charmed: !!e.charmed, hp: e.hp, maxhp: e.maxhp, runes: e.runes || 0 }; },
     // ---- authored-art wiring verify surface (zero cost unless called) ----
     // whether a named authored sprite (art/PROMPTS.md §8-9) has loaded into its
     // atlas cell, and the running per-name draw counter incremented every time a
@@ -5737,31 +5795,38 @@
       case 'jadeTribute': M.jadeTribute = true; break;
     }
   }
-  // A boon references a retired god/charm/mod/duo (POSEIDON removal). Tolerant of
-  // Run not exposing the registries (older harness): falls back to name-prefix checks.
+  // A mod id belongs to a removed god when it is namespaced under that god's name
+  // (e.g. 'poseidonTide') — the same prefix convention Run.sanitizeSavedLoadout uses. Derived
+  // from REMOVED_GODS so there is no second hardcoded god-name list (single source of truth, #7).
+  function modOfRemovedGod(id, rg) { for (var g in rg) { if (g && id.indexOf(g) === 0) return true; } return false; }
+  // A boon references a retired god/charm/mod/duo (POSEIDON removal). Reads the Run-side
+  // registries (Run loads before Game, so they exist at call time) — trivial {} fallback only.
   function isRetiredBoon(b) {
     if (!b) return false;
-    var rg = (Run && Run.REMOVED_GODS) || { poseidon: true };
-    var rd = (Run && Run.RETIRED_DUOS) || { worldSerpent: true, typhoonPillar: true, stormSurge: true };
+    var rg = (Run && Run.REMOVED_GODS) || {};
+    var rc = (Run && Run.REMOVED_CHARMS) || {};
+    var rd = (Run && Run.RETIRED_DUOS) || {};
     if ((b.kind === 'transformA' || b.kind === 'transformS' || b.kind === 'ultimate') && rg[b.god]) return true;
-    if (b.kind === 'charm' && b.id && (b.id === 'charmPoseidon')) return true;
-    if (b.kind === 'mod' && b.id && b.id.indexOf('poseidon') === 0) return true;
+    if (b.kind === 'charm' && b.id && rc[b.id]) return true;
+    if (b.kind === 'mod' && b.id && modOfRemovedGod(b.id, rg)) return true;
     if (b.kind === 'duo' && rd[b.id]) return true;
     return false;
   }
   // Scrub any retired-god reference out of the LIVE run state (a defensive net for a
   // mid-run save/restore that reinstated POSEIDON). Nulls a retired slot (resets its
-  // tier), and deletes retired charm/mod/duo flags. Returns count of scrubbed entries.
+  // tier), and deletes retired charm/mod/duo flags. Reads the Run-side registries (single
+  // source of truth, #7). Returns count of scrubbed entries.
   Game.sanitizeRemovedGods = function () {
-    var rg = (Run && Run.REMOVED_GODS) || { poseidon: true };
-    var rd = (Run && Run.RETIRED_DUOS) || { worldSerpent: true, typhoonPillar: true, stormSurge: true };
+    var rg = (Run && Run.REMOVED_GODS) || {};
+    var rc = (Run && Run.REMOVED_CHARMS) || {};
+    var rd = (Run && Run.RETIRED_DUOS) || {};
     var n = 0;
     if (rg[G.attackGod]) { G.attackGod = null; G.attackR = 1; n++; }
     if (rg[G.specialGod]) { G.specialGod = null; G.specialR = 1; n++; }
     if (rg[G.ultimateGod]) { G.ultimateGod = null; n++; }
     var k;
-    for (k in G.charms) { if (k === 'charmPoseidon') { delete G.charms[k]; n++; } }
-    for (k in G.mods) { if (k.indexOf('poseidon') === 0) { delete G.mods[k]; n++; } }
+    for (k in G.charms) { if (rc[k]) { delete G.charms[k]; n++; } }
+    for (k in G.mods) { if (modOfRemovedGod(k, rg)) { delete G.mods[k]; n++; } }
     for (k in G.duos) { if (rd[k]) { delete G.duos[k]; n++; } }
     if (n) updateCommunion();
     return n;
