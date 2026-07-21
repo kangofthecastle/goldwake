@@ -303,7 +303,7 @@ traditions (Greek only), no pure black #000000, no text or lettering, no busy
 particle noise, no watermark.
 ```
 
-### 8. POSEIDON — Lord of Tides
+### 8. POSEIDON — Lord of Tides  [RETIRED 2026-07-21 — god removed from the game; 8-poseidon.png kept as an unused asset, not re-gen'd]
 
 ```
 Painted card portrait, storybook style: Poseidon, waist-up, rising from a curling
@@ -930,7 +930,7 @@ Substitutions:
 | # | `{SUBJECT}` | `{TRADITION}` | `{ACCENT}` |
 | --- | --- | --- | --- |
 | 30.1 | EAGLE FEATHER of Zeus — a storm-charged eagle feather crackling faintly | Greek black-figure pottery and carved marble frieze | `#9fd8ff` |
-| 30.2 | PEARL OF THE DEEP of Poseidon — a huge pearl wrapped in kelp and rope | Greek black-figure pottery and carved marble frieze | `#4fe0e0` |
+| 30.2 | PEARL OF THE DEEP of Poseidon — RETIRED 2026-07-21 (POSEIDON removed); 30-2-pearl-of-the-deep.png kept as an unused asset | Greek black-figure pottery and carved marble frieze | `#4fe0e0` |
 | 30.3 | SILVER FLETCHING of Artemis — a single arrow fletching of moonlit feather | Greek black-figure pottery and carved marble frieze | `#b6ff5a` |
 | 30.4 | DOVE TOKEN of Aphrodite — a small carved dove charm on a silk cord | Greek black-figure pottery and carved marble frieze | `#ff77c8` |
 | 30.5 | SPEAR SPLINTER of Ares — a broken spearhead fragment bound in leather | Greek black-figure pottery and carved marble frieze | `#ff5a6e` |
@@ -1063,7 +1063,7 @@ color" negative for those rows.
 
 **What still never gets generated:** dense base streams (arrows, javelins fly
 3+ per volley but are listed below because their silhouettes exceed what the
-procedural atlas draws well — gen them small-readable), beams, the tidal wall,
+procedural atlas draws well — gen them small-readable), beams,
 the Bifröst band and dawn-seam, the Skyfall column, splinter shards, coil
 rings, telegraphs, and pure-motion FX. **Carve-out (owner 2026-07-19):**
 symbolic identity-marks and the burn flame are generated after all — see
@@ -1114,7 +1114,7 @@ Substitutions:
 | 33.12 | ANKH BOLT of Anubis — a small thrown ankh, loop leading: the cross-arms are the fins, the loop is the head; a judgment cast at the living | loop UP, vertical | warm amber #e8c46a blending gold at the loop | ~28 pixels tall |
 | 33.13 | RUNE-BOLT of Odin — one heavy blunt bolt of dark iron carved with a single stave-rune glowing along its length; slow, weighty, inevitable | nose UP, vertical | steel-blue #8fb4d8 body, the carved rune line glowing pale gold | ~34 pixels tall, thick |
 | 33.14 | HEARTSEEKER of Aphrodite — a slow seeking heart: one plump stylized heart shape with two small trailing silk ribbons, votive and ornamental, never a cartoon valentine | point DOWN (it weaves), ribbons trailing up | hot magenta #ff77c8 blending white at the cleft | ~36 pixels |
-| 33.15 | THE TIDAL WALL of Poseidon — one segment of a colossal breaking wave crest seen head-on: a rolling barrel of dark sea rising to a curling foam lip, spray thrown upward off the crest; the segment must TILE SEAMLESSLY left-and-right (the engine repeats it across the full field width as a wall rolling up the screen), so all wave motion/foam detail must exit the left edge exactly as it enters the right | crest UP, barrel below, horizontally seamless | deep sea-teal #1a5f7a rising through cyan #35d0ff to white foam at the lip | fills the frame edge-to-edge; drawn ~190px tall in play — bold rolling mass, not scattered ovals |
+<!-- 33.15 THE TIDAL WALL of Poseidon — REMOVED 2026-07-21 (owner: POSEIDON too gamebreaking). Row deleted; never generated, no longer needed. -->
 
 ### 34. Owned-entity sprite template
 

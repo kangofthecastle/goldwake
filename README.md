@@ -140,7 +140,7 @@ gauge and press **C**: a shockwave **cancels every enemy bullet into gold**,
 shields you ~1.2s, and jumps your multiplier to ×3 (climbing per kill, cap ×5,
 higher with upgrades) — and your **attack god answers with a rider**, a one-shot
 god-flavor kicker fired at activation (Zeus strikes every foe with lightning,
-Poseidon tidal-slams the field, Wukong summons his full clone court, Guan Yu
+Wukong summons his full clone court, Guan Yu
 throws a nova of eight crescents, Heimdall Marks everything and shoves the
 bullet field back…). When the gauge drains you get the **APOTHEOSIS BONUS**. No
 bombs — a full gauge is your panic button. 3 lives; death spills **25% of your
@@ -150,12 +150,11 @@ banked wallet** as re-collectable shards (~4s) and resets your multiplier.
 
 Modeled on *Hades*. You have two slots — **attack** and **special**. The **first**
 boon in a slot *transforms* the mechanic itself; later cards only scale it.
-**Fifteen** transform gods across four pantheons, each with an attack transform, a
+**Fourteen** transform gods across four pantheons, each with an attack transform, a
 special transform, and two mod cards:
 
 - **OLYMPUS** — **ZEUS** (chain lightning / **SKYFALL** — an instant lightning column
-  down your lane that **Stuns** and forks to neighbours), **POSEIDON** (knockback +
-  impact / tidal wall that eats bullets into gold), **ARTEMIS** (**THE HUNT** — silver
+  down your lane that **Stuns** and forks to neighbours), **ARTEMIS** (**THE HUNT** — silver
   arrows brand the first foe as your **Hunted** and home to it; hits ramp +12% (cap
   +96%), a Hunted kill splinters shards and chains the brand to the next prey / **THE
   LOOSED ARROW** — a piercing, always-**precise** needle that Marks all it strikes, the
@@ -209,7 +208,7 @@ FALSE DAWN).
 Statuses: **Marked/Weak** (bonus damage taken), **Charm** (fights for you),
 **Terror/Shaken** (Ares — flee + take more), **Burn** (DoT), **Stun** (frozen).
 Each reads by **where** its glyph sits (a distinct body zone) and **what** shape it
-is, not by hue alone. Poseidon, Thor, Guan Yu
+is, not by hue alone. Thor, Guan Yu
 and Terror shove enemies with real spring-damped **displacement** — visible
 lurch, wall-slams, and enemy pile-ups.
 
@@ -273,7 +272,7 @@ or advances a kit meter: Hunt brand, Odin runes, Quetz coil, Loki mischief).
 foes** skip their `onUpdate` (no enemy fire), are excluded from all enemy→player
 collision and from being targeted by shots/hazards, run `updateCharmed` (seek the
 nearest foe, fire player-faction shots at it), and expire in a heart-burst.
-Tidal carries and horn shoves use a per-bullet `timeScale`/`slowT` in
+Horn shoves use a per-bullet `timeScale`/`slowT` in
 `Engine.updateBullet`.
 
 **God entities** are pooled/singletons on `G`: Ra's beam is stateless (per-frame in

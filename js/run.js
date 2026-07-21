@@ -25,13 +25,13 @@
   // through until — or if — the image lands). getArt returns a decoded image or
   // null. Portraits/relics map by god; emblems by pantheon.
   var GOD_PORTRAIT = {
-    zeus: '7-zeus', poseidon: '8-poseidon', artemis: '9-artemis', aphrodite: '10-aphrodite',
+    zeus: '7-zeus', artemis: '9-artemis', aphrodite: '10-aphrodite',
     ares: '11-ares', heimdall: '12-heimdall', ra: '13-ra', anubis: '14-anubis', loki: '15-loki',
     odin: '16-odin', thor: '17-thor', wukong: '18-wukong', guanyu: '19-guan-yu',
     jade: '20-jade-emperor', quetz: '21-quetzalcoatl'
   };
   var GOD_RELIC = {
-    zeus: '30-1-eagle-feather', poseidon: '30-2-pearl-of-the-deep', artemis: '30-3-silver-fletching',
+    zeus: '30-1-eagle-feather', artemis: '30-3-silver-fletching',
     aphrodite: '30-4-dove-token', ares: '30-5-spear-splinter', heimdall: '30-6-watchmans-eye',
     ra: '30-7-sunstone', anubis: '30-8-heart-scarab', loki: '30-9-tangled-thread',
     odin: '30-10-huginn-muninn', thor: '30-11-hammer-shard', wukong: '30-12-golden-hair',
@@ -106,11 +106,42 @@
         Run.meta.lightningStyle = (m.lightningStyle === 'A' || m.lightningStyle === 'B' || m.lightningStyle === 'C') ? m.lightningStyle : Run.meta.lightningStyle;
         // hurtbox rim pick (A cyan / B crimson); legacy blob missing it keeps default 'A'.
         Run.meta.hitboxStyle = (m.hitboxStyle === 'A' || m.hitboxStyle === 'B') ? m.hitboxStyle : Run.meta.hitboxStyle;
+        // MIGRATION: the meta blob normally carries only settings/unlocks, but a legacy
+        // (or forked) build may have persisted a mid-run loadout that references a now-
+        // retired god (POSEIDON). Scrub any such reference so nothing downstream resolves
+        // a dangling id; if we cleaned anything, re-persist the blob immediately.
+        if (Run.sanitizeSavedLoadout(m)) { try { localStorage.setItem('goldwake_meta', JSON.stringify(m)); } catch (e2) {} }
       }
     } catch (e) {}
     if (window.GL) GL.setLightningStyle(Run.meta.lightningStyle);   // apply persisted bolt treatment
     if (window.GL) GL.setHitboxStyle(Run.meta.hitboxStyle);         // apply persisted hurtbox rim
   };
+  // Strip any retired-god reference out of a stored loadout-shaped object (attack/
+  // special/ultimate slot, charms, duos, mods). Tolerant of arbitrary blob shapes:
+  // a slot naming a removed god is nulled; a charm/mod/duo flag keyed to a removed
+  // entry is deleted. Returns true if anything was changed. Never throws.
+  Run.sanitizeSavedLoadout = function (o) {
+    if (!o || typeof o !== 'object') return false;
+    var changed = false;
+    // slots may live at the top level or nested under a 'loadout'/'run' object
+    var scopes = [o, o.loadout, o.run, o.equipped];
+    for (var si = 0; si < scopes.length; si++) {
+      var s = scopes[si]; if (!s || typeof s !== 'object') continue;
+      ['attackGod', 'specialGod', 'ultimateGod'].forEach(function (k) {
+        if (REMOVED_GODS[s[k]]) { s[k] = null; changed = true; if (k === 'attackGod') s.attackR = 1; if (k === 'specialGod') s.specialR = 1; }
+      });
+      ['charms', 'mods', 'duos'].forEach(function (grp) {
+        var g = s[grp]; if (!g || typeof g !== 'object') return;
+        for (var key in g) {
+          if (REMOVED_CHARMS[key] || (key.indexOf('poseidon') === 0) || (RETIRED_DUOS[key])) { delete g[key]; changed = true; }
+        }
+      });
+    }
+    return changed;
+  };
+  // duo ids that vanished with POSEIDON (both members / the pair no longer exists).
+  var RETIRED_DUOS = { worldSerpent: true, typhoonPillar: true, stormSurge: true };
+  Run.RETIRED_DUOS = RETIRED_DUOS;
   // HUBRIS multiplier from a peak step index — read the Game-side table so there's
   // a single source of truth; fall back to the linear form for a legacy/absent table.
   function hubrisMultOf(step) {
@@ -143,9 +174,6 @@
     zeus:      { name: 'ZEUS', epithet: 'the Stormbreaker', pantheon: 'OLYMPUS', css: '#9fd8ff', color: [0.62, 0.85, 1.0],
                  attack: 'Attacks arc chain lightning to nearby foes.',
                  special: 'SKYFALL: a bolt cracks straight down your lane and forks to nearby foes; struck foes are Stunned.' },
-    poseidon:  { name: 'POSEIDON', epithet: 'Lord of Tides', pantheon: 'OLYMPUS', css: '#4fe0e0', color: [0.2, 0.82, 0.85],
-                 attack: 'Attacks knock foes back; slams deal impact damage.',
-                 special: 'A tidal wall sweeps up, carrying bullets off as gold.' },
     artemis:   { name: 'ARTEMIS', epithet: 'the Huntress', pantheon: 'OLYMPUS', css: '#b6ff5a', color: [0.7, 1.0, 0.3],
                  attack: 'Silver arrows brand the first foe hit as your HUNTED and home to it; hits ramp, kills chain the hunt.',
                  special: 'THE LOOSED ARROW: a piercing precise needle that Marks all it strikes; the first becomes your Hunted at full ramp.' },
@@ -188,7 +216,17 @@
                  special: "Giant's Bane: a colossal hammer crushes the toughest foe." }
   };
   Run.GODS = GODS;
-  var GOD_KEYS = ['zeus', 'poseidon', 'artemis', 'aphrodite', 'ares', 'heimdall', 'ra', 'anubis', 'loki', 'odin', 'wukong', 'quetz', 'thor', 'guanyu', 'jade'];
+  // RETIRED GODS — ids that were shipped in older builds but have since been pulled
+  // from the game (POSEIDON removed 2026-07-21, owner: too gamebreaking). Kept as a
+  // registry so a legacy save / meta blob carrying a retired loadout sanitizes
+  // gracefully instead of leaving a dangling god id nothing can resolve.
+  var REMOVED_GODS = { poseidon: true };
+  var REMOVED_CHARMS = { charmPoseidon: true };
+  Run.REMOVED_GODS = REMOVED_GODS;
+  Run.REMOVED_CHARMS = REMOVED_CHARMS;
+  Run.isRemovedGod = function (g) { return !!(g && REMOVED_GODS[g]); };
+  Run.isLiveGod = function (g) { return !!(g && GODS[g] && !REMOVED_GODS[g]); };
+  var GOD_KEYS = ['zeus', 'artemis', 'aphrodite', 'ares', 'heimdall', 'ra', 'anubis', 'loki', 'odin', 'wukong', 'quetz', 'thor', 'guanyu', 'jade'];
 
   // §7 THREE-LINE CONTRACT card copy. GODS[g].attack/.special mix identity + mechanic;
   // the card wants a terse DESC one-liner + a ▸HOW activation/stack fragment (≤12 words,
@@ -196,8 +234,6 @@
   var GOD_CARD = {
     zeus:      { aDesc: 'Attacks arc chain lightning between nearby foes.', aHow: 'Each hit forks to the next foe.',
                  sDesc: 'SKYFALL cracks a bolt straight down your lane.', sHow: 'Forks to nearby foes; struck are Stunned.' },
-    poseidon:  { aDesc: 'Knocks foes back; slams deal impact damage.', aHow: 'Wall-slams add bonus impact.',
-                 sDesc: 'A tidal wall sweeps up the whole field.', sHow: 'Carries enemy bullets off as gold.' },
     artemis:   { aDesc: 'Silver arrows brand your HUNTED and home to it.', aHow: 'Hits ramp; a kill chains the hunt on.',
                  sDesc: 'THE LOOSED ARROW — a piercing, precise needle.', sHow: 'Marks all it strikes; first becomes Hunted.' },
     aphrodite: { aDesc: 'Attacks stack Charm across the swarm.', aHow: '+15% to the charm-touched & Weakened.',
@@ -230,7 +266,6 @@
   // starLine() prints "★★★  ×2.25 <qtyLabel> & <secondary>" from LADDER[tierOf(cur)].
   var STARLINE = {
     zeus:      { attack: { qtyLabel: 'arc damage', secondary: '+chain reach' }, special: { qtyLabel: 'bolt damage', secondary: 'wider stun' } },
-    poseidon:  { attack: { qtyLabel: 'impact damage', secondary: '+knockback' }, special: { qtyLabel: 'wave damage', secondary: 'gold sweep' } },
     artemis:   { attack: { qtyLabel: 'arrow damage', secondary: 'hunt ramp' }, special: { qtyLabel: 'needle damage', secondary: 'marks' } },
     aphrodite: { attack: { qtyLabel: 'charm damage', secondary: 'Weaken' }, special: { qtyLabel: 'heart damage', secondary: 'charm dwell' } },
     ares:      { attack: { qtyLabel: 'armory damage', secondary: 'war-heat' }, special: { qtyLabel: 'Terror damage', secondary: 'dread' } },
@@ -267,7 +302,6 @@
   // three-line contract (no ★-line: ultimates have no star levels first wave).
   var ULTS = {
     zeus:      ['OLYMPIAN STORM',        'Lightning smites every living foe at once. ▸ Instant screen-wide nuke; non-bosses are Stunned.'],
-    poseidon:  ['THE DELUGE',            'A calm-water zone floods where you stand. ▸ Enemy bullets entering it die; foes inside slow.'],
     artemis:   ['THE GREAT HUNT',        'Time nearly stops; you keep flying. ▸ Foes your lane crosses take a precise arrow on resume.'],
     aphrodite: ['ADORATION',             'A heart-aura clings to you 5s. ▸ Foes that dwell inside are charmed; bosses Weaken.'],
     ares:      ['ARISTEIA',              'Pinned FRENZY and doubled volleys. ▸ Each kill extends it (cap 8s); no clear, no safety.'],
@@ -288,7 +322,6 @@
   // that god: this is how gods you didn't pick still touch your run.
   var CHARMS = {
     charmZeus:      { god: 'zeus',      name: 'EAGLE FEATHER',    desc: '+12% damage to elites and bosses' },
-    charmPoseidon:  { god: 'poseidon',  name: 'PEARL OF THE DEEP', desc: '+50% magnet radius' },
     charmArtemis:   { god: 'artemis',   name: 'SILVER FLETCHING', desc: '+precise damage & +15% weak-point size' },
     charmAphrodite: { god: 'aphrodite', name: 'DOVE TOKEN',       desc: 'shop prices -15%' },
     charmAres:      { god: 'ares',      name: 'SPEAR SPLINTER',   desc: '+10% attack damage' },
@@ -304,12 +337,11 @@
     charmJade:      { god: 'jade',      name: 'IMPERIAL SEAL',    desc: 'DIVINE INTERVENTION bonus pays +30%' }
   };
   Run.CHARMS = CHARMS;
-  var CHARM_KEYS = ['charmZeus', 'charmPoseidon', 'charmArtemis', 'charmAphrodite', 'charmAres', 'charmHeimdall', 'charmRa', 'charmAnubis', 'charmLoki', 'charmOdin', 'charmThor', 'charmWukong', 'charmQuetz', 'charmGuanyu', 'charmJade'];
+  var CHARM_KEYS = ['charmZeus', 'charmArtemis', 'charmAphrodite', 'charmAres', 'charmHeimdall', 'charmRa', 'charmAnubis', 'charmLoki', 'charmOdin', 'charmThor', 'charmWukong', 'charmQuetz', 'charmGuanyu', 'charmJade'];
 
   // per-god mod cards: [id, desc, slotReq]  (slotReq: attack / special / any)
   var MODS = {
     zeus: [['zeusChain', '+1 chain lightning jump', 'attack'], ['zeusCrit', 'chains crit-strike the source', 'attack'], ['zeusFork', 'chains fork to a 2nd target', 'attack'], ['zeusField', 'kills leave a static zap field', 'attack']],
-    poseidon: [['poseidonBig', 'bigger knockback & impact', 'attack'], ['poseidonDrag', 'tidal wave drags gold to you', 'special'], ['poseidonSplash', 'wall-slams splash damage', 'attack'], ['poseidonForce', '+40% impulse & impact', 'attack']],
     artemis: [['artemisCrit', "HUNTER'S REACH: +2 ramp cap & +0.6 arrow homing", 'attack'], ['artemisRefund', 'a 6+ stack Hunted hit refunds special charge', 'attack'], ['artemisSpread', 'chain hops carry ALL stacks (no decay)', 'attack'], ['artemisMulti', 'DEEPER HUNT: ramp +0.18/stack (from +0.12)', 'attack']],
     aphrodite: [['aphroLong', 'charm lasts longer', 'any'], ['aphroExplode', 'charmed foes explode on expiry', 'any'], ['aphroTaunt', 'foes near a charmed ally target it', 'any'], ['aphroFast', 'charm at fewer hits', 'attack']],
     ares: [['aresDecay', 'frenzy decays half as fast', 'attack'], ['aresCharge', 'frenzy charges special 2x at 5+', 'attack'], ['aresTerror', 'terror lasts +1.5s', 'special'], ['aresSpoils', 'terror-slams drop gold', 'special']],
@@ -327,7 +359,7 @@
   };
   Run.MODS = MODS;
   // mods that are one-shot (skip once owned); zeusChain / artemisCrit stack
-  var BOOL_MODS = { zeusCrit: 1, zeusFork: 1, zeusField: 1, poseidonBig: 1, poseidonDrag: 1, poseidonSplash: 1, poseidonForce: 1,
+  var BOOL_MODS = { zeusCrit: 1, zeusFork: 1, zeusField: 1,
     artemisRefund: 1, artemisSpread: 1, artemisMulti: 1, aphroLong: 1, aphroExplode: 1, aphroTaunt: 1, aphroFast: 1,
     aresDecay: 1, aresCharge: 1, aresTerror: 1, aresSpoils: 1, heimVigil: 1, heimPrism: 1, heimHorn: 1, heimEcho: 1,
     raRamp: 1, raSpread: 1, raSplit: 1, raBurn: 1, anubisHeavy: 1, anubisFeast: 1, anubisRefund: 1, anubisShard: 1,
@@ -344,13 +376,11 @@
   // ---- duo boons (gated on a specific attack+special god pair) ---------
   var DUOS = {
     eclipse: { name: 'ECLIPSE', gods: ['zeus', 'ra'], desc: 'the solar beam arcs chain lightning', needSlot: { ra: 'attack' } },
-    worldSerpent: { name: 'WORLD SERPENT', gods: ['poseidon', 'quetz'], desc: 'the sky serpent leaves a bullet-sweeping wake', needSlot: { quetz: 'special' } },
     deathSentence: { name: 'DEATH SENTENCE', gods: ['artemis', 'anubis'], desc: 'precise strikes execute foes below 40% and load double weight on the scales' },
     loveAndWar: { name: 'LOVE AND WAR', gods: ['aphrodite', 'ares'], desc: 'charmed allies rage; their end sows Terror' },
     doubleTrouble: { name: 'DOUBLE TROUBLE', gods: ['loki', 'wukong'], desc: 'the decoy is a firing clone', needSlot: { loki: 'special' } },
     huntersEye: { name: "HUNTER'S EYE", gods: ['odin', 'artemis'], desc: 'Marked foes always expose a weak point' },
     bloodAndFire: { name: 'BLOOD AND FIRE', gods: ['ra', 'ares'], desc: 'frenzy never fades while anything burns', needSlot: { ares: 'attack' } },
-    typhoonPillar: { name: 'TYPHOON PILLAR', gods: ['poseidon', 'wukong'], desc: 'the staff sends a tidal shockwave', needSlot: { wukong: 'special' } },
     allfathersWrath: { name: "ALLFATHER'S WRATH", gods: ['zeus', 'odin'], desc: 'Gungnir chains lightning per pierce', needSlot: { odin: 'special' } },
     featheredHeart: { name: 'FEATHERED HEART', gods: ['aphrodite', 'quetz'], desc: 'the serpent charms instead of harming', needSlot: { quetz: 'special' } },
     stormfathers: { name: 'STORMFATHERS', gods: ['zeus', 'thor'], desc: 'every hammer impact cracks lightning' },
@@ -359,7 +389,6 @@
     fifthSunDawn: { name: 'FIFTH SUN DAWN', gods: ['ra', 'quetz'], desc: 'the serpent burns; eaten bullets ignite', needSlot: { quetz: 'special' } },
     havocInHeaven: { name: 'HAVOC IN HEAVEN', gods: ['wukong', 'zeus'], desc: "clones' shots chain lightning" },
     eternalDevotion: { name: 'ETERNAL DEVOTION', gods: ['anubis', 'aphrodite'], desc: 'the executed rise as charmed ghosts', needSlot: { anubis: 'attack' } },
-    stormSurge: { name: 'STORM SURGE', gods: ['thor', 'poseidon'], desc: 'hammer impacts emit tidal waves' },
     swornBrothers: { name: 'SWORN BROTHERS', gods: ['guanyu', 'wukong'], desc: 'clones swing crescent blades that pierce' },
     saintOfWar: { name: 'SAINT OF WAR', gods: ['guanyu', 'jade'], desc: 'crescents Weaken every foe they cleave', needSlot: { guanyu: 'attack' } },
     twoThrones: { name: 'TWO THRONES', gods: ['zeus', 'jade'], desc: 'IMPERIAL JUDGEMENT bolts crack an extra chain of lightning', needSlot: { jade: 'special' } },
@@ -576,6 +605,13 @@
     for (var i = 0; i < pool.length; i++) { if (pool[i].kind === kind && pool[i].id === id) return true; }
     return false;
   };
+  // verify seam: full candidate pool for the CURRENT Game.st(), flattened to {kind,god,id}
+  // triples — lets the harness assert no retired god/charm/mod/duo can ever be offered.
+  Run._poolDump = function () {
+    var pool = candidatePool(false), out = [];
+    for (var i = 0; i < pool.length; i++) out.push({ kind: pool[i].kind, god: pool[i].god || null, id: pool[i].id || null });
+    return out;
+  };
 
   // Verify hook (zero cost unless called): build one finalized boon per requested kind
   // against the CURRENT Game.st() (harness equips gods/stars/duo pair first), set them
@@ -586,7 +622,7 @@
     for (var i = 0; i < kinds.length; i++) {
       var k = kinds[i], t = null;
       if (k === 'transformA') t = tAttack(st.attackGod || 'zeus', false);
-      else if (k === 'transformS') t = tSpecial(st.specialGod || 'poseidon', false);
+      else if (k === 'transformS') t = tSpecial(st.specialGod || 'artemis', false);
       else if (k === 'levelA') { if (st.attackGod) t = tLevel('attack', st.attackGod); }
       else if (k === 'levelS') { if (st.specialGod) t = tLevel('special', st.specialGod); }
       else if (k === 'ultimate') t = tUltimate(st.attackGod || 'zeus', false);

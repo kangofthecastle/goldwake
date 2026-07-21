@@ -59,6 +59,9 @@ armory, Odin NINE NIGHTS, Heimdall THE BIFRÖST.
   Stunned." / ▸ "Instant strike on your column; forks jump to neighbours." / "★★★ ×2.25 strike damage"
 - **BOSS** whole column + collapsed forks on the lone body = strong single-target. zeusFork/Chain/Crit ride it unchanged.
 
+**POSEIDON** — REMOVED from the game 2026-07-21 (owner: too gamebreaking)
+> DEAD KIT — kept below for history only. POSEIDON (god, THE DELUGE ultimate, PEARL OF THE DEEP charm, all 4 mods, and the WORLD SERPENT / TYPHOON PILLAR / STORM SURGE duos) has been fully excised from js/. Nothing below is live. Retained ids sanitize out of any legacy save (Run.REMOVED_GODS / Game.sanitizeRemovedGods).
+
 **POSEIDON** — knockback+impact · tidal wall
 - **ATK** (unchanged): shots knock foes back, spring-damped displacement (lurch, wall-slams, pile-ups).
   **To-code**: add a 2-frame impact hold + KINETIC water-slap per landed shot so the shove is *felt*.
@@ -185,7 +188,7 @@ armory, Odin NINE NIGHTS, Heimdall THE BIFRÖST.
 - **SP GATE OF DUAT** (placement owner-ruled 2026-07-19, option 2): a sand-vortex gate tears open **at the
   player's position at cast** (~2.5s; the player is free to move away — the gate stays where opened).
   Placement is the skill: bait foes over a spot, then open the floor under them. Every WOUNDED foe
-  (hp < max) is **dragged** toward it (real pull — the mirror of Poseidon's push; bosses immovable)
+  (hp < max) is **dragged** toward it (real inward pull via the displacement system; bosses immovable)
   and takes a share of missing HP over the duration (absorbs old Judgment of Duat's identity; per-cast
   boss cap `min(0.05*specialR,0.15)*maxhp` stands); non-bosses that die at the gate pay bonus gold.
   *Sand vortex + soul-wisps spiraling in.* Voice BELL + low sand-roar.
@@ -276,7 +279,7 @@ I don't want the fan out"; owner picked SPECTRUM LANCE)
   WATCHMAN SEES**: any foe overlapping the band is **Marked** (`markT 6`), bosses included — lay the road
   through the hull. *Voice BELL; seam = rising arpeggio (3 bells, 5th+8ve); lance = crystalline shimmer
   (throttled 6/s); bridge-fade = soft descending pair.* State: `G.bifrost {t, x, seamT}` — no pooled
-  entities; band is a drawn hazard like tidal wall.
+  entities; band is a drawn hazard.
 - **SP GJALLARHORN** (unchanged): horn blast wounds + **Marks** every foe + shoves the whole field (`timeScale/slowT`).
   *Expanding shockwave, field shoved out.*
 - **★** atk→lance dmg · sp→horn dmg & Mark potency.
@@ -369,7 +372,7 @@ steer, wear, ride, or time.**
 | God | Ultimate · shape | Mechanics (baseline) |
 |---|---|---|
 | ZEUS | **OLYMPIAN STORM** · THE one instant nuke | every live foe struck at once, `LANCE_DMG*4` + Stun 1.2 non-boss; no bullet interaction; the delete button, deliberately unique in shape |
-| POSEIDON | **THE DELUGE** · placed territory | a calm-water zone floods the field third centered where you stand at cast, 4s: enemy bullets entering it DIE (no gold), foes inside slowed; you fight FROM your ground |
+| ~~POSEIDON~~ | ~~**THE DELUGE**~~ | REMOVED from the game 2026-07-21 (owner: too gamebreaking) — dead row, kept for history |
 | ARTEMIS | **THE GREAT HUNT** · time you move through | ~1.5s at timeScale ~0.12 with free player movement; every foe your column crosses during the slow is tagged; on resume each tagged foe takes a precise arrow (`forceCrit`, `LANCE_DMG*2.5`) — damage = your flying during the freeze |
 | APHRODITE | **ADORATION** · worn aura | a heart-aura clings to the player 5s (r~200): non-boss foes inside it charm one by one (~0.4s dwell); bosses inside accrue Weak stacks — you fly INTO them to convert |
 | ARES | **ARISTEIA** · kill contract | 4s pinned FRENZY + doubled volleys; each kill +0.3s (cap 8s); no clear, no safety — runs while you kill |
@@ -389,7 +392,7 @@ steer, wear, ride, or time.**
   cover · trailing blade · bullet conversion · orbiting eater. Quetz is the only orbiter (eats bullets);
   Thor throws one aimed round-trip; Ra steers a ranged column, Guan Yu drags a contact body — pairs split
   by verb.
-- Only MANDATE touches bullets→gold; only DELUGE/GIANT'S END destroy bullets uncompensated; only FIFTH SUN
+- Only MANDATE touches bullets→gold; only GIANT'S END destroys bullets uncompensated; only FIFTH SUN
   feeds the gauge; only GREAT HUNT touches time.
 - Voice: one shared ULT-CAST swell + the god's §6 material accent at ×1.5; stubs until Pass 3.
 - §11's ULTIMATES entry remains the ruling-of-record for the card type; this section is the roster.

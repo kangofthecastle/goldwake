@@ -75,7 +75,7 @@ finale; AMMIT — tri-beast coil + tipped judgment scales; MIDAS (the gilded kin
 
 **God portraits, emblems, cards (STORYBOOK).** Slightly warped, hand-drawn
 geometry; straight lines are rare and purposeful. Each god must be knowable as a
-**black silhouette + one iconic prop**: Zeus/bolt, Poseidon/trident, Artemis/bow,
+**black silhouette + one iconic prop**: Zeus/bolt, Artemis/bow,
 Ra/solar-disc, Anubis/scales, Odin/spear-and-ravens, Thor/hammer, Wukong/staff,
 Quetzalcoatl/feathered coil.
 
@@ -127,7 +127,7 @@ against that pantheon's base/midtone.
 
 | Pantheon | Tradition | Materials & motifs | God accents (from `Run.GODS`) |
 | --- | --- | --- | --- |
-| **OLYMPUS** | Marble frieze, black-figure pottery | Laurel, column, terracotta, sea-foam, veined marble | Zeus `#9fd8ff` · Poseidon `#4fe0e0` · Artemis `#b6ff5a` · Aphrodite `#ff77c8` · Ares `#ff5a6e` |
+| **OLYMPUS** | Marble frieze, black-figure pottery | Laurel, column, terracotta, sea-foam, veined marble | Zeus `#9fd8ff` · Artemis `#b6ff5a` · Aphrodite `#ff77c8` · Ares `#ff5a6e` |
 | **KEMET** | Papyrus & tomb-wall painting | Flat profile poses, gold-leaf on lapis, hieroglyph bands, sun-disc | Ra `#ffe89a` · Anubis `#e8c46a` |
 | **ASGARD** | Runestone knotwork, carved wood | Interlace, cold iron, weathered timber, frost, spear/raven/hammer | Loki `#8cff5a` · Odin `#cfd6e0` · Thor `#8fb4d8` · Heimdall `#ffe3c2` (dawn-gold; horn + prism) |
 | **CELESTIAL COURT** | Ming court scroll painting | Gold-on-jade, cloud bands, imperial seals, edict talismans, judgment curtain | Wukong `#ff6a3d` · Guan Yu `#3be089` (crescent blade, Red Hare) · Jade Emperor `#c99aff` (edicts, imperial violet) |
@@ -177,7 +177,7 @@ constant motion is visual noise. Build enemy actions in three beats: **calm
 anticipation → violent readable action → held recovery**. Telegraphs hold a
 **stable shape** before firing (see §7). Use **2–4-frame impact holds** on major
 hits, with a *very brief* screen shake only on **player-relevant** impacts.
-Displacement gods (Poseidon, Thor, Terror) get real spring-damped lurch — but the
+Displacement gods (Thor, Terror) get real spring-damped lurch — but the
 bullet field stays readable through it.
 
 **STORYBOOK layer.** Card and title art are near-still; favor strong single

@@ -129,7 +129,7 @@
     b.age = 0;
     b.grazed = false;
     b.life = o.life || 30;
-    b.timeScale = 1; b.slowT = 0; b.carried = false;
+    b.timeScale = 1; b.slowT = 0;
     b.friendly = false; b.srcId = -1;   // enemy bullets are hostile (PILFER flips them later, Pass 2)
     b.gardenerId = -1;
     // emitter ownership — lets a midship cancel its own remaining pattern to

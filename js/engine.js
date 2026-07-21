@@ -92,8 +92,7 @@
       oriented: false,
       flash: 0, age: 0, grazed: false,
       life: 1e9,
-      timeScale: 1, slowT: 0,         // bullet time-slow (tidal carry, horn shoves)
-      carried: false,                 // Poseidon tidal wave
+      timeScale: 1, slowT: 0,         // bullet time-slow (horn shoves)
       friendly: false, srcId: -1,     // player-faction flipped bullet (Loki PILFER, Pass 2)
       gardenerId: -1,                 // Bullet Gardener ownership
       ownerId: -1                     // emitter ownership (midship cancel-to-gold on death)
@@ -146,7 +145,7 @@
       // trickStacks/trickBudget, reserved for Loki PILFER's boss budget (Pass 2).
       // Unused this pass — kept only so the pool stays monomorphic.
       trickStacks: 0, trickBudget: 0, stunT: 0, judgeT: 0,
-      // Poseidon physical displacement (integrated after scripted movement)
+      // physical displacement — Thor / Guan Yu / Ares Terror (integrated after scripted movement)
       dispX: 0, dispY: 0, dispVX: 0, dispVY: 0, impactDmg: 0, slamCd: 0,
       // phase-6 archetypes
       arch: '', aura: '', link: null, gen: 0, g1: '', g2: '', shieldT: 0,

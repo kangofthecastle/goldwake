@@ -1298,7 +1298,7 @@
 
   // pantheon of each god, and the PANTHEON register×/rev-send table (§6).
   var PAN_OF = {
-    zeus: 'O', poseidon: 'O', artemis: 'O', aphrodite: 'O', ares: 'O',
+    zeus: 'O', artemis: 'O', aphrodite: 'O', ares: 'O',
     ra: 'K', anubis: 'K',
     loki: 'A', odin: 'A', thor: 'A', heimdall: 'A',
     wukong: 'C', guanyu: 'C', jade: 'C',
@@ -1318,7 +1318,6 @@
     zeus:      { mat: 'ELECTRIC', f0: 820 },
     loki:      { mat: 'ELECTRIC', f0: 820, warble: 18 },              // +18c S&H warble
     thor:      { mat: 'KINETIC',  f0: 165, doubleHit: true },         // throw + return
-    poseidon:  { mat: 'KINETIC',  f0: 165, water: 1200 },             // +1.2k water
     wukong:    { mat: 'KINETIC',  f0: 165, wood: true },              // wooden knock
     guanyu:    { mat: 'BLADE',    f0: 2500 },                         // −80c/pierce (event)
     ra:        { mat: 'BEAM',     f0: 110 },                          // sustained, no per-shot
@@ -1385,7 +1384,7 @@
       var cf = ctx.createBiquadFilter(); cf.type = 'highpass'; cf.frequency.setValueAtTime(3000, tt);
       c.s.disconnect(); c.s.connect(cf); cf.connect(c.g);
       c.g.gain.setValueAtTime(0.03, tt); c.g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.004);
-      if (v.water) {                                            // Poseidon 1.2k water ping
+      if (v.water) {                                            // optional water-ping accent (unused since POSEIDON removed)
         var wn = noiseVoice(tt, 0.04, master);
         var wf = ctx.createBiquadFilter(); wf.type = 'bandpass'; wf.Q.value = 3;
         wf.frequency.setValueAtTime(v.water, tt);
@@ -1606,7 +1605,7 @@
     nf.frequency.setValueAtTime(1200, t); nf.frequency.exponentialRampToValueAtTime(200, t + 0.25);
     n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
     n.g.gain.setValueAtTime(0.35, t); n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
-    if (v.water) {                                              // Poseidon rising water
+    if (v.water) {                                              // optional rising-water accent (unused since POSEIDON removed)
       var wn = noiseVoice(t, 0.4, out);
       var wf = ctx.createBiquadFilter(); wf.type = 'bandpass'; wf.Q.value = 1.5;
       wf.frequency.setValueAtTime(300, t); wf.frequency.exponentialRampToValueAtTime(2500, t + 0.38);
@@ -2190,7 +2189,6 @@
     ['shot:aphrodite', function () { SFX.shot('aphrodite'); }],
     ['shot:thor',    function () { SFX.shot('thor'); }],
     ['special:zeus', function () { SFX.special('zeus'); }],
-    ['special:poseidon', function () { SFX.special('poseidon'); }],
     ['special:ra',   function () { SFX.special('ra'); }],
     ['special:aphrodite', function () { SFX.special('aphrodite'); }],
     ['bell',         function () { SFX.bell(); }],
