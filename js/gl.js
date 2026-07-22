@@ -41,6 +41,16 @@
   GL.hitboxStyle = 'A';
   GL.setHitboxStyle = function (s) { GL.hitboxStyle = (s === 'B') ? 'B' : 'A'; };
 
+  // ENEMY-STATE visual language (owner 2026-07-21 ruling: NO plain looping geometric
+  // rings/circles as state/buff indicators anywhere — reads as amateurish). This flag
+  // auditions two ring-free languages for elite auras + the aegis shield (drawn in game.js
+  // drawEnemies). Toggle live from the console: GL.setStateStyle('B'). Audition only — not
+  // persisted.
+  //   'A' SILHOUETTE RIM-LIGHT — the state colour hugs the sprite's own outline.
+  //   'B' DIEGETIC — the state is a physical read on the hull (motes, glints, embers).
+  GL.stateStyle = 'A';
+  GL.setStateStyle = function (s) { GL.stateStyle = (s === 'B') ? 'B' : 'A'; };
+
   // Sprite ids -> atlas region index.
   GL.SPR = {
     GLOW: 0,        // soft radial glow disc
@@ -587,7 +597,26 @@
       g.addColorStop(0.80, 'rgba(255,255,255,0.02)');
       g.addColorStop(1.00, 'rgba(255,255,255,0)');
       ctx.fillStyle = g;
-      ctx.fillRect(-r, -r, r * 2, r * 2);              // full HEIGHT: no length-wise fade
+      ctx.fillRect(-r, -r, r * 2, r * 2);
+      // LENGTHWISE FEATHER (joint-bead fix): multiply the alpha by a LINEAR ramp over
+      // the first/last BOLT_FEATHER fraction of the length. Segment quads are laid so
+      // their overlap == this feather zone (drawBoltLeg/drawMiniBolt set ov = len*F/(1-F)),
+      // so a ramp-DOWN tail + a ramp-UP head sum to a FLAT 1.0 across every joint — no more
+      // additive doubling into periodic beads. Ramps MUST stay linear for the sum to be flat.
+      // Keep this F in sync with BOLT_FEATHER in game.js.
+      // CRITICAL: 'destination-in' makes the destination transparent EVERYWHERE the source
+      // shape is not — on the shared atlas canvas that would erase every previously-painted
+      // cell. CLIP to this cell first so the alpha-multiply is confined to the BOLT cell only.
+      var F = 0.20;
+      ctx.beginPath(); ctx.rect(-r, -r, r * 2, r * 2); ctx.clip();
+      ctx.globalCompositeOperation = 'destination-in';
+      var gy = ctx.createLinearGradient(0, -r, 0, r);   // falloff along LENGTH (y)
+      gy.addColorStop(0.00, 'rgba(255,255,255,0)');
+      gy.addColorStop(F,    'rgba(255,255,255,1)');
+      gy.addColorStop(1 - F, 'rgba(255,255,255,1)');
+      gy.addColorStop(1.00, 'rgba(255,255,255,0)');
+      ctx.fillStyle = gy;
+      ctx.fillRect(-r, -r, r * 2, r * 2);
     });
 
     // NEEDLE: thinner, sharper vertical shard for fast aimed shots.

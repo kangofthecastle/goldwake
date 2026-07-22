@@ -568,6 +568,14 @@
   var BOLT_PTS = 40;         // max points per leg (<=5 subdivisions -> 33)
   var BOLT_BRPTS = 12;       // max points per side-branch
   var BOLT_SEG_CAP = 640;    // hard per-frame drawn-segment cap (readability)
+  // JOINT-BEAD FIX (owner 2026-07-21, 3rd complaint): the BOLT atlas cell now carries a
+  // linear lengthwise feather over its first/last BOLT_FEATHER of length. Every segment
+  // quad overlaps its neighbour by EXACTLY that feather zone (ov = len*F/(1-F)), so the
+  // ramp-down tail of one segment and the ramp-up head of the next sum to a flat 1.0 —
+  // instead of two full-brightness quads adding to a ~2x bright bead at each joint. MUST
+  // equal the F baked into GL.SPR.BOLT (gl.js). ov_from_len keeps the arithmetic in one place.
+  var BOLT_FEATHER = 0.20;
+  function boltOverlap(len) { return len * BOLT_FEATHER / (1 - BOLT_FEATHER); }
   // CHAIN-ARC PRESENCE (T2, owner 2026-07-21: the lightning presence pass reached the
   // projectiles/streams but "not the chain lightning arcs"). Every per-hop chain arc —
   // attack chain jumps, the zeus apotheosis strikes, zap-field arcs, and the boss/
@@ -736,7 +744,15 @@
   // bends stay razor-sharp and joints never gap, while straight runs get no bead.
   // `taper` (branches) fades width+alpha toward the tip; `wscale` thins the whole
   // leg (branches are thinner than the trunk). Returns #segs drawn.
-  function drawBoltLeg(b, arr, n, env, r, g, bb, taper, wscale) {
+  // TWO-PASS draw (owner 2026-07-21 joint-bead fix): `core=false` lays the additive
+  // coloured haze underlay; `core=true` lays the white-hot core + kink miter. drawBolts
+  // runs ALL haze additively, then switches to premultiplied-OVER (GL.blendPremult) for
+  // ALL cores — so overlapping segment ends, the kink miter and even crossings between
+  // DIFFERENT bolts OVERWRITE instead of additively doubling. That categorically kills the
+  // periodic joint beads (the "dots"): two over-composited near-white cores can never sum
+  // past 1.0. The lengthwise feather (boltOverlap + the BOLT cell) keeps the ADDITIVE haze
+  // pass from doubling at its own joints, and softens the core-pass ends.
+  function drawBoltLeg(b, arr, n, env, r, g, bb, taper, wscale, core) {
     if (n < 2) return 0;
     var ws = wscale || 1, cw = b.coreW * ws, hw = b.hazeW * ws;
     var wr = r * 0.4 + 0.6, wg = g * 0.4 + 0.6, wb = bb * 0.4 + 0.6;   // near-white hot core
@@ -749,19 +765,22 @@
       var mx = (x0 + x1) * 0.5, my = (y0 + y1) * 0.5, rot = Math.atan2(-dx, dy);   // BOLT long axis (local +y) -> segment dir
       var tf = taper ? (1 - i * inv * 0.8) : 1;                       // width/alpha falloff toward a branch tip
       var cwi = cw * tf, hwi = hw * (0.55 + 0.45 * tf), af = env * tf;
-      var ov = cwi * 0.4 + 2;                                         // small overlap: fills the kink notch without doubling into beads
-      GL.draw(GL.SPR.BOLT, mx, my, hwi, len + ov, rot, r, g, bb, 0.15 * af);      // soft coloured haze underlay
-      GL.draw(GL.SPR.BOLT, mx, my, cwi, len + ov, rot, wr, wg, wb, 0.98 * af);    // thin white-hot core
-      if (havePrev) {                                                 // fill the kink miter with a SHORT feathered BOLT ribbon along the bisector — NEVER a round bead
-        var bend = 1 - (pux * ux + puy * uy);                        // 0 = straight .. 2 = full reversal
-        if (bend > 0.12) {
-          var bxs = pux + ux, bys = puy + uy, bl = Math.sqrt(bxs * bxs + bys * bys);
-          if (bl > 0.001) {
-            bxs /= bl; bys /= bl;                                     // outgoing angle bisector = miter (notch) axis
-            var jl = cwi * (0.55 + bend * 0.6);                      // notch depth ~ ribbon width, grows with sharpness
-            var ja = 0.55 + bend * 0.30; if (ja > 0.85) ja = 0.85;
-            var jrot = Math.atan2(-bxs, bys);                        // BOLT long axis -> bisector dir (feathered laterally, hot lengthwise)
-            GL.draw(GL.SPR.BOLT, x0, y0, cwi, jl, jrot, wr, wg, wb, ja * af);
+      var ov = boltOverlap(len);                                     // overlap == the cell's feather zone → haze joints crossfade flat; core joints overwrite
+      if (!core) {
+        GL.draw(GL.SPR.BOLT, mx, my, hwi, len + ov, rot, r, g, bb, 0.15 * af);    // soft coloured haze underlay (additive pass)
+      } else {
+        GL.draw(GL.SPR.BOLT, mx, my, cwi, len + ov, rot, wr, wg, wb, 0.98 * af);  // thin white-hot core (premult-over pass)
+        if (havePrev) {                                              // fill the kink miter with a SHORT feathered BOLT ribbon along the bisector — over-composited, so it fills the notch without a bright bead
+          var bend = 1 - (pux * ux + puy * uy);                     // 0 = straight .. 2 = full reversal
+          if (bend > 0.12) {
+            var bxs = pux + ux, bys = puy + uy, bl = Math.sqrt(bxs * bxs + bys * bys);
+            if (bl > 0.001) {
+              bxs /= bl; bys /= bl;                                  // outgoing angle bisector = miter (notch) axis
+              var jl = cwi * (0.55 + bend * 0.6);                   // notch depth ~ ribbon width, grows with sharpness
+              var ja = 0.55 + bend * 0.30; if (ja > 0.85) ja = 0.85;
+              var jrot = Math.atan2(-bxs, bys);                     // BOLT long axis -> bisector dir (feathered laterally, hot lengthwise)
+              GL.draw(GL.SPR.BOLT, x0, y0, cwi, jl, jrot, wr, wg, wb, ja * af);
+            }
           }
         }
       }
@@ -785,21 +804,35 @@
     }
   }
   function drawBolts() {
-    var drawn = 0;
-    for (var i = 0; i < BOLT_MAX; i++) {
-      var b = bolts[i]; if (!b.active || b.delay > 0) continue;
-      var f = 1 - b.t / b.strikeDur; if (f < 0) f = 0;
-      var env = b.alpha * (0.35 + 0.65 * f * f);   // per-strike flicker envelope
-      if (b.sheet && b.age0 < 0.06) {              // variant C: fast column glow-sheet (~60ms)
+    var i, b, f, env, k;
+    // PASS 1 — additive glows: sheet flash, coloured haze underlay, end/impact pops.
+    for (i = 0; i < BOLT_MAX; i++) {
+      b = bolts[i]; if (!b.active || b.delay > 0) continue;
+      f = 1 - b.t / b.strikeDur; if (f < 0) f = 0;
+      env = b.alpha * (0.35 + 0.65 * f * f);   // per-strike flicker envelope
+      if (b.sheet && b.age0 < 0.06) {          // variant C: fast column glow-sheet (~60ms)
         var sa = (1 - b.age0 / 0.06) * 0.15 * b.alpha;
         GL.draw(GL.SPR.GLOW, (b.minX + b.maxX) * 0.5, (b.minY + b.maxY) * 0.5, (b.maxX - b.minX) + 96, (b.maxY - b.minY) + 44, 0, b.r, b.g, b.b, sa);
       }
-      drawn += drawBoltLeg(b, b.L1, b.L1n, env, b.r1, b.g1, b.b1);
-      if (b.legN === 2) drawn += drawBoltLeg(b, b.L2, b.L2n, env, b.r, b.g, b.b);
-      for (var k = 0; k < b.branches; k++) if (b.brN[k] > 1) drawn += drawBoltLeg(b, b.brPts[k], b.brN[k], env * 0.6, b.r, b.g, b.b, true, 0.55);
+      drawBoltLeg(b, b.L1, b.L1n, env, b.r1, b.g1, b.b1, false, 1, false);
+      if (b.legN === 2) drawBoltLeg(b, b.L2, b.L2n, env, b.r, b.g, b.b, false, 1, false);
+      for (k = 0; k < b.branches; k++) if (b.brN[k] > 1) drawBoltLeg(b, b.brPts[k], b.brN[k], env * 0.6, b.r, b.g, b.b, true, 0.55, false);
       drawBoltEnds(b, env);
+    }
+    // PASS 2 — CORES in premultiplied-OVER so overlaps/miters/cross-bolt crossings
+    // overwrite instead of doubling (no joint beads). Restore additive after.
+    GL.blendPremult();
+    var drawn = 0;
+    for (i = 0; i < BOLT_MAX; i++) {
+      b = bolts[i]; if (!b.active || b.delay > 0) continue;
+      f = 1 - b.t / b.strikeDur; if (f < 0) f = 0;
+      env = b.alpha * (0.35 + 0.65 * f * f);
+      drawn += drawBoltLeg(b, b.L1, b.L1n, env, b.r1, b.g1, b.b1, false, 1, true);
+      if (b.legN === 2) drawn += drawBoltLeg(b, b.L2, b.L2n, env, b.r, b.g, b.b, false, 1, true);
+      for (k = 0; k < b.branches; k++) if (b.brN[k] > 1) drawn += drawBoltLeg(b, b.brPts[k], b.brN[k], env * 0.6, b.r, b.g, b.b, true, 0.55, true);
       if (drawn > BOLT_SEG_CAP) break;
     }
+    GL.blendAdditive();   // restore additive for the remainder of the base pass (bullet halos, etc.)
   }
   function addShake(mag) { if (mag > G.shakeMag) G.shakeMag = Math.min(mag, JUICE.shakeMax); }
 
@@ -3810,8 +3843,9 @@
 
   // AEGIS SHIELDBEARER — front shield; displacement spins it to expose the back
   function spawnAegis(x) {
-    var e = newEnemy(20, x, -120, 70, GL.SPR.SHIP_GUN, 110, 50, [0.5, 0.8, 1.0], 8, 2200, true); if (!e) return;
+    var e = newEnemy(20, x, -120, 70, GL.SPR.SHIP_GUN, 110, 50, [0.5, 0.8, 1.0], 8, 2200, true); if (!e) return null;
     e.arch = 'aegis'; e.vy = 120; e.fireCd = 1.4; e.onUpdate = updateAegis;
+    return e;
   }
   function updateAegis(e, dt) {
     e.t += dt;
@@ -3819,7 +3853,13 @@
     e.rot = Math.PI;
     if (e.shieldT > 0) e.shieldT -= dt;
     e.fireT -= dt;
-    if (e.fireT <= 0) { e.fireT = e.fireCd; Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 3, 0.4, 280 * G.rank, { color: Patterns.CYAN, radius: 11 }); }
+    if (e.fireT <= 0) {
+      e.fireT = e.fireCd;
+      // SELF-OPENING WINDOW (owner: "impossible to kill early"): FIRING drops the shield for
+      // ~0.8s — its aimed fan IS the opening. Fire = vulnerability; the player dodges and punishes.
+      e.shieldT = Math.max(e.shieldT, 0.8);
+      Patterns.aimedFan(e.x, e.y, AIMX(e), AIMY(e), 3, 0.4, 280 * G.rank, { color: Patterns.CYAN, radius: 11 });
+    }
     if (e.t > 18) { e.y += 100 * dt; if (e.y > H + 140) killEnemy(e, false); }
   }
 
@@ -5422,6 +5462,16 @@
     // HURTBOX rim switch — sets the live flag AND persists in goldwake_meta.
     setHitboxStyle: function (st) { GL.setHitboxStyle(st); Run.meta.hitboxStyle = GL.hitboxStyle; Run.saveMeta(); },
     hitboxStyle: function () { return GL.hitboxStyle; },
+    // ENEMY-STATE visual audition (T1/T2): toggle silhouette-rim ('A') vs diegetic ('B').
+    setStateStyle: function (st) { GL.setStateStyle(st); },
+    stateStyle: function () { return GL.stateStyle; },
+    // apply an elite aura (gilded/bulwark/frenzied) to enemy i so its state read renders.
+    setAura: function (i, a) { var e = Engine.enemies.items[i]; if (e && e.active) applyAura(e, a); },
+    // spawn a real AEGIS SHIELDBEARER (wired onUpdate/fire) → returns its pool index.
+    spawnAegis: function (x) { var e = spawnAegis(x == null ? W / 2 : x); return e ? e._i : -1; },
+    // shield open-timer read/set (shieldT>0 = spun open = full damage; <=0 = closed = 0.2x).
+    setShield: function (i, t) { var e = Engine.enemies.items[i]; if (e && e.active) e.shieldT = t; },
+    shieldT: function (i) { var e = Engine.enemies.items[i]; return (e && e.active) ? e.shieldT : -999; },
     boltCount: function () { var n = 0; for (var i = 0; i < BOLT_MAX; i++) if (bolts[i].active) n++; return n; },
     boltMax: function () { return BOLT_MAX; },
     boltDrops: function () { return { chain: _boltDrop.chain, ambient: _boltDrop.ambient }; },   // saturation telemetry (chain==0 is the invariant)
@@ -5976,7 +6026,7 @@
         setTimerSpawn(0.2, function () { spawnMidship(clampX(ax, 260)); });
         for (var i = 0; i < 4; i++) (function (i) { setTimerSpawn(1.0 + i * 0.5, function () { spawnDarter(200 + i * 170, 0, W + 160); }); })(i);
       } },
-    { name: 'featureAegis', weight: 6, minSector: 0, roles: ['feature'], fn: function (rng) {
+    { name: 'featureAegis', weight: 6, minSector: 1, roles: ['feature'], fn: function (rng) {   // minSector 0→1 (owner: aegis too oppressive as an opener)
         setTimerSpawn(0, function () { spawnAegis(W * 0.35); });
         setTimerSpawn(0.4, function () { spawnAegis(W * 0.65); });
         for (var i = 0; i < 3; i++) (function (i) { setTimerSpawn(1.0 + i * 0.4, function () { spawnDarter(220 + i * 170, 0, W + 160); }); })(i);
@@ -6258,6 +6308,7 @@
       // eye tracks straight to the bright ankle weak point drawn below.
       var dim = e.nailActive ? 0.55 : 1;
       GL.draw(GL.SPR.GLOW, e.x, e.y, ds * 1.5, ds * 1.5, 0, er, eg, eb, (e.boss ? 0.5 : 0.35) * dim);
+      if (GL.stateStyle === 'A') drawStateRimA(e, cell, ds);   // VARIANT A: silhouette rim-light BEHIND the body (no rings)
       if (authored) {
         // authored sprite carries its own faction-correct colour: draw near-white
         // so it shows true, punch toward white on hit-flash, flip cyan when charmed.
@@ -6304,15 +6355,12 @@
         GL.draw(GL.SPR.RING, e.nailX, e.nailY, 72 + 10 * np, 72 + 10 * np, G.time * 3, 0.6, 1, 0.5, 0.8);   // pulsing target reticle
         GL.draw(GL.SPR.RING, e.nailX, e.nailY, 100 + 24 * np2, 100 + 24 * np2, -G.time * 1.6, 0.5, 1, 0.55, 0.4 * (1 - np2));   // outward lock-on pulse
       }
-      // elite aura rings
-      if (e.aura === 'gilded') GL.draw(GL.SPR.RING, e.x, e.y, e.scale * 1.7, e.scale * 1.7, G.time * 1.5, 1, 0.82, 0.3, 0.8);
-      else if (e.aura === 'bulwark') GL.draw(GL.SPR.RING, e.x, e.y, e.scale * 1.7, e.scale * 1.7, 0, 0.4, 0.8, 1, 0.7);
-      else if (e.aura === 'frenzied') GL.draw(GL.SPR.RING, e.x, e.y, e.scale * 1.7, e.scale * 1.7, -G.time * 3, 1, 0.3, 0.2, 0.8);
-      // aegis / bulwark front shield arc (front = below; spins open when displaced)
-      if ((e.arch === 'aegis' || e.aura === 'bulwark') && e.shieldT <= 0) {
-        GL.draw(GL.SPR.GLOW, e.x, e.y + e.scale * 0.5, e.scale * 1.5, e.scale * 0.7, 0, 0.4, 0.8, 1.0, 0.5);
-        GL.draw(GL.SPR.RING, e.x, e.y + e.scale * 0.35, e.scale * 1.6, e.scale * 1.6, 0, 0.5, 0.9, 1.0, 0.6);
-      }
+      // ELITE STATE (owner ruling: NO plain looping rings). VARIANT A rims were drawn
+      // BEHIND the body above; VARIANT B lays a physical read on the hull here (after body).
+      if (GL.stateStyle === 'B') drawStateDiegeticB(e, cell, ds);
+      // AEGIS / BULWARK front shield — a directional PLATE ARC hugging the player-facing
+      // (lower) hull edge; folds aside with a glint when spun open. Same in both variants.
+      if (e.arch === 'aegis' || e.aura === 'bulwark') drawAegisShield(e, ds);
       // mimic disguise pulse (the tell)
       if (e.arch === 'mimic' && e.s0 === 0) { var mp = 0.5 + 0.5 * Math.sin(G.time * 6); GL.draw(GL.SPR.GLOW, e.x, e.y, e.scale * 1.7, e.scale * 1.7, 0, 1, 0.85, 0.4, 0.22 + 0.2 * mp); }
       // weaver-pair tether curtain
@@ -6332,6 +6380,81 @@
       drawStatus(e);
       drawKitOverlays(e);   // Pass-2 player-brand overlays (Hunt chevron, runes, coil, node)
     });
+  }
+  // ── ENEMY STATE VISUALS (owner 2026-07-21: NO plain looping geometric rings as state
+  // indicators). Two auditionable languages (GL.setStateStyle 'A'|'B'); the aegis shield is
+  // a plate ARC in both. ─────────────────────────────────────────────────────────────────
+  // VARIANT A — SILHOUETTE RIM-LIGHT: redraw the enemy's OWN draw-cell behind the body,
+  // scaled ~1.06-1.12, additively tinted in the state colour, alpha-pulsed (NEVER rotating).
+  // For an authored cell this is a true silhouette halo hugging the outline. Max 2 rim layers.
+  function stateRim(cell, x, y, ds, rot, r, g, b, a, sc) {
+    GL.draw(cell, x, y, ds * sc, ds * sc, rot, r, g, b, a);
+    GL.draw(cell, x, y, ds * (sc - 0.045), ds * (sc - 0.045), rot, r, g, b, a * 0.5);   // inner falloff → softer rim
+  }
+  function drawStateRimA(e, cell, ds) {
+    var t = G.time, rot = e.rot;
+    if (e.aura === 'gilded') { var gp = 0.72 + 0.28 * Math.sin(t * 3); stateRim(cell, e.x, e.y, ds, rot, 1, 0.82, 0.30, 0.5 * gp, 1.11); }       // gold
+    else if (e.aura === 'bulwark') { var bp = 0.78 + 0.22 * Math.sin(t * 2.2); stateRim(cell, e.x, e.y, ds, rot, 0.5, 0.7, 1.0, 0.46 * bp, 1.09); } // steel-blue
+    else if (e.aura === 'frenzied') { var fp = 0.45 + 0.55 * Math.abs(Math.sin(t * 11)); stateRim(cell, e.x, e.y, ds, rot, 1, 0.34, 0.16, 0.58 * fp, 1.12); } // ember-red, fast flicker
+    // 2nd layer — a cyan-steel rim while the shield is UP (reads "protected now"); it snaps
+    // off the instant the shield spins open (shieldT>0), telegraphing the punish window.
+    if ((e.arch === 'aegis' || e.aura === 'bulwark') && e.shieldT <= 0) { var sp = 0.6 + 0.4 * Math.sin(t * 4); stateRim(cell, e.x, e.y, ds, rot, 0.55, 0.85, 1.0, 0.34 * sp, 1.06); }
+  }
+  // VARIANT B — DIEGETIC EQUIPMENT/BODY: the state is a physical read ON the hull. No rings,
+  // no orbiting shapes. Per-enemy phase (e._i) desyncs the particle motion.
+  function drawStateDiegeticB(e, cell, ds) {
+    var t = G.time, ph = (e._i || 0) * 1.7, i;
+    if (e.aura === 'gilded') {
+      GL.draw(cell, e.x, e.y, ds, ds, e.rot, 1, 0.78, 0.28, 0.16 + 0.06 * Math.sin(t * 2 + ph));   // faint gold body tint
+      for (i = 0; i < 4; i++) {                                              // slow gold motes dripping off the lower hull
+        var mf = (t * 0.5 + i * 0.27 + ph) % 1;
+        var mx = e.x + Math.sin(i * 2.3 + ph) * ds * 0.30, my = e.y + ds * (0.14 + mf * 0.62);
+        GL.draw(GL.SPR.GOLD, mx, my, ds * 0.1, ds * 0.14, i + t, 1, 0.82, 0.34, 0.85 * (1 - mf));
+      }
+    } else if (e.aura === 'bulwark') {
+      GL.draw(cell, e.x, e.y, ds, ds, e.rot, 0.55, 0.7, 1.0, 0.12);          // steel sheen (no motion)
+      var fx = [-0.28, 0.0, 0.28, -0.14, 0.16], fy = [-0.2, -0.32, -0.18, 0.14, 0.1];   // fixed hull facet points
+      for (i = 0; i < 5; i++) {
+        var gl = Math.max(0, Math.sin(t * 3 - i * 0.9 + ph)); gl = gl * gl * gl;         // brief, sharp travelling glint
+        if (gl > 0.05) { var px = e.x + fx[i] * ds, py = e.y + fy[i] * ds;
+          GL.draw(GL.SPR.SPARK, px, py, ds * 0.16, ds * 0.16, 0.5, 0.85, 0.95, 1.0, 0.9 * gl);
+          GL.draw(GL.SPR.STREAK, px, py, ds * 0.03, ds * 0.2, 0.7 + i, 0.8, 0.92, 1.0, 0.75 * gl);
+        }
+      }
+    } else if (e.aura === 'frenzied') {
+      GL.draw(cell, e.x, e.y, ds, ds, e.rot, 1, 0.32, 0.18, 0.2 + 0.1 * Math.sin(t * 9 + ph));      // red-shifted body tint
+      for (i = 0; i < 6; i++) {                                             // embers streaming OFF the hull (enemies face down → trail up)
+        var ef = (t * 1.3 + i * 0.19 + ph) % 1;
+        var ex = e.x + Math.sin(i * 1.7 + ph + t) * ds * 0.34 * (0.4 + ef), ey = e.y - ds * (0.1 + ef * 0.7);
+        var ea = (1 - ef) * (0.55 + 0.45 * Math.sin(t * 20 + i)), es = ds * 0.09 * (1 - ef * 0.5);
+        GL.draw(GL.SPR.CORE, ex, ey, es, es, 0, 1, 0.4 + 0.3 * ef, 0.15, ea);
+      }
+    }
+  }
+  // AEGIS / BULWARK SHIELD — a thick arc of overlapping plate segments hugging the hull's
+  // player-facing (lower) edge: a shield WALL, not a halo. When spun open (shieldT>0) the
+  // arc hinges outward and folds aside with a glint, exposing the hull; it snaps back closed.
+  function drawAegisShield(e, ds) {
+    var openT = e.shieldT > 0 ? Math.min(1, e.shieldT / 0.8) : 0;   // 1 = flung open .. 0 = wall closed
+    var N = 5, R = ds * 0.62, cx = e.x, cy = e.y + ds * 0.24, spread = 0.66, i;
+    var closed = 1 - openT * 0.85;
+    // soft directional backing glow — gives the WALL presence (a low banded glow hugging the
+    // lower hull, NOT a ring); fades as the arc swings aside.
+    GL.draw(GL.SPR.GLOW, cx, cy + R * 0.72, ds * 1.5, ds * 0.72, 0, 0.42, 0.66, 1.0, 0.4 * closed);
+    for (i = 0; i < N; i++) {
+      var f = i / (N - 1) - 0.5;                       // -0.5..0.5 across the arc
+      var a = Math.PI / 2 + f * 2 * spread;            // PI/2 = straight down = player-facing
+      var oa = a + openT * f * 1.9;                    // hinge from centre when opening
+      var rr = R * (1 + openT * 0.55);                 // push outward, exposing hull
+      var px = cx + Math.cos(oa) * rr, py = cy + Math.sin(oa) * rr;
+      var alpha = 1 - openT * 0.8, segL = ds * 0.46, segT = ds * 0.17, rot = oa + openT * f;   // long enough to OVERLAP into a continuous thick wall; rot=radius angle → plate tangent
+      GL.draw(GL.SPR.STREAK, px, py, segT, segL, rot, 0.34, 0.52, 0.74, 0.95 * alpha);         // steel plate body
+      GL.draw(GL.SPR.STREAK, px - Math.cos(oa) * segT * 0.32, py - Math.sin(oa) * segT * 0.32, segT * 0.5, segL * 0.92, rot, 0.85, 0.95, 1.0, 0.9 * alpha);   // bright plate rim highlight (the lit edge)
+    }
+    if (openT > 0.15) {   // GLINT flash at the swinging edge while open (transient FX — exempt from the ring ban)
+      var ga = Math.PI / 2 + (openT - 0.5) * 2 * spread * 1.4;
+      GL.draw(GL.SPR.SPARK, cx + Math.cos(ga) * R * 1.2, cy + Math.sin(ga) * R * 1.2, ds * 0.34, ds * 0.34, 0.6, 0.9, 0.98, 1.0, 0.85 * openT);
+    }
   }
   // Pass-2 KIT OVERLAYS — player-brand marks drawn near the enemy loop (the Hunted
   // chevron is a player brand, NOT a status; the rune-band is Odin's meter; the coil
@@ -6663,7 +6786,7 @@
     for (i = 0; i < N; i++) {
       var x0 = _mScr[i * 2], y0 = _mScr[i * 2 + 1], x1 = _mScr[i * 2 + 2], y1 = _mScr[i * 2 + 3];
       var dx = x1 - x0, dy = y1 - y0, len = Math.sqrt(dx * dx + dy * dy); if (len < 0.5) continue;
-      var mx = (x0 + x1) * 0.5, my = (y0 + y1) * 0.5, rot = Math.atan2(-dx, dy), ov = cw * 0.4 + 2;
+      var mx = (x0 + x1) * 0.5, my = (y0 + y1) * 0.5, rot = Math.atan2(-dx, dy), ov = boltOverlap(len);   // feather-matched overlap → no joint bead
       GL.draw(GL.SPR.BOLT, mx, my, hw, len + ov, rot, r, g, b, 0.34);             // coloured haze underlay
       GL.draw(GL.SPR.BOLT, mx, my, cw, len + ov, rot, wr, wg, wb, 0.95);          // near-white core (2x the old lance read)
     }
