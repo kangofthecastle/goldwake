@@ -583,10 +583,10 @@
   // site carries a bespoke width. A hop is a bold EVENT, not a hairline: thick core,
   // wider haze, a hard impact pop (the hop flash), ≥3 re-strikes, and a guaranteed
   // minimum on-screen life so a brief hop still reads.
-  var HOP_CORE_MUL = 2.1;    // core-width multiplier vs the base bolt (was 1.9)
-  var HOP_CORE_ADD = 5;      // flat core-width bump (px) so even a short hop reads bold
-  var HOP_HAZE_MUL = 1.6;    // soft coloured-haze underlay widening
-  var HOP_IMPACT_MUL = 1.7;  // impact ring/flash pop at the struck foe — the "hop flash"
+  var HOP_CORE_MUL = 1.7;    // core-width multiplier vs the base bolt (2.1→1.7: short hops between near foes were fat lozenges that stacked into blobs)
+  var HOP_CORE_ADD = 3;      // flat core-width bump (px) so even a short hop reads bold
+  var HOP_HAZE_MUL = 1.15;   // soft coloured-haze underlay widening (1.6→1.15: the wide haze was the main area-fill that saturated white at converging nodes)
+  var HOP_IMPACT_MUL = 1.7;  // struck-foe presence — now pumps the ribbon terminus FLARE width + crackle-fork length/count (drawBoltEnds), NOT a round ring/flash orb (owner law, 6th pass)
   var HOP_MIN_STRIKES = 3;   // re-strike floor (each restrike re-randomises the path)
   var HOP_MIN_LIFE = 0.34;   // s — guaranteed total visible life of a hop across restrikes
   var _bScrA = new Float32Array(BOLT_PTS * 2);   // midpoint-displacement scratch
@@ -763,7 +763,13 @@
       var ux = dx / len, uy = dy / len;
       var mx = (x0 + x1) * 0.5, my = (y0 + y1) * 0.5, rot = Math.atan2(-dx, dy);   // BOLT long axis (local +y) -> segment dir
       var tf = taper ? (1 - i * inv * 0.8) : 1;                       // width/alpha falloff toward a branch tip
-      var cwi = cw * tf, hwi = hw * (0.55 + 0.45 * tf), af = env * tf;
+      // ENDPOINT TAPER (non-branch legs): thin the ribbon to a fine point over the first/
+      // last ~22% of the leg. Where many chain arcs converge on one foe their fine ends
+      // cross as a STARBURST of lines instead of stacking their full widths into a filled
+      // disc — this is what kills the endpoint "orb" under heavy overlap. Mid-arc stays bold.
+      var ew = 1;
+      if (!taper) { var edge = i * inv, em = edge < 1 - edge ? edge : 1 - edge; if (em < 0.22) ew = 0.32 + 0.68 * (em / 0.22); }
+      var cwi = cw * tf * ew, hwi = hw * (0.55 + 0.45 * tf) * (0.4 + 0.6 * ew), af = env * tf;
       var ov = boltOverlap(len);                                     // overlap == the cell's feather zone → haze joints crossfade flat; core joints overwrite
       if (!core) {
         GL.draw(GL.SPR.BOLT, mx, my, hwi, len + ov, rot, r, g, bb, 0.15 * af);    // soft coloured haze underlay (additive pass)
@@ -788,18 +794,58 @@
     }
     return segs;
   }
+  // RIBBON-NATIVE TERMINUS / ORIGIN / BANK — ZERO round sprites (owner law, 6th
+  // lightning pass: the endpoint CORE/GLOW/RING orbs were the "dots"). A bolt now
+  // reads as energy ARRIVING: the last stretch of the target leg FLARES (wider,
+  // hotter, biting a few px INTO the silhouette) and 2-4 short streak-forks crackle
+  // off the contact. Origin (muzzle) gets a small reverse flare; a mirror bank gets
+  // a short bright ribbon overlap. Body feedback is the enemy hitFlash, not an orb.
+  // The presence multiplier `b.impact` (HOP_IMPACT_MUL etc.) now pumps the flare
+  // width + fork count/length instead of an orb radius.
+  function boltFlare(cx, cy, ux, uy, len, cw, r, g, bb, im, env) {
+    var wr = r * 0.4 + 0.6, wg = g * 0.4 + 0.6, wb = bb * 0.4 + 0.6;   // near-white hot
+    // A THIN hot ribbon over the last stretch — deliberately narrow so that where many
+    // chains converge on one foe the flares cross as a starburst of lines, never fill a
+    // disc. Single draw (the leg's own haze pass supplies glow); no wide underlay.
+    var fw = cw * (0.9 + 0.12 * im);                          // about the body core width — a hot tip, not a bulb
+    var bite = 4 + 3 * im;                                    // extends PAST the endpoint, biting into the target
+    var flL = (len < 24 ? len : 24) * (0.8 + 0.22 * im);     // rides the last stretch of the incoming segment
+    var L = flL + bite; if (L < fw * 2.6) L = fw * 2.6;       // guarantee a RIBBON aspect, never a round blob
+    var mx = cx - ux * (flL * 0.5) + ux * (bite * 0.5), my = cy - uy * (flL * 0.5) + uy * (bite * 0.5);
+    GL.draw(GL.SPR.BOLT, mx, my, fw, L, Math.atan2(-ux, uy), wr, wg, wb, 0.8 * env);   // BOLT long axis -> incoming direction
+  }
+  function boltForks(cx, cy, ux, uy, cw, r, g, bb, im, env, seed) {
+    var wr = r * 0.4 + 0.6, wg = g * 0.4 + 0.6, wb = bb * 0.4 + 0.6;
+    var base = Math.atan2(-uy, -ux);                          // spray BACK off the contact — energy splashing
+    var nf = 1 + ((jhash(seed, 0) * 2) | 0);                 // 1..2 forks, stable per bolt (kept sparse so heavy overlap stays a line-tangle, not a halo)
+    for (var k = 0; k < nf; k++) {
+      var a = base + (jhash(seed, k + 1) - 0.5) * 2.2;       // ±~1.1 rad fan
+      var fl = (7 + jhash(seed, k + 7) * 11) * (0.7 + 0.35 * im);   // short 7..18px, grows with impact
+      var fux = Math.cos(a), fuy = Math.sin(a);
+      var mx = cx + fux * fl * 0.5, my = cy + fuy * fl * 0.5, ov = boltOverlap(fl);
+      GL.draw(GL.SPR.BOLT, mx, my, cw * 0.7, fl + ov, Math.atan2(-fux, fuy), wr, wg, wb, 0.6 * env);   // short streak-fork (ribbon)
+    }
+  }
   function drawBoltEnds(b, env) {
     var im = b.impact;
-    GL.draw(GL.SPR.GLOW, b.bx, b.by, 62 * im, 62 * im, 0, b.r, b.g, b.b, 0.32 * env);   // impact haze
-    GL.draw(GL.SPR.RING, b.bx, b.by, 48 * im, 48 * im, 0, b.r, b.g, b.b, 0.5 * env);    // impact ring pop
-    GL.draw(GL.SPR.SPARK, b.bx, b.by, 40 * im, 40 * im, b.age0 * 8, 1, 1, 1, 0.5 * env);
-    GL.draw(GL.SPR.CORE, b.bx, b.by, 15, 15, 0, 1, 1, 1, 0.9 * env);                    // white-hot impact
-    GL.draw(GL.SPR.GLOW, b.ax, b.ay, 30, 30, 0, b.r1, b.g1, b.b1, 0.28 * env);          // origin muzzle glint
-    GL.draw(GL.SPR.CORE, b.ax, b.ay, 11, 11, 0, b.r1, b.g1, b.b1, 0.6 * env);
-    if (b.bank) {                                                                        // mirror bank-flash at the join
-      GL.draw(GL.SPR.GLOW, b.jx, b.jy, 82, 82, 0, b.r1, b.g1, b.b1, 0.42 * env);
-      GL.draw(GL.SPR.RING, b.jx, b.jy, 62, 62, b.age0 * 6, b.r1, b.g1, b.b1, 0.6 * env);
-      GL.draw(GL.SPR.CORE, b.jx, b.jy, 20, 20, 0, 1, 0.95, 0.8, 0.85 * env);
+    var tl = b.legN === 2 ? b.L2 : b.L1, tn = b.legN === 2 ? b.L2n : b.L1n;
+    var seed = b.ax * 0.13 + b.by * 0.07 + b.bx * 0.017;     // stable per active bolt
+    if (tn >= 2) {                                            // TERMINUS — flare biting in + crackle forks off the contact
+      var ex = tl[(tn - 1) * 2], ey = tl[(tn - 1) * 2 + 1], pxx = tl[(tn - 2) * 2], pyy = tl[(tn - 2) * 2 + 1];
+      var dx = ex - pxx, dy = ey - pyy, len = Math.sqrt(dx * dx + dy * dy) || 1, ux = dx / len, uy = dy / len;
+      boltFlare(ex, ey, ux, uy, len, b.coreW, b.r, b.g, b.b, im, env);
+      boltForks(b.bx, b.by, ux, uy, b.coreW, b.r, b.g, b.b, im, env, seed);
+    }
+    if (b.L1n >= 2) {                                         // ORIGIN (muzzle) — small reverse flare, no orb
+      var ax0 = b.L1[0], ay0 = b.L1[1], ax1 = b.L1[2], ay1 = b.L1[3];
+      var adx = ax1 - ax0, ady = ay1 - ay0, alen = Math.sqrt(adx * adx + ady * ady) || 1;
+      boltFlare(b.ax, b.ay, -adx / alen, -ady / alen, alen, b.coreW * 0.7, b.r1, b.g1, b.b1, im * 0.5, env * 0.7);
+    }
+    if (b.bank && b.L2n >= 2) {                               // MIRROR BANK — short bright ribbon overlap across the join
+      var jdx = b.L2[2] - b.L2[0], jdy = b.L2[3] - b.L2[1], jl = Math.sqrt(jdx * jdx + jdy * jdy) || 1;
+      var jw = b.coreW * 1.2, jL = jw * 2.6;
+      GL.draw(GL.SPR.BOLT, b.jx, b.jy, jw * 1.3, jL, Math.atan2(-jdx / jl, jdy / jl), b.r1, b.g1, b.b1, 0.5 * env);
+      GL.draw(GL.SPR.BOLT, b.jx, b.jy, jw, jL, Math.atan2(-jdx / jl, jdy / jl), b.r1 * 0.4 + 0.6, b.g1 * 0.4 + 0.6, b.b1 * 0.4 + 0.6, env);
     }
   }
   function drawBolts() {
@@ -1328,8 +1374,10 @@
     boltSpawn(colX - 16, -24, colX + 6, baseY, [0.66, 0.88, 1.0], { big: true, column: true });
     boltSpawn(colX, -24, colX, baseY, [0.82, 0.94, 1.0], { big: true, column: true });
     boltSpawn(colX + 18, -24, colX - 8, baseY, [0.66, 0.88, 1.0], { big: true, column: true });
-    flash(colX, baseY, [0.8, 0.9, 1.0], 150, 0.22);            // ground-flash at the base
-    ringShock(colX, baseY, [0.7, 0.85, 1.0], 60, 3200, 0.45);
+    // NO ground-flash orb / shock ring (owner law: zero round sprites in the lightning
+    // stack). The three strands each terminate at the base with a ribbon flare + crackle
+    // forks (drawBoltEnds), so the impact reads as arriving energy, not a stamped disc.
+    spark(colX, baseY, [0.85, 0.92, 1.0], 5, 260, 16);         // streak-shaped ground crackle (SPARK, not a round pop)
   }
   // ARTEMIS THE LOOSED ARROW — fastest moon-silver needle; pierces everything (999),
   // always precise, Marks each pierced foe; the FIRST struck becomes the Hunted at 8.
@@ -1586,7 +1634,8 @@
           var zsp = Math.max(0, Math.sin(G.time * 9 - zk * 1.7)); zsp *= zsp;
           if (zsp > 0.04) GL.draw(GL.SPR.SPARK, hz.x + Math.cos(zang) * hz.r * zjit, hz.y + Math.sin(zang) * hz.r * zjit, hz.r * 0.12, hz.r * 0.12, zang, 0.7, 0.9, 1.0, 0.8 * zsp * za);
         }
-        GL.draw(GL.SPR.CORE, hz.x, hz.y, hz.r * 0.22, hz.r * 0.22, 0, 0.85, 0.95, 1.0, 0.5 * za);
+        // no round centre core (owner law): the field's charge reads from the area haze,
+        // the edge sparks, and the crackle-bolts spawned on tick — never a stamped disc.
       }
       else if (hz.type === 'sweep') {
         // colossal jade-green crescent: a full-width blade whose edges trail
