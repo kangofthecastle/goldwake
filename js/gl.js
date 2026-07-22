@@ -41,15 +41,11 @@
   GL.hitboxStyle = 'A';
   GL.setHitboxStyle = function (s) { GL.hitboxStyle = (s === 'B') ? 'B' : 'A'; };
 
-  // ENEMY-STATE visual language (owner 2026-07-21 ruling: NO plain looping geometric
-  // rings/circles as state/buff indicators anywhere — reads as amateurish). This flag
-  // auditions two ring-free languages for elite auras + the aegis shield (drawn in game.js
-  // drawEnemies). Toggle live from the console: GL.setStateStyle('B'). Audition only — not
-  // persisted.
-  //   'A' SILHOUETTE RIM-LIGHT — the state colour hugs the sprite's own outline.
-  //   'B' DIEGETIC — the state is a physical read on the hull (motes, glints, embers).
-  GL.stateStyle = 'A';
-  GL.setStateStyle = function (s) { GL.stateStyle = (s === 'B') ? 'B' : 'A'; };
+  // ENEMY-STATE visual language (owner 2026-07-21 ruling, now LAW): state = a SILHOUETTE
+  // RIM-LIGHT in the state colour hugging the sprite's own outline + body-zone glyphs/pips.
+  // NO persistent plain geometric rings/circles as state/buff indicators anywhere. The
+  // audition is over — variant A is the one language (drawStateRimA in game.js drawEnemies);
+  // the per-state rim colours are the only data that varies.
 
   // Sprite ids -> atlas region index.
   GL.SPR = {

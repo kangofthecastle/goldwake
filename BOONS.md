@@ -438,6 +438,20 @@ manager. **Confuse removed** (ruling 1); roster = 7.
 - **Freed by confuse's death**: `confuseT/confuseBudget` → `trickStacks/trickBudget` (Loki Pilfer boss budget); the green
   confuse ring and the purple mirror-chevron brand are both deleted.
 
+### 4a. THE RING BAN — state visual law (owner ruling 2026-07-21, binding)
+
+**State = a SILHOUETTE RIM-LIGHT in the state colour (own draw-cell redrawn ~1.05–1.14× behind the body, alpha-pulsed,
+never rotating) + body-zone glyphs/pips.** Persistent plain geometric rings/circles as state/buff/hazard indicators are
+**BANNED everywhere** — enemy, player, hazard. Exempt: transient (<0.5s) impact FX; the player hurtbox dot+ring.
+
+- **Standard rim colours:** gilded gold `1,0.82,0.30` · bulwark steel-blue `0.5,0.7,1.0` · frenzied ember `1,0.34,0.16` ·
+  shield cyan-steel `0.55,0.85,1.0` · coil jade `0.35→0.9,1.0,0.5→0.95` (→ hot-white at max) · seal gold `1,0.82,0.4` ·
+  decoy green `0.4,1.0,0.5` · cursed red `1,0.22,0.13`.
+- **Ring replacements are diegetic:** weak-points = diamond/crosshair glyphs you aim at (not haloes); lock-on = converging
+  L-corner brackets; stacks = pips/glyphs in a body zone; hazard boundaries = crackle sparks + interior haze / spiral
+  streak-arms / directional gradients (readable for dodging, never a clean circle); slows = desaturated ice-blue body cast.
+- The single implementation is `drawStateRimA` + `stateRim` (`js/game.js`); the audition flag is retired.
+
 ---
 
 ## 5. Faction & owned-entity language

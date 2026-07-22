@@ -744,14 +744,13 @@
   // bends stay razor-sharp and joints never gap, while straight runs get no bead.
   // `taper` (branches) fades width+alpha toward the tip; `wscale` thins the whole
   // leg (branches are thinner than the trunk). Returns #segs drawn.
-  // TWO-PASS draw (owner 2026-07-21 joint-bead fix): `core=false` lays the additive
-  // coloured haze underlay; `core=true` lays the white-hot core + kink miter. drawBolts
-  // runs ALL haze additively, then switches to premultiplied-OVER (GL.blendPremult) for
-  // ALL cores — so overlapping segment ends, the kink miter and even crossings between
-  // DIFFERENT bolts OVERWRITE instead of additively doubling. That categorically kills the
-  // periodic joint beads (the "dots"): two over-composited near-white cores can never sum
-  // past 1.0. The lengthwise feather (boltOverlap + the BOLT cell) keeps the ADDITIVE haze
-  // pass from doubling at its own joints, and softens the core-pass ends.
+  // TWO-PASS draw (owner 2026-07-21): `core=false` lays the coloured haze underlay;
+  // `core=true` lays the white-hot core + kink miter. Both passes are ADDITIVE. The
+  // periodic joint beads (the "dots") are killed STRUCTURALLY by the lengthwise feather
+  // (boltOverlap + the BOLT cell): every segment quad overlaps its neighbour by exactly the
+  // feather zone, so a ramp-DOWN tail + a ramp-UP head are linear and sum to a FLAT 1.0
+  // across every joint — additive never doubles there. (ccb5aa1 also routed the core pass
+  // through premult-over; that DARKENED bright backgrounds and was reverted — see drawBolts.)
   function drawBoltLeg(b, arr, n, env, r, g, bb, taper, wscale, core) {
     if (n < 2) return 0;
     var ws = wscale || 1, cw = b.coreW * ws, hw = b.hazeW * ws;
@@ -769,8 +768,8 @@
       if (!core) {
         GL.draw(GL.SPR.BOLT, mx, my, hwi, len + ov, rot, r, g, bb, 0.15 * af);    // soft coloured haze underlay (additive pass)
       } else {
-        GL.draw(GL.SPR.BOLT, mx, my, cwi, len + ov, rot, wr, wg, wb, 0.98 * af);  // thin white-hot core (premult-over pass)
-        if (havePrev) {                                              // fill the kink miter with a SHORT feathered BOLT ribbon along the bisector — over-composited, so it fills the notch without a bright bead
+        GL.draw(GL.SPR.BOLT, mx, my, cwi, len + ov, rot, wr, wg, wb, 0.98 * af);  // thin white-hot core (additive)
+        if (havePrev) {                                              // fill the kink miter with a SHORT feathered BOLT ribbon along the bisector (laterally feathered, so it fills the concave notch without a round bead)
           var bend = 1 - (pux * ux + puy * uy);                     // 0 = straight .. 2 = full reversal
           if (bend > 0.12) {
             var bxs = pux + ux, bys = puy + uy, bl = Math.sqrt(bxs * bxs + bys * bys);
@@ -819,9 +818,13 @@
       for (k = 0; k < b.branches; k++) if (b.brN[k] > 1) drawBoltLeg(b, b.brPts[k], b.brN[k], env * 0.6, b.r, b.g, b.b, true, 0.55, false);
       drawBoltEnds(b, env);
     }
-    // PASS 2 — CORES in premultiplied-OVER so overlaps/miters/cross-bolt crossings
-    // overwrite instead of doubling (no joint beads). Restore additive after.
-    GL.blendPremult();
+    // PASS 2 — CORES, ADDITIVE (owner 2026-07-21 hotfix). The premult-over core pass
+    // (ccb5aa1) DARKENED bright backgrounds: over a dense bullet field a feathered wing/end
+    // texel gives out = src.rgb + dst*(1-src.a); the dim premult src adds less than the
+    // (1-src.a) factor removes → gray-smoke tendrils (invisible on black, hence it passed).
+    // Additive can ONLY brighten, so cores read hot-white over anything. The lengthwise
+    // feather (BOLT_FEATHER + overlap==feather) is the real anti-bead fix and is safe here:
+    // a ramp-down tail + ramp-up head are linear and sum to a FLAT 1.0 across every joint.
     var drawn = 0;
     for (i = 0; i < BOLT_MAX; i++) {
       b = bolts[i]; if (!b.active || b.delay > 0) continue;
@@ -832,7 +835,6 @@
       for (k = 0; k < b.branches; k++) if (b.brN[k] > 1) drawn += drawBoltLeg(b, b.brPts[k], b.brN[k], env * 0.6, b.r, b.g, b.b, true, 0.55, true);
       if (drawn > BOLT_SEG_CAP) break;
     }
-    GL.blendAdditive();   // restore additive for the remainder of the base pass (bullet halos, etc.)
   }
   function addShake(mag) { if (mag > G.shakeMag) G.shakeMag = Math.min(mag, JUICE.shakeMax); }
 
@@ -1529,7 +1531,7 @@
           GL.draw(GL.SPR.CORE, hz.x, H / 2, hz.halfW * 1.6, H, 0, 1, 0.85, 0.45, 0.85 * pa);
           GL.draw(GL.SPR.CORE, hz.x, H / 2, hz.halfW * 0.5, H, 0, 1, 1, 0.9, pa);
         }
-        GL.draw(GL.SPR.RING, hz.x, G.player.y, hz.halfW * 3, hz.halfW * 3, G.time * 2, 1, 0.85, 0.4, 0.5 * pa);
+        GL.draw(GL.SPR.GLOW, hz.x, G.player.y, hz.halfW * 3.2, hz.halfW * 1.1, 0, 1, 0.85, 0.4, 0.38 * pa);   // soft gold footprint band at the cover line (no ring — owner law)
       }
       else if (hz.type === 'serpent' && hz.trail) {
         var segR2 = 72 * (G.mods.quetzBig ? 1.35 : 1);
@@ -1575,7 +1577,15 @@
         // on tick (updateHazards), not a stacked glow oval.
         var za = Math.min(1, hz.timer), zp = 0.85 + 0.15 * Math.sin(G.time * 22);
         GL.draw(GL.SPR.GLOW, hz.x, hz.y, hz.r * 1.4, hz.r * 1.4, 0, 0.35, 0.6, 1.0, 0.10 * za);   // faint charged air
-        GL.draw(GL.SPR.RING, hz.x, hz.y, hz.r * 2.0 * zp, hz.r * 2.0 * zp, G.time * 1.5, 0.55, 0.85, 1.0, 0.45 * za);
+        // INTERIOR HAZE — a broad dim electric fill so the danger AREA reads. The boundary is
+        // carried by the crackle-bolts spawned on tick (updateHazards) + the irregular edge
+        // sparks below; the clean ring is gone (owner law).
+        GL.draw(GL.SPR.GLOW, hz.x, hz.y, hz.r * 1.9, hz.r * 1.9, 0, 0.4, 0.7, 1.0, 0.09 * za * zp);
+        for (var zk = 0; zk < 7; zk++) {   // short-lived sparks arcing along the edge (irregular, never a full circle)
+          var zang = zk * 2.399 + G.time * 1.3, zjit = 0.9 + 0.12 * Math.sin(G.time * 17 + zk * 3.1);
+          var zsp = Math.max(0, Math.sin(G.time * 9 - zk * 1.7)); zsp *= zsp;
+          if (zsp > 0.04) GL.draw(GL.SPR.SPARK, hz.x + Math.cos(zang) * hz.r * zjit, hz.y + Math.sin(zang) * hz.r * zjit, hz.r * 0.12, hz.r * 0.12, zang, 0.7, 0.9, 1.0, 0.8 * zsp * za);
+        }
         GL.draw(GL.SPR.CORE, hz.x, hz.y, hz.r * 0.22, hz.r * 0.22, 0, 0.85, 0.95, 1.0, 0.5 * za);
       }
       else if (hz.type === 'sweep') {
@@ -1884,8 +1894,8 @@
     if (!G.decoy.active) return;
     var d = G.decoy, pulse = 0.6 + 0.4 * Math.sin(G.time * 10);
     GL.draw(GL.SPR.GLOW, d.x, d.y, 72, 72, 0, 0.4, 1, 0.5, 0.5 * pulse);
+    stateRim(GL.SPR.SHIP_PLAYER, d.x, d.y, 72, 0, 0.4, 1, 0.5, 0.5 * (0.6 + 0.4 * pulse), 1.14);   // Loki-green rim-light marks the fake (own-cell redraw)
     GL.draw(GL.SPR.SHIP_PLAYER, d.x, d.y, 72, 72, 0, 0.4, 1, 0.5, 0.7);   // Loki green body, nose-up
-    GL.draw(GL.SPR.RING, d.x, d.y, 92, 92, G.time * 3, 0.4, 1, 0.5, 0.4);
     drawOwnedGem(d.x, d.y, 1);                                            // §5 cyan heart
   }
 
@@ -2049,10 +2059,15 @@
     // T5: amped sand-vortex — a deeper stack of counter-spinning rings + a hot maw core so
     // the gate reads as an active, hungry whirlpool rather than a faint decal.
     GL.draw(GL.SPR.GLOW, d.x, d.y, 460, 240, 0, 0.65, 0.5, 0.2, 0.5 * life);              // broad dust haze
-    for (var r = 0; r < 6; r++) {
-      var rr = 54 + r * 52, a = 0.6 - r * 0.075;
-      var spin = t * (1.8 + r * 0.7) * (r % 2 ? -1 : 1);                                   // counter-rotating shells
-      GL.draw(GL.SPR.RING, d.x, d.y, rr * 2, rr * 1.05, spin, 0.9, 0.72, 0.32, a * life);  // sand vortex shells
+    // SPIRAL SAND-STREAK ARMS feeding the maw (replaces the concentric shells; owner ring
+    // law). Each arm is a run of tangential sand streaks twisting inward toward the maw.
+    for (var arm = 0; arm < 4; arm++) {
+      var a0 = t * 1.2 + arm * (TAU / 4);
+      for (var seg = 0; seg < 9; seg++) {
+        var sr = 40 + seg * 46, sa = a0 + seg * 0.5;
+        var sx3 = d.x + Math.cos(sa) * sr, sy3 = d.y + Math.sin(sa) * sr * 0.55;
+        GL.draw(GL.SPR.STREAK, sx3, sy3, 10 + seg * 1.5, 46, sa + Math.PI / 2, 0.9, 0.72, 0.32, (0.6 - seg * 0.05) * life);
+      }
     }
     GL.draw(GL.SPR.GLOW, d.x, d.y, 150, 90, 0, 1, 0.85, 0.4, 0.55 * life);                 // hot maw
     GL.draw(GL.SPR.CORE, d.x, d.y, 40, 22, t * 3, 1, 0.92, 0.6, 0.5 * life);
@@ -2770,9 +2785,17 @@
         else GL.draw(GL.SPR.CORE, qx, qy, 44, 44, 0, qcol[0], qcol[1], qcol[2], 0.8);
       }
     } else if (u.god === 'adoration') {   // worn heart-aura
+      // FIELD READ = drifting heart-petals filling the aura area (boundary implied by their
+      // radial falloff) + a soft rose rim-light on the wearer. Owner ring law — no hard circle.
       var ap = 0.5 + 0.5 * Math.sin(t * 4);
-      GL.draw(GL.SPR.GLOW, p.x, p.y, 420, 420, 0, 1, 0.4, 0.7, 0.28 + 0.1 * ap);
-      GL.draw(GL.SPR.RING, p.x, p.y, 400, 400, t * 1.5, 1, 0.4, 0.7, 0.5);
+      GL.draw(GL.SPR.GLOW, p.x, p.y, 420, 420, 0, 1, 0.4, 0.7, 0.24 + 0.1 * ap);          // soft rose field, fades outward
+      stateRim(GL.SPR.SHIP_PLAYER, p.x, p.y, shipDrawSize(100), 0, 1, 0.45, 0.72, 0.42 * (0.7 + 0.3 * ap), 1.12);   // rose rim on the wearer
+      for (var hpi = 0; hpi < 16; hpi++) {                                                // drifting heart-petals filling the area
+        var hph = t * 0.5 + hpi * 0.62, hrad = ((t * 0.16 + hpi * 0.37) % 1);             // slow outward drift
+        var hpr = 40 + hrad * 190, hpx = p.x + Math.cos(hpi * 2.4 + hph) * hpr, hpy = p.y + Math.sin(hpi * 2.4 + hph) * hpr;
+        var hpa = (1 - hrad) * (0.5 + 0.5 * Math.sin(t * 3 + hpi)) * 0.7;                  // falloff toward the boundary
+        GL.draw(GL.SPR.SHARD, hpx, hpy, 15, 17, hph, 1, 0.42, 0.66, hpa);                  // petal ≈ heart mote
+      }
     } else if (u.god === 'greathunt') {   // time-freeze wash + a hunt-arrow lock over every tagged foe
       GL.draw(GL.SPR.GLOW, W / 2, H / 2, W * 2, H * 2, 0, 0.6, 0.7, 1, 0.12);
       // task 5d: the authored kind-4 hunt-arrow sprite marks each foe the column has tagged
@@ -2784,8 +2807,11 @@
         if (hac >= 0) GL.draw(hac, e.x, ay, 46, 46, Math.PI, 0.85, 0.9, 1, 0.9);
         else GL.draw(GL.SPR.NEEDLE, e.x, ay, 16, 40, Math.PI, 0.85, 0.9, 1, 0.9);
       });
-    } else if (u.god === 'aristeia') {   // war-heat corona on the player
-      GL.draw(GL.SPR.RING, p.x, p.y, 150, 150, -t * 4, 1, 0.3, 0.2, 0.6);
+    } else if (u.god === 'aristeia') {   // war-heat on the player (extra-inventory: same ring law)
+      // molten-ember rim-light on the ship silhouette + a low war-heat glow; no circle.
+      var arp = 0.6 + 0.4 * Math.sin(t * 9);
+      GL.draw(GL.SPR.GLOW, p.x, p.y, shipDrawSize(150), shipDrawSize(150), 0, 1, 0.32, 0.18, 0.22 * arp);
+      stateRim(GL.SPR.SHIP_PLAYER, p.x, p.y, shipDrawSize(100), 0, 1, 0.32, 0.18, 0.5 * arp, 1.13);   // frenzied-ember war rim
     }
   }
 
@@ -5462,9 +5488,6 @@
     // HURTBOX rim switch — sets the live flag AND persists in goldwake_meta.
     setHitboxStyle: function (st) { GL.setHitboxStyle(st); Run.meta.hitboxStyle = GL.hitboxStyle; Run.saveMeta(); },
     hitboxStyle: function () { return GL.hitboxStyle; },
-    // ENEMY-STATE visual audition (T1/T2): toggle silhouette-rim ('A') vs diegetic ('B').
-    setStateStyle: function (st) { GL.setStateStyle(st); },
-    stateStyle: function () { return GL.stateStyle; },
     // apply an elite aura (gilded/bulwark/frenzied) to enemy i so its state read renders.
     setAura: function (i, a) { var e = Engine.enemies.items[i]; if (e && e.active) applyAura(e, a); },
     // spawn a real AEGIS SHIELDBEARER (wired onUpdate/fire) → returns its pool index.
@@ -6159,7 +6182,9 @@
     var bs = b.bossShadow;
     if (bs.active && bs.alpha > 0.01) {
       GL.draw(GL.SPR.GLOW, W / 2, bs.y, W * 1.5, H * 0.7, 0, 0.06, 0.04, 0.09, 0.5 * bs.alpha * dim);
-      GL.draw(GL.SPR.RING, W / 2, bs.y, W * 0.9, W * 0.9, G.time * 0.4, 0.10, 0.07, 0.13, 0.45 * bs.alpha * dim);
+      // soft directional darkening bleeding DOWN from the top edge (the boss looming in),
+      // not a circle (owner ring law).
+      GL.draw(GL.SPR.GLOW, W / 2, Math.min(bs.y, H * 0.26), W * 2.0, H * 0.8, 0, 0.08, 0.05, 0.11, 0.4 * bs.alpha * dim);
     }
     // STRUCTURE LAYER — drifting architecture silhouettes (painted override or
     // procedural units).
@@ -6194,13 +6219,19 @@
     Engine.gold.forEach(function (g) {
       var fade = g.age > g.life - 1.5 ? Math.max(0, (g.life - g.age) / 1.5) : 1;
       if (g.cursed) {
-        // CURSED GOLD — must read at a glance vs normal loot: a brighter gilded
-        // shimmer + a pulsing warm DANGER rim (the greed trap made visible).
+        // CURSED GOLD — must read at a glance vs normal loot: a brighter gilded shimmer + a
+        // pulsing RED DANGER RIM-LIGHT on the coin SPRITE ITSELF (own-cell redraw, no ring —
+        // owner law): the greed trap made visible.
         var cp = 0.55 + 0.45 * Math.sin(G.time * 9 + g.rot);
         GL.draw(GL.SPR.GLOW, g.x, g.y, g.scale * 2.8, g.scale * 2.8, 0, 1, 0.72, 0.2, 0.55 * fade);
-        GL.draw(GL.SPR.RING, g.x, g.y, g.scale * 2.2, g.scale * 2.2, G.time * 3, 1, 0.42, 0.2, (0.45 + 0.4 * cp) * fade);   // warm danger rim
-        if (coinC >= 0) GL.draw(coinC, g.x, g.y, g.scale * 1.7, g.scale * 1.7, g.rot, 1, 0.9, 0.55, fade);   // authored coin, warm-tinted for the curse
-        else GL.draw(GL.SPR.GOLD, g.x, g.y, g.scale * 1.15, g.scale * 1.4, g.rot, 1, 0.86, 0.34, fade);
+        if (coinC >= 0) {
+          GL.draw(coinC, g.x, g.y, g.scale * 1.98, g.scale * 1.98, g.rot, 1, 0.22, 0.13, (0.5 + 0.4 * cp) * fade);   // red danger rim (outer)
+          GL.draw(coinC, g.x, g.y, g.scale * 1.83, g.scale * 1.83, g.rot, 1, 0.3, 0.2, (0.26 + 0.22 * cp) * fade);   // rim falloff
+          GL.draw(coinC, g.x, g.y, g.scale * 1.7, g.scale * 1.7, g.rot, 1, 0.9, 0.55, fade);                          // authored coin, warm-tinted
+        } else {
+          GL.draw(GL.SPR.GOLD, g.x, g.y, g.scale * 1.5, g.scale * 1.82, g.rot, 1, 0.22, 0.13, (0.5 + 0.4 * cp) * fade);   // red rim behind the shard
+          GL.draw(GL.SPR.GOLD, g.x, g.y, g.scale * 1.15, g.scale * 1.4, g.rot, 1, 0.86, 0.34, fade);                       // gold shard
+        }
         GL.draw(GL.SPR.CORE, g.x, g.y, g.scale * 0.55, g.scale * 0.55, 0, 1, 1, 0.85, (0.6 + 0.4 * cp) * fade);
         return;
       }
@@ -6308,7 +6339,7 @@
       // eye tracks straight to the bright ankle weak point drawn below.
       var dim = e.nailActive ? 0.55 : 1;
       GL.draw(GL.SPR.GLOW, e.x, e.y, ds * 1.5, ds * 1.5, 0, er, eg, eb, (e.boss ? 0.5 : 0.35) * dim);
-      if (GL.stateStyle === 'A') drawStateRimA(e, cell, ds);   // VARIANT A: silhouette rim-light BEHIND the body (no rings)
+      drawStateRimA(e, cell, ds);   // state = silhouette rim-light BEHIND the body (the one language; no rings)
       if (authored) {
         // authored sprite carries its own faction-correct colour: draw near-white
         // so it shows true, punch toward white on hit-flash, flip cyan when charmed.
@@ -6352,14 +6383,18 @@
           GL.draw(GL.SPR.NEEDLE, e.nailX, e.nailY, 30, 70, 0, 1, 0.95, 0.6, 0.95);
           GL.draw(GL.SPR.CORE, e.nailX, e.nailY, 32, 32, 0, 0.7, 1, 0.5, 0.7 + 0.3 * np);
         }
-        GL.draw(GL.SPR.RING, e.nailX, e.nailY, 72 + 10 * np, 72 + 10 * np, G.time * 3, 0.6, 1, 0.5, 0.8);   // pulsing target reticle
-        GL.draw(GL.SPR.RING, e.nailX, e.nailY, 100 + 24 * np2, 100 + 24 * np2, -G.time * 1.6, 0.5, 1, 0.55, 0.4 * (1 - np2));   // outward lock-on pulse
+        // LOCK-ON BRACKETS — 4 L-corners converging on the nail (genre reticle read); they
+        // breathe inward on the pulse. The hot green-gold glow above is the loud part; no circles.
+        var lockR = 66 + 30 * (1 - np2), larm = 30, lth = 8;
+        for (var nbi = 0; nbi < 4; nbi++) {
+          var sxg = (nbi & 1) ? 1 : -1, syg = (nbi & 2) ? 1 : -1;
+          var bxN = e.nailX + sxg * lockR, byN = e.nailY + syg * lockR;
+          GL.draw(GL.SPR.STREAK, bxN - sxg * larm * 0.5, byN, lth, larm, Math.PI / 2, 0.6, 1, 0.5, 0.92);   // horizontal arm of the L
+          GL.draw(GL.SPR.STREAK, bxN, byN - syg * larm * 0.5, lth, larm, 0, 0.6, 1, 0.5, 0.92);             // vertical arm of the L
+        }
       }
-      // ELITE STATE (owner ruling: NO plain looping rings). VARIANT A rims were drawn
-      // BEHIND the body above; VARIANT B lays a physical read on the hull here (after body).
-      if (GL.stateStyle === 'B') drawStateDiegeticB(e, cell, ds);
       // AEGIS / BULWARK front shield — a directional PLATE ARC hugging the player-facing
-      // (lower) hull edge; folds aside with a glint when spun open. Same in both variants.
+      // (lower) hull edge; folds aside with a glint when spun open.
       if (e.arch === 'aegis' || e.aura === 'bulwark') drawAegisShield(e, ds);
       // mimic disguise pulse (the tell)
       if (e.arch === 'mimic' && e.s0 === 0) { var mp = 0.5 + 0.5 * Math.sin(G.time * 6); GL.draw(GL.SPR.GLOW, e.x, e.y, e.scale * 1.7, e.scale * 1.7, 0, 1, 0.85, 0.4, 0.22 + 0.2 * mp); }
@@ -6381,10 +6416,10 @@
       drawKitOverlays(e);   // Pass-2 player-brand overlays (Hunt chevron, runes, coil, node)
     });
   }
-  // ── ENEMY STATE VISUALS (owner 2026-07-21: NO plain looping geometric rings as state
-  // indicators). Two auditionable languages (GL.setStateStyle 'A'|'B'); the aegis shield is
-  // a plate ARC in both. ─────────────────────────────────────────────────────────────────
-  // VARIANT A — SILHOUETTE RIM-LIGHT: redraw the enemy's OWN draw-cell behind the body,
+  // ── ENEMY STATE VISUALS (owner 2026-07-21 LAW: NO persistent geometric rings as state
+  // indicators). State = SILHOUETTE RIM-LIGHT in the state colour + body-zone glyphs/pips;
+  // the aegis shield is a plate ARC. ─────────────────────────────────────────────────────
+  // SILHOUETTE RIM-LIGHT: redraw the enemy's OWN draw-cell behind the body,
   // scaled ~1.06-1.12, additively tinted in the state colour, alpha-pulsed (NEVER rotating).
   // For an authored cell this is a true silhouette halo hugging the outline. Max 2 rim layers.
   function stateRim(cell, x, y, ds, rot, r, g, b, a, sc) {
@@ -6399,37 +6434,6 @@
     // 2nd layer — a cyan-steel rim while the shield is UP (reads "protected now"); it snaps
     // off the instant the shield spins open (shieldT>0), telegraphing the punish window.
     if ((e.arch === 'aegis' || e.aura === 'bulwark') && e.shieldT <= 0) { var sp = 0.6 + 0.4 * Math.sin(t * 4); stateRim(cell, e.x, e.y, ds, rot, 0.55, 0.85, 1.0, 0.34 * sp, 1.06); }
-  }
-  // VARIANT B — DIEGETIC EQUIPMENT/BODY: the state is a physical read ON the hull. No rings,
-  // no orbiting shapes. Per-enemy phase (e._i) desyncs the particle motion.
-  function drawStateDiegeticB(e, cell, ds) {
-    var t = G.time, ph = (e._i || 0) * 1.7, i;
-    if (e.aura === 'gilded') {
-      GL.draw(cell, e.x, e.y, ds, ds, e.rot, 1, 0.78, 0.28, 0.16 + 0.06 * Math.sin(t * 2 + ph));   // faint gold body tint
-      for (i = 0; i < 4; i++) {                                              // slow gold motes dripping off the lower hull
-        var mf = (t * 0.5 + i * 0.27 + ph) % 1;
-        var mx = e.x + Math.sin(i * 2.3 + ph) * ds * 0.30, my = e.y + ds * (0.14 + mf * 0.62);
-        GL.draw(GL.SPR.GOLD, mx, my, ds * 0.1, ds * 0.14, i + t, 1, 0.82, 0.34, 0.85 * (1 - mf));
-      }
-    } else if (e.aura === 'bulwark') {
-      GL.draw(cell, e.x, e.y, ds, ds, e.rot, 0.55, 0.7, 1.0, 0.12);          // steel sheen (no motion)
-      var fx = [-0.28, 0.0, 0.28, -0.14, 0.16], fy = [-0.2, -0.32, -0.18, 0.14, 0.1];   // fixed hull facet points
-      for (i = 0; i < 5; i++) {
-        var gl = Math.max(0, Math.sin(t * 3 - i * 0.9 + ph)); gl = gl * gl * gl;         // brief, sharp travelling glint
-        if (gl > 0.05) { var px = e.x + fx[i] * ds, py = e.y + fy[i] * ds;
-          GL.draw(GL.SPR.SPARK, px, py, ds * 0.16, ds * 0.16, 0.5, 0.85, 0.95, 1.0, 0.9 * gl);
-          GL.draw(GL.SPR.STREAK, px, py, ds * 0.03, ds * 0.2, 0.7 + i, 0.8, 0.92, 1.0, 0.75 * gl);
-        }
-      }
-    } else if (e.aura === 'frenzied') {
-      GL.draw(cell, e.x, e.y, ds, ds, e.rot, 1, 0.32, 0.18, 0.2 + 0.1 * Math.sin(t * 9 + ph));      // red-shifted body tint
-      for (i = 0; i < 6; i++) {                                             // embers streaming OFF the hull (enemies face down → trail up)
-        var ef = (t * 1.3 + i * 0.19 + ph) % 1;
-        var ex = e.x + Math.sin(i * 1.7 + ph + t) * ds * 0.34 * (0.4 + ef), ey = e.y - ds * (0.1 + ef * 0.7);
-        var ea = (1 - ef) * (0.55 + 0.45 * Math.sin(t * 20 + i)), es = ds * 0.09 * (1 - ef * 0.5);
-        GL.draw(GL.SPR.CORE, ex, ey, es, es, 0, 1, 0.4 + 0.3 * ef, 0.15, ea);
-      }
-    }
   }
   // AEGIS / BULWARK SHIELD — a thick arc of overlapping plate segments hugging the hull's
   // player-facing (lower) edge: a shield WALL, not a halo. When spun open (shieldT>0) the
@@ -6485,12 +6489,20 @@
       }
       if (ignite) { var ip = 0.6 + 0.4 * Math.sin(t * 12); GL.draw(GL.SPR.GLOW, e.x, gy, span * 1.3, s * 0.4, 0, 1, 0.85, 0.4, 0.4 * ip); }
     }
-    // QUETZ — coil rings tightening jade → hot-white; a CONSTRICT pulse-ring at max.
+    // QUETZ — the coil is a JADE RIM-LIGHT on the constricted foe (intensity + thickness
+    // step with e.coilQ 1-6, jade → hot-white at max), + a jade pip count in the over-hull
+    // band (one pip per coil). No circular arcs (owner ring law).
     if (e.coilQ > 0 && G.attackGod === 'quetz') {
-      var cf = e.coilQ / 6, cr = e.radius * (1.6 - 0.6 * cf);
-      var cr2 = cf, r2 = 0.4 + 0.6 * cr2, g2 = 1.0, b2 = 0.5 + 0.5 * cr2;   // jade → hot-white
-      GL.draw(GL.SPR.RING, e.x, e.y, cr * 2, cr * 2, t * 2, r2, g2, b2, 0.8);
-      if (e.coilQ >= 6) { var pp = (t * 2) % 1; GL.draw(GL.SPR.RING, e.x, e.y, cr * 2 * (1 + pp), cr * 2 * (1 + pp), 0, 1, 1, 1, 0.6 * (1 - pp)); }
+      var cf = e.coilQ / 6, qcell = enemyDrawCell(e);
+      var jr = 0.35 + 0.55 * cf, jg = 1.0, jb = 0.5 + 0.45 * cf;              // jade → hot-white as the coil tightens
+      var qsc = 1.05 + 0.07 * cf, qa = 0.32 + 0.30 * cf;                       // thicker + brighter rim per stack
+      var qpulse = e.coilQ >= 6 ? (0.7 + 0.3 * Math.sin(t * 9)) : 1;           // max coil: a CONSTRICT pulse in the rim itself
+      stateRim(qcell, e.x, e.y, s, e.rot, jr, jg, jb, qa * qpulse, qsc);
+      var qspan = s * 0.7, qpy = e.y - s * 0.62;                              // pips ride the over-hull band
+      for (var qp = 0; qp < e.coilQ; qp++) {
+        var qpf = e.coilQ > 1 ? (qp / (e.coilQ - 1) - 0.5) : 0;
+        GL.draw(GL.SPR.CORE, e.x + qpf * qspan, qpy - Math.abs(qpf) * s * 0.1, s * 0.06, s * 0.06, 0, 0.4, 1, 0.6, 0.95);
+      }
     }
     // ANUBIS THE WEIGHING — gold scales glyph over the hull, TIPPING with accrued weight.
     if (e.scaleW > 0 && G.attackGod === 'anubis' && !e.dying) {
@@ -6510,20 +6522,31 @@
         GL.draw(GL.SPR.GOLD, e.x + bx, gy + by, s * 0.16, s * 0.16, 0, 1, 0.85, 0.4, 0.9);  // pan (sinks with weight)
       }
     }
-    // §3 PRECISION — the weak-point node: a pulsing diamond-shard (telegraph flash → open).
+    // §3 PRECISION — the weak-point node. ARMED = a pulsing diamond bud (telegraph); OPEN =
+    // a bright diamond + 4 converging crosshair arms with a sharp open-snap shimmer: a target
+    // you AIM AT, not a halo (owner ring law — no node ring).
     if (e.nodeState > 0) {
       var open = e.nodeState === 2, pu = 0.55 + 0.45 * Math.sin(t * (open ? 10 : 26));
       var nr = nodeRadius(e), col = e.nodeHit > 0 ? [1, 1, 0.7] : [1, 0.92, 0.5];
       GL.draw(GL.SPR.GLOW, e.nodeX, e.nodeY, nr * 2.0, nr * 2.0, 0, col[0], col[1], col[2], (open ? 0.5 : 0.3) * pu);
-      GL.draw(GL.SPR.GOLD, e.nodeX, e.nodeY, nr * 1.0, nr * 1.2, t * 3, col[0], col[1], col[2], (open ? 0.95 : 0.6) * pu);
-      if (open) GL.draw(GL.SPR.RING, e.nodeX, e.nodeY, nr * 2.4, nr * 2.4, -t * 2, col[0], col[1], col[2], 0.5);
+      if (open) {
+        var snap = 0.72 + 0.28 * Math.sin(t * 30);                                   // fast open-snap shimmer
+        GL.draw(GL.SPR.SHARD, e.nodeX, e.nodeY, nr * 1.5, nr * 1.5, Math.PI / 4, col[0], col[1], col[2], 0.95 * snap);   // bright target diamond
+        GL.draw(GL.SPR.CORE, e.nodeX, e.nodeY, nr * 0.5, nr * 0.5, 0, 1, 1, 1, snap);
+        for (var nci = 0; nci < 4; nci++) {                                          // crosshair brackets converging on the node
+          var nca = nci * (Math.PI / 2) + Math.PI / 4, noff = nr * 1.9;
+          GL.draw(GL.SPR.NEEDLE, e.nodeX + Math.cos(nca) * noff, e.nodeY + Math.sin(nca) * noff, nr * 0.24, nr * 0.72, nca + Math.PI / 2, col[0], col[1], col[2], 0.9 * snap);
+        }
+      } else {
+        GL.draw(GL.SPR.GOLD, e.nodeX, e.nodeY, nr * 1.0, nr * 1.2, t * 3, col[0], col[1], col[2], 0.6 * pu);   // armed but sealed: a small pulsing diamond bud
+      }
     }
-    // JADE edict style-C — the seal-mark ring, stamped on hit (e.sealT), drawn here at render.
+    // JADE edict style-C — the seal-mark, stamped on hit (e.sealT). Owner ring law: the
+    // authored seal glyph (36-6) alone + a GOLD RIM-LIGHT PULSE on the sealed foe; no ring.
     if (e.sealT > 0 && !e.dying) {
-      // §36 authored Jade seal-brand (stamped on style-C edict hit); RING on miss.
-      var sealC = authCell('36-6-seal'), sealA = 0.95 * Math.min(1, e.sealT / 0.3);
-      if (sealC >= 0) GL.draw(sealC, e.x, e.y, s * 0.6, s * 0.6, 0, 1, 1, 1, sealA);
-      else GL.draw(GL.SPR.RING, e.x, e.y, s * 0.9, s * 0.9, 0, 1, 0.3, 0.3, sealA);
+      var sealC = authCell('36-6-seal'), sealF = Math.min(1, e.sealT / 0.3), sealP = 0.6 + 0.4 * Math.sin(t * 6);
+      stateRim(enemyDrawCell(e), e.x, e.y, s, e.rot, 1, 0.82, 0.4, 0.42 * sealP * sealF, 1.08);   // gold seal rim-light pulse
+      if (sealC >= 0) GL.draw(sealC, e.x, e.y, s * 0.6, s * 0.6, 0, 1, 1, 1, 0.95 * sealF);          // §36 authored seal glyph
     }
     // LOKI — MISCHIEF triskele: the §36 authored 3-blade mark over the crown, growing
     // with the stack (1/2/3); procedural per-stack kunai on miss (stack = shape).
@@ -6906,7 +6929,11 @@
       var R = b.scale, fl = b.flash > 0 ? b.flash / 0.1 : 0;
       GL.draw(GL.SPR.GLOW, b.x, b.y, R * wideS, R * wideS, 0, b.r, b.g, b.b, wideA + fl * 0.28);
       GL.draw(GL.SPR.GLOW, b.x, b.y, R * tightS, R * tightS, 0, b.r, b.g, b.b, tightA + fl * 0.32);
-      if (b.slowT > 0) GL.draw(GL.SPR.RING, b.x, b.y, R * 3.2, R * 3.2, 0, 0.6, 0.9, 1.0, 0.25);
+      if (b.slowT > 0) {   // SLOWED bullet: a desaturated ICE-BLUE cast over the body (cool, frozen read) instead of a ring
+        var slw = Math.min(1, b.slowT * 2.5);
+        GL.draw(GL.SPR.GLOW, b.x, b.y, R * 2.5, R * 2.5, 0, 0.55, 0.78, 1.0, 0.22 * slw);
+        GL.draw(GL.SPR.CORE, b.x, b.y, R * 0.95, R * 0.95, 0, 0.72, 0.86, 1.0, 0.32 * slw);
+      }
     });
   }
   // §34d TALOS HURLED STONES — the authored boulder is a normal RGBA sprite, so it
@@ -6985,13 +7012,15 @@
     var p = G.player;
     var dim = (p.invuln > 0 && Math.floor(p.blink * 20) % 2 === 0) ? 0.35 : 1;
     var kick = p.recoil > 0 ? p.recoil * 60 : 0;
-    // CURSED-GOLD gild: a gold statue. Render the ship in solid gold with a
-    // shimmer ring so the freeze reads at a glance (no blink; it's frozen, not hit).
+    // CURSED-GOLD gild: a gold statue. Render the ship in solid gold with a MOLTEN-GOLD
+    // RIM-LIGHT on the silhouette (own-cell redraw) so the freeze reads at a glance — no
+    // ring (owner law; no blink either — it's frozen, not hit).
     if (G.freeze.t > 0) {
+      var frp = 0.6 + 0.3 * Math.sin(G.time * 12);
       GL.draw(GL.SPR.GLOW, p.x, p.y, shipDrawSize(120), shipDrawSize(120), 0, 1, 0.78, 0.28, 0.55);
+      stateRim(GL.SPR.SHIP_PLAYER, p.x, p.y, shipDrawSize(104), 0, 1, 0.85, 0.4, 0.5 * frp, 1.1);   // molten-gold rim on the frozen ship
       GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, shipDrawSize(104), shipDrawSize(104), 0, 1, 0.82, 0.32, 1);
       GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, shipDrawSize(62), shipDrawSize(62), 0, 1, 0.92, 0.55, 0.9);
-      GL.draw(GL.SPR.RING, p.x, p.y, shipDrawSize(96), shipDrawSize(96), G.time * 1.5, 1, 0.85, 0.4, 0.6 + 0.3 * Math.sin(G.time * 12));
       drawHurtboxRead(p, 1);   // the honest dot still reads through the freeze
       return;
     }
@@ -7001,7 +7030,18 @@
     GL.draw(GL.SPR.GLOW, p.x, p.y + 42 + kick, engSz, shipDrawSize(118) + kick * 2, 0, 0.3, 0.8, 1.0, 0.5 * dim + (p.recoil > 0 ? 0.4 : 0));
     GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, shipDrawSize(100), shipDrawSize(100), 0, 0.7, 0.95, 1.0, dim);
     GL.draw(GL.SPR.SHIP_PLAYER, p.x, p.y, shipDrawSize(62), shipDrawSize(62), 0, 1, 1, 1, 0.8 * dim);
-    if (Engine.focusHeld()) GL.draw(GL.SPR.RING, p.x, p.y, shipDrawSize(78), shipDrawSize(78), G.time * 2, 0.6, 1, 1, G.dash.cd > 0 ? 0.4 : 0.9); // dimmer ring = dash on cooldown
+    // FOCUS read now lives entirely in the hurtbox rim (steadier + brighter under Focus,
+    // see drawHurtboxRead); the separate focus ring is gone (owner law). The dash-cooldown
+    // info it carried becomes 3 chevron pips below the ship that REFILL as the dash cools.
+    if (Engine.focusHeld()) {
+      var drdy = 1 - Math.min(1, G.dash.cd / 0.9), dpy = p.y + shipDrawSize(50), dpw = shipDrawSize(12);
+      for (var dpi = 0; dpi < 3; dpi++) {
+        var dfill = Math.max(0, Math.min(1, drdy * 3 - dpi)), dpx = p.x + (dpi - 1) * dpw * 1.7;
+        var dpa = (0.22 + 0.72 * dfill) * dim, dch = shipDrawSize(11);
+        GL.draw(GL.SPR.STREAK, dpx - dpw * 0.26, dpy, shipDrawSize(3.4), dch, 0.6, 0.6, 1, 1, dpa);   // chevron arm
+        GL.draw(GL.SPR.STREAK, dpx + dpw * 0.26, dpy, shipDrawSize(3.4), dch, -0.6, 0.6, 1, 1, dpa);  // chevron arm
+      }
+    }
     drawHurtboxRead(p, dim);   // ABOVE the ship, honest to the true collision radius
   }
 
