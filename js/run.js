@@ -11,10 +11,11 @@
   var W = 1080, H = 1920;
   var TAU = Math.PI * 2;
 
-  var COL_CYAN = '#5fe6ff', COL_GOLD = '#ffd766', COL_DIM = '#6fa9b8';
-  var COL_RED = '#ff5a6e', COL_PANEL = 'rgba(8,16,22,0.92)', COL_COMMON = '#bfeaf2';
+  var COL_CYAN = '#5fe6ff', COL_GOLD = '#ffd766', COL_DIM = '#79a8b5';
+  var COL_RED = '#ff5a6e', COL_PANEL = 'rgba(6,14,20,0.94)', COL_COMMON = '#d0edf2';
+  var COL_LINE = 'rgba(130,221,238,0.18)';
   // rarity border colors
-  var RB = { common: '#e8f4f7', rare: '#7fd0ff', epic: '#ffd766' };
+  var RB = { common: '#a9c6cd', rare: '#7fd0ff', epic: '#ffd766' };
 
   // ---- STORYBOOK art (art/gen/*.png) lazy loader --------------------------
   // These paintings (god portraits ~3MB each, emblems, relic icons, title +
@@ -1008,7 +1009,7 @@
   function drawRail(ctx, cx, y, cur, next, sold) {
     var parts = [], i;
     for (i = 0; i < RAIL.length; i++) { var isNext = Math.abs(RAIL[i] - next) < 0.01; parts.push(isNext ? '[' + magStr(RAIL[i]) + ']' : magStr(RAIL[i])); }
-    ctx.font = '600 16px Consolas, monospace';   // 16px: the 5-node rail fits a 306px card
+    ctx.font = '600 16px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';   // 16px: the 5-node rail fits a 306px card
     ctx.fillStyle = sold ? '#6a5a2e' : COL_GOLD;
     ctx.fillText(parts.join(' · '), cx, y);
   }
@@ -1050,58 +1051,157 @@
     return true;
   }
 
+  // Shared menu chrome. The painted key art stays the hero; these translucent
+  // surfaces simply organize text into readable, repeatable groups.
+  function glassPanel(ctx, x, y, w, h, accent, selected, radius) {
+    radius = radius || 18;
+    ctx.save();
+    var g = ctx.createLinearGradient(x, y, x, y + h);
+    g.addColorStop(0, 'rgba(12,27,35,0.94)');
+    g.addColorStop(1, 'rgba(3,9,14,0.9)');
+    ctx.fillStyle = g;
+    if (selected) { ctx.shadowColor = accent || COL_CYAN; ctx.shadowBlur = 28; }
+    roundRect(ctx, x, y, w, h, radius); ctx.fill(); ctx.shadowBlur = 0;
+    ctx.strokeStyle = selected ? (accent || COL_CYAN) : COL_LINE;
+    ctx.lineWidth = selected ? 3 : 2;
+    roundRect(ctx, x + 1, y + 1, w - 2, h - 2, radius); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.045)'; ctx.lineWidth = 1;
+    roundRect(ctx, x + 8, y + 8, w - 16, h - 16, Math.max(8, radius - 7)); ctx.stroke();
+    ctx.restore();
+  }
+  function rule(ctx, cx, y, w, col) {
+    var g = ctx.createLinearGradient(cx - w / 2, 0, cx + w / 2, 0);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(0.5, col || 'rgba(95,230,255,0.55)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(cx - w / 2, y, w, 2);
+  }
+  function keycap(ctx, x, y, label, accent) {
+    var w = Math.max(44, ctx.measureText(label).width + 24), h = 34;
+    ctx.save();
+    ctx.fillStyle = 'rgba(4,10,15,0.94)'; roundRect(ctx, x, y, w, h, 7); ctx.fill();
+    ctx.strokeStyle = accent || COL_CYAN; ctx.lineWidth = 1.5; roundRect(ctx, x, y, w, h, 7); ctx.stroke();
+    ctx.fillStyle = '#f5fdff'; ctx.textAlign = 'center'; ctx.font = '700 18px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    ctx.fillText(label, x + w / 2, y + 8);
+    ctx.restore();
+    return w;
+  }
+  function controlRow(ctx, x, y, key, action, accent) {
+    ctx.font = '700 18px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    var kw = keycap(ctx, x, y, key, accent);
+    ctx.textAlign = 'left'; ctx.fillStyle = COL_COMMON;
+    ctx.font = '600 21px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    ctx.fillText(action, x + kw + 16, y + 6);
+  }
+  function actionButton(ctx, x, y, w, h, key, label, accent, pulse) {
+    ctx.save();
+    glassPanel(ctx, x, y, w, h, accent, true, 16);
+    if (pulse != null) ctx.globalAlpha = 0.72 + 0.28 * pulse;
+    ctx.fillStyle = accent || COL_CYAN; ctx.fillRect(x + 2, y + 2, 5, h - 4);
+    ctx.textAlign = 'center'; ctx.fillStyle = '#ffffff';
+    ctx.font = '800 30px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    ctx.fillText(key + '  ' + label, x + w / 2, y + h / 2 - 17);
+    ctx.globalAlpha = 1; ctx.restore();
+  }
+
   function drawTitle(ctx) {
-    drawScreenArt(ctx, '1-hubris-title-backdrop', 0.28, 0.35);
+    drawScreenArt(ctx, '1-hubris-title-backdrop', 0.08, 0.35);
+    var vg = ctx.createRadialGradient(W / 2, H * 0.38, 120, W / 2, H * 0.38, 720);
+    vg.addColorStop(0, 'rgba(2,7,11,0.02)'); vg.addColorStop(0.62, 'rgba(2,7,11,0.22)');
+    vg.addColorStop(1, 'rgba(1,4,7,0.68)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+    var topFade = ctx.createLinearGradient(0, 0, 0, H);
+    topFade.addColorStop(0, 'rgba(1,4,7,0.58)');
+    topFade.addColorStop(0.22, 'rgba(1,4,7,0.05)');
+    topFade.addColorStop(0.72, 'rgba(1,4,7,0.12)');
+    topFade.addColorStop(1, 'rgba(1,4,7,0.78)');
+    ctx.fillStyle = topFade; ctx.fillRect(0, 0, W, H);
+
     ctx.textAlign = 'center';
-    ctx.fillStyle = COL_GOLD; ctx.font = '800 150px Consolas, monospace';
-    spaced(ctx, 'HUBRIS', W / 2, H * 0.16, 30);   // 6 letters: wider tracking than the old 8-letter mark
-    ctx.fillStyle = COL_CYAN; ctx.font = '500 34px Consolas, monospace';
-    // textBaseline is 'top': clear the full 150px glyph block before the subtitle
-    ctx.fillText('a divine-intervention bullet hell', W / 2, H * 0.16 + 160);
+    ctx.shadowColor = 'rgba(255,188,66,0.5)'; ctx.shadowBlur = 34;
+    ctx.fillStyle = '#ffdc83';
+    ctx.font = '700 176px "Palatino Linotype", "Book Antiqua", Georgia, serif';
+    spaced(ctx, 'HUBRIS', W / 2, 152, 18);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#9be9f5';
+    ctx.font = '700 24px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
+    spaced(ctx, 'A DIVINE-INTERVENTION BULLET HELL', W / 2, 342, 5);
+    rule(ctx, W / 2, 400, 500, 'rgba(255,215,102,0.68)');
+    ctx.fillStyle = 'rgba(224,241,244,0.82)';
+    ctx.font = '500 27px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
+    ctx.fillText('Descend. Defy the gods. Return gilded.', W / 2, 432);
 
     var pulse = 0.5 + 0.5 * Math.sin(perfNow() * 0.005);
-    ctx.globalAlpha = 0.55 + 0.45 * pulse; ctx.fillStyle = '#ffffff'; ctx.font = '700 52px Consolas, monospace';
-    ctx.fillText('Z  —  START RUN', W / 2, H * 0.30); ctx.globalAlpha = 1;
+    var bx = 190, by = 520, bw = W - 380, bh = 126;
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,198,74,' + (0.24 + pulse * 0.24) + ')';
+    ctx.shadowBlur = 30 + pulse * 12;
+    var bg = ctx.createLinearGradient(bx, by, bx + bw, by + bh);
+    bg.addColorStop(0, 'rgba(58,42,14,0.94)');
+    bg.addColorStop(0.5, 'rgba(18,25,27,0.97)');
+    bg.addColorStop(1, 'rgba(58,42,14,0.94)');
+    ctx.fillStyle = bg; roundRect(ctx, bx, by, bw, bh, 18); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,215,102,' + (0.62 + pulse * 0.22) + ')';
+    ctx.lineWidth = 3; roundRect(ctx, bx + 1, by + 1, bw - 2, bh - 2, 18); ctx.stroke();
+    ctx.fillStyle = COL_GOLD;
+    ctx.font = '700 21px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    spaced(ctx, 'PRESS Z', W / 2, by + 24, 3);
+    ctx.fillStyle = '#fff7df';
+    ctx.font = '700 37px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
+    spaced(ctx, 'BEGIN DESCENT', W / 2, by + 66, 2);
+    ctx.restore();
 
-    ctx.fillStyle = COL_DIM; ctx.font = '500 30px Consolas, monospace';
-    var cy = H * 0.375, lines = [
-      'WASD / Arrows  move          Shift  focus',
-      'Shift-tap + direction  ghost dodge (i-frames)',
-      'Z / Space  attack            X  SPECIAL',
-      'C  DIVINE INTERVENTION       P / Esc  pause',
-      'Left/Right + Z  choose boons  (or click)',
-      'R  restart run    M  mute'
-    ];
-    for (var i = 0; i < lines.length; i++) ctx.fillText(lines[i], W / 2, cy + i * 42);
-
-    ctx.fillStyle = COL_GOLD; ctx.font = '600 34px Consolas, monospace';
-    ctx.fillText('HI  ' + commas(Run.meta.hi) + '     BEST SECTOR  ' + Run.meta.bestSector + '/3', W / 2, H * 0.575);
-    ctx.fillStyle = COL_DIM; ctx.font = '500 26px Consolas, monospace';
-    ctx.fillText('career gold  ' + commas(Run.meta.careerGold) + '     peak hubris  x' + Run.meta.peakHubris.toFixed(1), W / 2, H * 0.575 + 42);
-
-    var un = Run.unlocks(), ux = W / 2, uy = H * 0.66;
-    ctx.font = '600 28px Consolas, monospace'; ctx.fillStyle = COL_CYAN;
-    ctx.fillText('— PERMANENT UNLOCKS —', ux, uy);
-    var us = [
-      [un.startLife, 'Talos slain', '+1 starting life'],
-      [un.startGauge, 'Run completed', 'start with 25% DIVINE INTERVENTION'],
-      [un.baseDamage, 'Career gold ' + commas(CAREER_GOLD_UNLOCK), '+10% base damage']
-    ];
-    for (var k = 0; k < us.length; k++) {
-      var on = us[k][0];
-      ctx.fillStyle = on ? COL_GOLD : '#3a5560'; ctx.font = '600 26px Consolas, monospace';
-      ctx.fillText((on ? '◆ ' : '◇ ') + us[k][2] + '  (' + us[k][1] + ')', ux, uy + 40 + k * 36);
+    var sy = 760;
+    rule(ctx, W / 2, sy, 760, 'rgba(95,230,255,0.34)');
+    ctx.fillStyle = 'rgba(155,233,245,0.72)';
+    ctx.font = '700 20px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
+    spaced(ctx, 'PILOT RECORD', W / 2, sy + 30, 4);
+    var statX = [W * 0.27, W * 0.50, W * 0.73];
+    var statLabel = ['HIGH SCORE', 'BEST SECTOR', 'PEAK HUBRIS'];
+    var statValue = [commas(Run.meta.hi), Run.meta.bestSector + ' / 3', 'x' + Run.meta.peakHubris.toFixed(1)];
+    for (var si = 0; si < 3; si++) {
+      ctx.fillStyle = COL_DIM;
+      ctx.font = '700 19px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+      ctx.fillText(statLabel[si], statX[si], sy + 78);
+      ctx.fillStyle = COL_GOLD;
+      ctx.font = '700 36px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
+      ctx.fillText(statValue[si], statX[si], sy + 112);
     }
+    rule(ctx, W / 2, sy + 170, 760, 'rgba(95,230,255,0.20)');
 
-    // god roster teaser
-    ctx.font = '600 22px Consolas, monospace';
-    var gy = H * 0.79;
-    ctx.fillStyle = COL_DIM; ctx.fillText('— OLYMPUS OFFERS —', ux, gy);
-    for (var gi = 0; gi < GOD_KEYS.length; gi++) {
-      var g = GODS[GOD_KEYS[gi]];
-      ctx.fillStyle = g.css;
-      ctx.fillText(g.name, W * 0.22 + (gi % 3) * W * 0.28, gy + 40 + ((gi / 3) | 0) * 34);
-    }
+    var cx = 138, cy = 1030, cw = W - 276, ch = 300;
+    ctx.fillStyle = 'rgba(2,9,13,0.66)'; roundRect(ctx, cx, cy, cw, ch, 20); ctx.fill();
+    ctx.strokeStyle = 'rgba(95,230,255,0.16)'; ctx.lineWidth = 1.5;
+    roundRect(ctx, cx, cy, cw, ch, 20); ctx.stroke();
+    ctx.fillStyle = COL_DIM;
+    ctx.font = '700 20px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
+    spaced(ctx, 'FLIGHT CONTROLS', W / 2, cy + 28, 4);
+    var lx = cx + 52, rx = cx + cw / 2 + 18, ry = cy + 82;
+    controlRow(ctx, lx, ry, 'WASD', 'MOVE', COL_CYAN);
+    controlRow(ctx, lx, ry + 70, 'SHIFT', 'FOCUS', COL_CYAN);
+    controlRow(ctx, lx, ry + 140, 'Z', 'ATTACK', COL_GOLD);
+    controlRow(ctx, rx, ry, 'X', 'SPECIAL', '#d89bff');
+    controlRow(ctx, rx, ry + 70, 'C', 'INTERVENE', COL_GOLD);
+    controlRow(ctx, rx, ry + 140, 'P', 'PAUSE', COL_CYAN);
+
+    var un = Run.unlocks();
+    var legacyCount = (un.startLife ? 1 : 0) + (un.startGauge ? 1 : 0) + (un.baseDamage ? 1 : 0);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(155,233,245,0.7)';
+    ctx.font = '700 20px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
+    spaced(ctx, 'YOUR LEGACY', W / 2, 1438, 4);
+    ctx.fillStyle = COL_GOLD;
+    ctx.font = '700 30px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    ctx.fillText(commas(Run.meta.careerGold) + ' GOLD   ·   ' + legacyCount + ' / 3 BOONS AWAKENED', W / 2, 1484);
+    rule(ctx, W / 2, 1540, 560, 'rgba(255,215,102,0.34)');
+
+    ctx.fillStyle = 'rgba(224,241,244,0.58)';
+    ctx.font = '600 22px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
+    spaced(ctx, 'THE PANTHEONS AWAIT', W / 2, 1690, 5);
+    ctx.fillStyle = 'rgba(121,168,181,0.62)';
+    ctx.font = '600 18px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    ctx.fillText('ARROWS  CHOOSE   ·   R  RESTART   ·   M  MUTE', W / 2, 1740);
   }
 
   // sector → tradition for the intro emblem stamp (S1 Bronze Coast/TALOS = Greek,
@@ -1116,34 +1216,36 @@
     // pantheon emblem stamp, large and dim, centered above the sector title
     var emb = getArt(PANTHEON_EMBLEM[SECTOR_PANTHEON[Run.sectorIdx] || 'OLYMPUS']);
     if (emb) { ctx.save(); ctx.globalAlpha = 0.5; var es = 240; ctx.drawImage(emb, W / 2 - es / 2, H * 0.20, es, es); ctx.restore(); }
+    glassPanel(ctx, 110, H * 0.33, W - 220, 760, COL_GOLD, false, 24);
     ctx.textAlign = 'center';
-    ctx.fillStyle = COL_CYAN; ctx.font = '600 40px Consolas, monospace';
+    ctx.fillStyle = COL_CYAN; ctx.font = '600 40px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     ctx.fillText('SECTOR ' + (Run.sectorIdx + 1) + ' / 3', W / 2, H * 0.36);
-    ctx.fillStyle = COL_GOLD; ctx.font = '800 92px Consolas, monospace';
+    rule(ctx, W / 2, H * 0.36 + 54, 520);
+    ctx.fillStyle = COL_GOLD; ctx.font = '800 92px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     spaced(ctx, sec.affix.name, W / 2, H * 0.42, 12);
-    ctx.fillStyle = COL_COMMON; ctx.font = '500 34px Consolas, monospace';
+    ctx.fillStyle = COL_COMMON; ctx.font = '500 34px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     ctx.fillText(sec.affix.desc, W / 2, H * 0.42 + 96);
-    ctx.fillStyle = COL_DIM; ctx.font = '500 26px Consolas, monospace';
+    ctx.fillStyle = COL_DIM; ctx.font = '500 26px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     ctx.fillText(sec.wavesCount + ' waves  •  anchor boss', W / 2, H * 0.42 + 150);
-    if (Run.loop > 0) { ctx.fillStyle = COL_RED; ctx.font = '600 30px Consolas, monospace'; ctx.fillText('ENDLESS LOOP ' + (Run.loop + 1), W / 2, H * 0.42 + 190); }
+    if (Run.loop > 0) { ctx.fillStyle = COL_RED; ctx.font = '600 30px "SFMono-Regular", "Cascadia Mono", Consolas, monospace'; ctx.fillText('ENDLESS LOOP ' + (Run.loop + 1), W / 2, H * 0.42 + 190); }
 
     var ly = H * 0.60;
     if (Run.labor.offered && !Run.labor.decided) {
-      ctx.fillStyle = COL_GOLD; ctx.font = '700 40px Consolas, monospace';
+      ctx.fillStyle = COL_GOLD; ctx.font = '700 40px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
       spaced(ctx, '◆ LABOR OFFERED ◆', W / 2, ly, 4);
-      ctx.fillStyle = COL_COMMON; ctx.font = '500 30px Consolas, monospace';
+      ctx.fillStyle = COL_COMMON; ctx.font = '500 30px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
       ctx.fillText('+1 extra affix  &  +40% enemy HP', W / 2, ly + 48);
       ctx.fillText('reward: 3 EPIC boons + 300 gold on boss kill', W / 2, ly + 86);
       var pulse = 0.5 + 0.5 * Math.sin(perfNow() * 0.006);
-      ctx.globalAlpha = 0.55 + 0.45 * pulse; ctx.fillStyle = '#ffffff'; ctx.font = '700 36px Consolas, monospace';
-      ctx.fillText('Z  ACCEPT          X  DECLINE', W / 2, ly + 150); ctx.globalAlpha = 1;
-      clickRects.push({ x: W * 0.16, y: ly + 122, w: W * 0.32, h: 56, action: function () { decideLabor(true); } });
-      clickRects.push({ x: W * 0.52, y: ly + 122, w: W * 0.32, h: 56, action: function () { decideLabor(false); } });
+      actionButton(ctx, 174, ly + 134, 340, 72, '[ Z ]', 'ACCEPT', COL_GOLD, pulse);
+      actionButton(ctx, 566, ly + 134, 340, 72, '[ X ]', 'DECLINE', COL_CYAN, pulse);
+      clickRects.push({ x: 174, y: ly + 134, w: 340, h: 72, action: function () { decideLabor(true); } });
+      clickRects.push({ x: 566, y: ly + 134, w: 340, h: 72, action: function () { decideLabor(false); } });
     } else if (Run.labor.accepted) {
-      ctx.fillStyle = COL_GOLD; ctx.font = '700 36px Consolas, monospace';
+      ctx.fillStyle = COL_GOLD; ctx.font = '700 36px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
       ctx.fillText('◆ LABOR ACCEPTED — ' + Game.st().aff.name + ' ◆', W / 2, ly);
     } else if (Run.labor.decided) {
-      ctx.fillStyle = COL_DIM; ctx.font = '500 30px Consolas, monospace';
+      ctx.fillStyle = COL_DIM; ctx.font = '500 30px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
       ctx.fillText('labor declined', W / 2, ly);
     }
   }
@@ -1226,8 +1328,14 @@
   function drawCard(ctx, x, y, w, h, b, selected, price, sold) {
     var border = b.duo ? COL_GOLD : (RB[b.rarity] || RB.common);
     ctx.save();
-    ctx.fillStyle = COL_PANEL; roundRect(ctx, x, y, w, h, 18); ctx.fill();
+    var pg = ctx.createLinearGradient(x, y, x, y + h);
+    pg.addColorStop(0, selected ? 'rgba(14,31,39,0.98)' : COL_PANEL);
+    pg.addColorStop(1, 'rgba(3,8,12,0.98)');
+    ctx.fillStyle = pg; roundRect(ctx, x, y, w, h, 18); ctx.fill();
     var hasArt = drawCardArt(ctx, x, y, w, h, b);
+    // A narrow rarity rail is easier to scan than relying on the border alone.
+    ctx.fillStyle = sold ? '#30434a' : border;
+    roundRect(ctx, x + 11, y + 11, 5, h - 22, 3); ctx.fill();
     if (b.duo) {                                         // rainbow rim for duos
       var grd = ctx.createLinearGradient(x, y, x + w, y + h);
       grd.addColorStop(0, '#ff77c8'); grd.addColorStop(0.33, '#9fd8ff'); grd.addColorStop(0.66, '#b6ff5a'); grd.addColorStop(1, '#ffd766');
@@ -1245,15 +1353,19 @@
       if (selected) { ctx.shadowColor = border; ctx.shadowBlur = 30; }
       roundRect(ctx, x, y, w, h, 18); ctx.stroke(); ctx.shadowBlur = 0;
     }
+    if (selected) {
+      ctx.fillStyle = border;
+      ctx.beginPath(); ctx.moveTo(x + w / 2 - 12, y - 14); ctx.lineTo(x + w / 2 + 12, y - 14); ctx.lineTo(x + w / 2, y - 2); ctx.closePath(); ctx.fill();
+    }
     ctx.textAlign = 'center';
     if (hasArt) { ctx.shadowColor = 'rgba(0,0,0,0.92)'; ctx.shadowBlur = 5; ctx.shadowOffsetY = 1; }   // keep text legible over the painting
     // kind + rarity tag
-    ctx.fillStyle = border; ctx.font = '600 22px Consolas, monospace';
+    ctx.fillStyle = border; ctx.font = '600 22px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     ctx.fillText(kindLabel(b) + '  ·  ' + b.rarity.toUpperCase(), x + w / 2, y + 22);
     // god / card name (shrink for long names like QUETZALCOATL)
     ctx.fillStyle = sold ? '#4a6570' : b.css;
     var nf = b.name.length > 9 ? 28 : 40;
-    ctx.font = '700 ' + nf + 'px Consolas, monospace';
+    ctx.font = '700 ' + nf + 'px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     var nameY = y + h * 0.30;
     spaced(ctx, b.name, x + w / 2, nameY, b.name.length > 9 ? 1 : 3);
     // §7: NAME + ★-track — a small current-tier star row under the name (transforms/levels).
@@ -1261,40 +1373,39 @@
     var isLevel = (b.kind === 'levelA' || b.kind === 'levelS');
     var hasTrack = isXform || isLevel, panY, epiY;
     if (hasTrack) {
-      ctx.fillStyle = sold ? '#6a5a2e' : COL_GOLD; ctx.font = '600 18px Consolas, monospace';
+      ctx.fillStyle = sold ? '#6a5a2e' : COL_GOLD; ctx.font = '600 18px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
       ctx.fillText(magStars(isXform ? cardTierMag(b) : b.curMag), x + w / 2, nameY + 24);
       panY = nameY + 48; epiY = nameY + (b.god && GODS[b.god] ? 72 : 58);
     } else { panY = nameY + 34; epiY = nameY + ((b.god && GODS[b.god]) ? 60 : 44); }
     // pantheon tag line
     var pan = (b.god && GODS[b.god]) ? GODS[b.god].pantheon : '';
-    if (pan) { ctx.fillStyle = sold ? '#3d545c' : b.css; ctx.font = '600 20px Consolas, monospace'; ctx.fillText('· ' + pan + ' ·', x + w / 2, panY); }
+    if (pan) { ctx.fillStyle = sold ? '#3d545c' : b.css; ctx.font = '600 20px "SFMono-Regular", "Cascadia Mono", Consolas, monospace'; ctx.fillText('· ' + pan + ' ·', x + w / 2, panY); }
     // epithet
-    ctx.fillStyle = sold ? '#3d545c' : COL_DIM; ctx.font = 'italic 500 23px Consolas, monospace';
+    ctx.fillStyle = sold ? '#3d545c' : COL_DIM; ctx.font = 'italic 500 20px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     ctx.fillText(b.epithet, x + w / 2, epiY);
     // ---- §7 three-line contract body: DESC / ▸HOW / ★-LINE (or the LEVEL rail) ----
     var L = cardLines(b), by = epiY + 34;
-    ctx.fillStyle = sold ? '#4a6570' : COL_COMMON; ctx.font = '500 25px Consolas, monospace';
+    ctx.fillStyle = sold ? '#4a6570' : COL_COMMON; ctx.font = '500 21px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     var dl = wrapArr(ctx, L.desc, w - 50);
-    for (var _d = 0; _d < dl.length; _d++) { ctx.fillText(dl[_d], x + w / 2, by); by += 31; }
+    for (var _d = 0; _d < dl.length; _d++) { ctx.fillText(dl[_d], x + w / 2, by); by += 26; }
     if (L.how) {
-      by += 3; ctx.fillStyle = sold ? '#3d545c' : COL_CYAN; ctx.font = '500 21px Consolas, monospace';
+      by += 2; ctx.fillStyle = sold ? '#3d545c' : COL_CYAN; ctx.font = '500 19px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
       var hl = wrapArr(ctx, '▸ ' + L.how, w - 44);
-      for (var _h = 0; _h < hl.length; _h++) { ctx.fillText(hl[_h], x + w / 2, by); by += 26; }
+      for (var _h = 0; _h < hl.length; _h++) { ctx.fillText(hl[_h], x + w / 2, by); by += 22; }
     }
-    var floorY = y + h - (price != null ? 84 : 30);       // the ★-block may not cross into the price zone / card edge
+    var floorY = y + h - (price != null ? 84 : 22);       // the ★-block may not cross into the price zone / card edge
     if (isLevel) {                                        // ★-LINE now→next + the 5-node rail
-      by += 8; if (by > floorY - 56) by = floorY - 56;    // clamp: anchor the block above the bottom, never clip
-      ctx.fillStyle = sold ? '#7a6a3a' : COL_GOLD; ctx.font = '600 23px Consolas, monospace';
-      ctx.fillText(L.star, x + w / 2, by); by += 30;
+      by += 6;
+      ctx.fillStyle = sold ? '#7a6a3a' : COL_GOLD; ctx.font = '600 19px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+      ctx.fillText(L.star, x + w / 2, by); by += 24;
       drawRail(ctx, x + w / 2, by, b.curMag, b.mag, sold);
     } else if (L.star) {                                  // ★-LINE at current tier (transforms only)
-      by += 8; ctx.fillStyle = sold ? '#7a6a3a' : COL_GOLD; ctx.font = '600 22px Consolas, monospace';
+      by += 6; ctx.fillStyle = sold ? '#7a6a3a' : COL_GOLD; ctx.font = '600 19px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
       var sl = wrapArr(ctx, L.star, w - 40);
-      if (by > floorY - (sl.length - 1) * 26) by = floorY - (sl.length - 1) * 26;   // clamp: never clip the card edge
-      for (var _s = 0; _s < sl.length; _s++) { ctx.fillText(sl[_s], x + w / 2, by); by += 26; }
+      for (var _s = 0; _s < sl.length && by <= floorY; _s++) { ctx.fillText(sl[_s], x + w / 2, by); by += 22; }
     }
     if (price != null) {
-      ctx.fillStyle = sold ? COL_RED : COL_GOLD; ctx.font = '700 36px Consolas, monospace';
+      ctx.fillStyle = sold ? COL_RED : COL_GOLD; ctx.font = '700 36px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
       ctx.fillText(sold ? 'SOLD' : (commas(price) + ' g'), x + w / 2, y + h - 44);
     }
     ctx.restore();
@@ -1303,10 +1414,11 @@
   function drawDraft(ctx) {
     dim(ctx, 0.62);
     ctx.textAlign = 'center';
-    ctx.fillStyle = COL_CYAN; ctx.font = '700 52px Consolas, monospace';
+    ctx.fillStyle = COL_CYAN; ctx.font = '700 52px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     spaced(ctx, 'A GOD OFFERS A BOON', W / 2, H * 0.14, 6);
-    ctx.fillStyle = COL_DIM; ctx.font = '500 30px Consolas, monospace';
-    ctx.fillText('Left / Right   •   Z to accept', W / 2, H * 0.14 + 58);
+    rule(ctx, W / 2, H * 0.14 + 58, 620);
+    ctx.fillStyle = COL_DIM; ctx.font = '500 30px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    ctx.fillText('CHOOSE ONE OFFERING', W / 2, H * 0.14 + 82);
 
     var n = Run.draftOffers.length, cw = 306, ch = 470, gap = 30;
     var totalW = n * cw + (n - 1) * gap, x0 = (W - totalW) / 2, y0 = H * 0.30;
@@ -1315,18 +1427,25 @@
       drawCard(ctx, x, y0, cw, ch, Run.draftOffers[i], i === Run.draftSel, null, false);
       clickRects.push({ x: x, y: y0, w: cw, h: ch, action: (function (idx) { return function () { Run.draftSel = idx; var bx = Run.draftOffers[idx]; Game.applyBoon(bx); pickupSfx(bx); afterDraft(); }; })(i) });
     }
+    glassPanel(ctx, W / 2 - 250, y0 + ch + 44, 500, 62, COL_CYAN, false, 14);
+    ctx.fillStyle = COL_COMMON; ctx.font = '600 22px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    ctx.fillText('←  →  SELECT     ·     Z  ACCEPT', W / 2, y0 + ch + 63);
     drawStacked(ctx);
   }
 
   function drawShop(ctx) {
     drawScreenArt(ctx, '29-black-market', 0.42, 0.66);
     ctx.textAlign = 'center';
-    ctx.fillStyle = COL_GOLD; ctx.font = '700 58px Consolas, monospace';
+    ctx.fillStyle = COL_GOLD; ctx.font = '700 58px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     spaced(ctx, 'BLACK MARKET', W / 2, H * 0.10, 8);
-    ctx.fillStyle = COL_GOLD; ctx.font = '700 40px Consolas, monospace';
-    ctx.fillText('WALLET  ' + commas(Game.st().wallet) + ' g', W / 2, H * 0.10 + 60);
+    rule(ctx, W / 2, H * 0.10 + 64, 560, 'rgba(255,215,102,0.65)');
+    glassPanel(ctx, W / 2 - 190, H * 0.10 + 86, 380, 64, COL_GOLD, false, 14);
+    ctx.fillStyle = COL_DIM; ctx.font = '700 16px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    ctx.fillText('AVAILABLE GOLD', W / 2, H * 0.10 + 99);
+    ctx.fillStyle = COL_GOLD; ctx.font = '800 28px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    ctx.fillText(commas(Game.st().wallet) + ' g', W / 2, H * 0.10 + 124);
 
-    var cw = 300, ch = 440, gap = 30, totalW = 3 * cw + 2 * gap, x0 = (W - totalW) / 2, y0 = H * 0.24;
+    var cw = 300, ch = 440, gap = 30, totalW = 3 * cw + 2 * gap, x0 = (W - totalW) / 2, y0 = H * 0.25;
     for (var i = 0; i < Run.shopItems.length; i++) {
       var it = Run.shopItems[i], x = x0 + i * (cw + gap);
       drawCard(ctx, x, y0, cw, ch, it.boon, Run.shopSel === i, it.price, it.sold);
@@ -1343,26 +1462,24 @@
       drawButton(ctx, bx, by, bw, bh, btns[b].label, btns[b].sub, btns[b].sel);
       clickRects.push({ x: bx, y: by, w: bw, h: bh, action: (function (sel) { return function () { Run.shopSel = sel; buyCurrent(); }; })(btns[b].act) });
     }
-    ctx.fillStyle = COL_DIM; ctx.font = '500 28px Consolas, monospace';
+    ctx.fillStyle = COL_DIM; ctx.font = '500 28px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     ctx.fillText('Left / Right   •   Z buy / activate   •   X leave', W / 2, by + bh + 50);
     drawStacked(ctx);
   }
   function drawButton(ctx, x, y, w, h, label, sub, sel) {
     ctx.save();
-    ctx.fillStyle = COL_PANEL; roundRect(ctx, x, y, w, h, 14); ctx.fill();
-    ctx.lineWidth = sel ? 6 : 3; ctx.strokeStyle = sel ? '#ffffff' : COL_CYAN;
-    if (sel) { ctx.shadowColor = COL_CYAN; ctx.shadowBlur = 24; }
-    roundRect(ctx, x, y, w, h, 14); ctx.stroke(); ctx.shadowBlur = 0;
+    glassPanel(ctx, x, y, w, h, COL_CYAN, sel, 14);
+    ctx.fillStyle = sel ? COL_CYAN : 'rgba(95,230,255,0.36)'; ctx.fillRect(x + 2, y + 2, 5, h - 4);
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#ffffff'; ctx.font = '700 34px Consolas, monospace'; ctx.fillText(label, x + w / 2, y + 30);
-    ctx.fillStyle = COL_GOLD; ctx.font = '600 26px Consolas, monospace'; ctx.fillText(sub, x + w / 2, y + 64);
+    ctx.fillStyle = '#ffffff'; ctx.font = '700 34px "SFMono-Regular", "Cascadia Mono", Consolas, monospace'; ctx.fillText(label, x + w / 2, y + 30);
+    ctx.fillStyle = COL_GOLD; ctx.font = '600 26px "SFMono-Regular", "Cascadia Mono", Consolas, monospace'; ctx.fillText(sub, x + w / 2, y + 64);
     ctx.restore();
   }
 
   function drawStacked(ctx) {
     var lines = Game.upgradeSummary();
     var st = Game.st();
-    ctx.textAlign = 'left'; ctx.font = '500 24px Consolas, monospace';
+    ctx.textAlign = 'left'; ctx.font = '500 24px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     var extra = [];
     if (st.attackGod) extra.push('ATK ' + GODS[st.attackGod].name);
     if (st.specialGod) extra.push('SPC ' + GODS[st.specialGod].name);
@@ -1383,14 +1500,16 @@
     // tally text stays readable (same treatment as the title backdrop). Dim on absent.
     drawScreenArt(ctx, win ? '1c-victory' : '1b-game-over', 0.55, 0.72);
     ctx.textAlign = 'center';
-    ctx.fillStyle = win ? COL_GOLD : COL_RED; ctx.font = '800 92px Consolas, monospace';
+    ctx.fillStyle = win ? COL_GOLD : COL_RED; ctx.font = '800 92px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     spaced(ctx, win ? 'RUN COMPLETE' : 'GAME OVER', W / 2, H * 0.24, 12);
+    rule(ctx, W / 2, H * 0.24 + 105, 620, win ? 'rgba(255,215,102,0.7)' : 'rgba(255,90,110,0.7)');
+    glassPanel(ctx, 160, H * 0.325, W - 320, 560, win ? COL_GOLD : COL_RED, false, 22);
     var st = Game.st();
-    ctx.fillStyle = COL_GOLD; ctx.font = '700 52px Consolas, monospace';
+    ctx.fillStyle = COL_GOLD; ctx.font = '700 52px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     ctx.fillText('SCORE  ' + commas(st.score), W / 2, H * 0.36);
-    ctx.fillStyle = COL_CYAN; ctx.font = '600 36px Consolas, monospace';
+    ctx.fillStyle = COL_CYAN; ctx.font = '600 36px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     ctx.fillText('BEST  ' + commas(Run.meta.hi), W / 2, H * 0.36 + 56);
-    ctx.fillStyle = COL_COMMON; ctx.font = '500 32px Consolas, monospace';
+    ctx.fillStyle = COL_COMMON; ctx.font = '500 32px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     ctx.fillText('reached sector ' + Math.min(3, Run.sectorIdx + 1) + '/3', W / 2, H * 0.36 + 108);
     ctx.fillText('banked this run  ' + commas(st.wallet) + ' g', W / 2, H * 0.36 + 150);
 
@@ -1406,23 +1525,26 @@
       ['PEAK HUBRIS', 'x' + hubrisMultOf(st.hubris.peak).toFixed(1)]
     ];
     var elapsed = perfNow() - (Run.endT0 || 0);
-    var lx = W * 0.30, rx = W * 0.70, ty = H * 0.47;
-    ctx.font = '600 28px Consolas, monospace';
+    var lx = W * 0.30, rx = W * 0.70, ty = H * 0.475;
+    ctx.font = '600 28px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     for (var ti = 0; ti < rows.length; ti++) {
       if (elapsed < (ti + 1) * 220) break;   // staggered reveal
-      var ry = ty + ti * 30;
+      var ry = ty + ti * 38;
       ctx.textAlign = 'left';
       ctx.fillStyle = COL_DIM; ctx.fillText(rows[ti][0], lx, ry);
       ctx.textAlign = 'right';
       ctx.fillStyle = ti === rows.length - 1 ? COL_GOLD : COL_COMMON;
       ctx.fillText(rows[ti][1], rx, ry);
+      if (ti < rows.length - 1) {
+        ctx.fillStyle = 'rgba(121,168,181,0.14)'; ctx.fillRect(lx, ry + 29, rx - lx, 1);
+      }
     }
     ctx.textAlign = 'center';
 
-    ctx.fillStyle = COL_DIM; ctx.font = '600 30px Consolas, monospace';
+    ctx.fillStyle = COL_DIM; ctx.font = '600 30px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     ctx.fillText('SEED  ' + Run.seed.toString(16).toUpperCase(), W / 2, H * 0.56);
     var pulse = 0.5 + 0.5 * Math.sin(perfNow() * 0.005);
-    ctx.globalAlpha = 0.5 + 0.5 * pulse; ctx.fillStyle = '#ffffff'; ctx.font = '600 38px Consolas, monospace';
+    ctx.globalAlpha = 0.5 + 0.5 * pulse; ctx.fillStyle = '#ffffff'; ctx.font = '600 38px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     ctx.fillText(win ? 'Z — DESCEND DEEPER (endless)     Esc — title' : 'Z — retry     Esc — title', W / 2, H * 0.64);
     ctx.globalAlpha = 1;
   }

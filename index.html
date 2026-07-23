@@ -7,13 +7,15 @@
 <style>
   html, body {
     margin: 0; padding: 0; height: 100%; width: 100%;
-    background: #000; overflow: hidden;
+    background: #020609; overflow: hidden;
     cursor: none;
   }
   #wrap {
     position: fixed; inset: 0;
     display: block;
-    background: #000;
+    background:
+      radial-gradient(circle at 50% 35%, rgba(22, 70, 82, 0.16), transparent 46%),
+      #020609;
   }
   canvas {
     position: absolute; left: 0; top: 0;
@@ -27,8 +29,8 @@
     position: fixed; inset: 0; z-index: 10;
     display: none;
     align-items: center; justify-content: center;
-    color: #7fdfff; background: #000;
-    font-family: Consolas, "Courier New", monospace;
+    color: #8ceaff; background: #020609;
+    font-family: "SFMono-Regular", "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
     font-size: 22px; text-align: center; line-height: 1.6;
     padding: 40px; box-sizing: border-box;
   }
@@ -43,13 +45,13 @@
   <div id="msg"></div>
 
   <!-- Load order matters: no modules, each file hangs a namespace on window. -->
-  <script src="js/sfx.js"></script>
-  <script src="js/music.js"></script>
-  <script src="js/sprites-data.js"></script>
-  <script src="js/gl.js"></script>
-  <script src="js/engine.js"></script>
-  <script src="js/patterns.js"></script>
-  <script src="js/run.js"></script>
-  <script src="js/game.js"></script>
+  <script src="js/sfx.js?v=20260723-visual"></script>
+  <script src="js/music.js?v=20260723-visual"></script>
+  <script src="js/sprites-data.js?v=20260723-visual"></script>
+  <script src="js/gl.js?v=20260723-visual"></script>
+  <script src="js/engine.js?v=20260723-visual"></script>
+  <script src="js/patterns.js?v=20260723-visual"></script>
+  <script src="js/run.js?v=20260723-visual"></script>
+  <script src="js/game.js?v=20260723-visual"></script>
 </body>
 </html>

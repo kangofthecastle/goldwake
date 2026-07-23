@@ -113,7 +113,7 @@
 
   var UI_CYAN = '#5fe6ff', UI_GOLD = '#ffd766', UI_RED = '#ff5a6e';
   var HUBRIS_COL = '#ffc24a';    // hubris gold tint (distinct from loot UI_GOLD)
-  function UI_DIM() { return '#6fa9b8'; }
+  function UI_DIM() { return '#79a8b5'; }
 
   // ---------------------------------------------------------------------
   // boot
@@ -7152,33 +7152,66 @@
   // ---------------------------------------------------------------------
   function commas(n) { return Math.floor(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 
+  function hudCornerWash(x, y, w, h, right) {
+    var g = hud.createLinearGradient(right ? x + w : x, 0, right ? x : x + w, 0);
+    g.addColorStop(0, 'rgba(2,8,12,0.78)');
+    g.addColorStop(0.72, 'rgba(2,8,12,0.24)');
+    g.addColorStop(1, 'rgba(2,8,12,0)');
+    hud.fillStyle = g; hud.fillRect(x, y, w, h);
+  }
+  function hudRule(x, y, w, right, col) {
+    var g = hud.createLinearGradient(right ? x + w : x, 0, right ? x : x + w, 0);
+    g.addColorStop(0, col || 'rgba(95,230,255,0.56)');
+    g.addColorStop(1, 'rgba(95,230,255,0)');
+    hud.fillStyle = g; hud.fillRect(x, y, w, 2);
+  }
+
   function drawCombatHUD() {
-    hud.fillStyle = UI_CYAN;
-    hud.font = '600 46px Consolas, monospace';
+    hudCornerWash(0, 0, 420, 238, false);
+    hudCornerWash(W - 420, 0, 420, 238, true);
+
     hud.textAlign = 'right';
-    hud.fillText(commas(G.score), W - 34, 26);
-    hud.font = '600 24px Consolas, monospace';
+    hud.font = '700 16px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     hud.fillStyle = UI_DIM();
-    hud.fillText('HI ' + commas(Run.meta.hi), W - 34, 82);
+    hud.fillText('SCORE', W - 34, 18);
+    hud.fillStyle = UI_CYAN;
+    hud.font = '700 44px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    hud.fillText(commas(G.score), W - 34, 44);
+    hudRule(W - 350, 96, 316, true);
+    hud.font = '600 20px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    hud.fillStyle = UI_DIM();
+    hud.fillText('HIGH  ' + commas(Run.meta.hi), W - 34, 108);
+    hud.font = '700 16px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    hud.fillStyle = UI_DIM();
+    hud.fillText('RUN GOLD', W - 34, 141);
     hud.fillStyle = UI_GOLD;
-    hud.font = '700 30px Consolas, monospace';
-    hud.fillText(commas(G.wallet) + ' g', W - 34, 116);
+    hud.font = '700 28px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    hud.fillText(commas(G.wallet) + ' g', W - 34, 166);
 
     hud.textAlign = 'left';
-    hud.font = '700 42px Consolas, monospace';
+    hud.font = '700 16px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    hud.fillStyle = UI_DIM();
+    hud.fillText('MULTIPLIER', 40, 18);
+    hud.font = '800 42px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     hud.fillStyle = G.mult > 1.01 ? UI_GOLD : UI_DIM();
-    hud.fillText('x' + G.mult.toFixed(G.mult >= 3 ? 1 : 2), 40, 26);
-    hud.font = '600 24px Consolas, monospace';
+    hud.fillText('x' + G.mult.toFixed(G.mult >= 3 ? 1 : 2), 40, 44);
+    hudRule(40, 98, 300, false);
+    hud.font = '700 20px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     hud.fillStyle = UI_CYAN;
-    hud.fillText('GRAZE ' + G.graze, 40, 74);
+    hud.fillText('GRAZE  ' + G.graze, 40, 110);
     drawHubris();
 
     hud.textAlign = 'center';
-    hud.font = '600 26px Consolas, monospace';
-    hud.fillStyle = UI_CYAN;
+    hud.font = '700 18px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    hud.fillStyle = G.aff.name ? UI_GOLD : UI_CYAN;
     var stxt = 'SECTOR ' + (Run.sectorIdx + 1) + '/3';
-    if (G.aff.name) stxt += '   ·   ' + G.aff.name;
-    hud.fillText(stxt, W / 2, 116);
+    if (G.aff.name) stxt += '  ·  ' + G.aff.name;
+    var sw = hud.measureText(stxt).width + 38;
+    hud.fillStyle = 'rgba(3,11,16,0.78)'; roundRect(hud, W / 2 - sw / 2, 18, sw, 38, 12); hud.fill();
+    hud.strokeStyle = 'rgba(95,230,255,0.22)'; hud.lineWidth = 1;
+    roundRect(hud, W / 2 - sw / 2, 18, sw, 38, 12); hud.stroke();
+    hud.fillStyle = G.aff.name ? UI_GOLD : UI_CYAN;
+    hud.fillText(stxt, W / 2, 27);
 
     drawGauge();
     drawSpecialMeter();
@@ -7197,20 +7230,22 @@
     var h = G.hubris, mult = HUBRIS_MULT[h.step];
     // Stacked BELOW the GRAZE counter with clear spacing so the label + pips no
     // longer collide with the graze cluster (score / graze / hubris read cleanly).
-    var x = 40, y = 152;
+    var x = 40, y = 166;
     hud.textAlign = 'left';
-    hud.font = '600 18px Consolas, monospace';
+    hud.font = '600 18px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     hud.fillStyle = UI_DIM();
     hud.fillText('HUBRIS', x, y - 28);
-    hud.font = '700 32px Consolas, monospace';
+    hud.font = '700 32px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     hud.fillStyle = h.step > 0 ? HUBRIS_COL : UI_DIM();
     hud.fillText('x' + mult.toFixed(1), x, y);
     // five step pips: lit for steps gained, the next pip fills by partial progress.
     var px = x + 108, py = y - 22, pw = 24, ph = 13, gap = 6;
     for (var i = 0; i < HUBRIS_MAX; i++) {
       var sx = px + i * (pw + gap);
-      hud.fillStyle = 'rgba(52,40,12,0.75)';
+      hud.fillStyle = 'rgba(52,40,12,0.78)';
       roundRect(hud, sx, py, pw, ph, 3); hud.fill();
+      hud.strokeStyle = 'rgba(255,194,74,0.2)'; hud.lineWidth = 1;
+      roundRect(hud, sx, py, pw, ph, 3); hud.stroke();
       var f = i < h.step ? 1 : (i === h.step ? h.prog : 0);
       if (f > 0) { hud.fillStyle = HUBRIS_COL; roundRect(hud, sx, py, pw * f, ph, 3); hud.fill(); }
     }
@@ -7222,6 +7257,8 @@
     var frac = v.active ? (v.timer / v.duration) : (v.gauge / GAUGE_MAX);
     hud.fillStyle = 'rgba(20,40,50,0.7)';
     roundRect(hud, x, y, w, h, 8); hud.fill();
+    hud.strokeStyle = 'rgba(95,230,255,0.25)'; hud.lineWidth = 2;
+    roundRect(hud, x, y, w, h, 8); hud.stroke();
     var fh = h * frac;
     var grd = hud.createLinearGradient(0, y + h, 0, y + h - fh);
     if (v.active) { grd.addColorStop(0, '#ffb020'); grd.addColorStop(1, '#fff0a0'); }
@@ -7231,7 +7268,7 @@
     roundRect(hud, x, y + h - fh, w, fh, 8); hud.fill();
     hud.save();
     hud.translate(x + w + 14, y + h); hud.rotate(-Math.PI / 2);
-    hud.textAlign = 'left'; hud.font = '700 22px Consolas, monospace';
+    hud.textAlign = 'left'; hud.font = '700 22px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     if (v.active) { hud.fillStyle = UI_GOLD; hud.fillText('DIVINE INTERVENTION', 0, 0); }
     else if (v.ready) { var pl = 0.5 + 0.5 * Math.sin(G.time * 8); hud.fillStyle = 'rgba(255,225,110,' + (0.5 + 0.5 * pl) + ')'; hud.fillText('DIVINE INTERVENTION — C', 0, 0); }
     else { hud.fillStyle = UI_DIM(); hud.fillText('DIVINE INTERVENTION', 0, 0); }
@@ -7248,6 +7285,8 @@
       var part = !full && charge > i ? (charge - i) : 0;
       hud.fillStyle = 'rgba(30,20,50,0.7)';
       roundRect(hud, x, sy, w, segH, 6); hud.fill();
+      hud.strokeStyle = 'rgba(216,155,255,0.22)'; hud.lineWidth = 1.5;
+      roundRect(hud, x, sy, w, segH, 6); hud.stroke();
       if (full || part > 0) {
         var gr = hud.createLinearGradient(0, sy + segH, 0, sy);
         gr.addColorStop(0, '#8a2bff'); gr.addColorStop(1, '#d89bff');
@@ -7258,13 +7297,16 @@
     }
     hud.save();
     hud.translate(x + w + 14, y + h); hud.rotate(-Math.PI / 2);
-    hud.textAlign = 'left'; hud.font = '700 22px Consolas, monospace';
+    hud.textAlign = 'left'; hud.font = '700 22px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     hud.fillStyle = G.sp.charge >= 1 ? '#d89bff' : UI_DIM();
     hud.fillText('SPECIAL — X', 0, 0);
     hud.restore();
   }
   function drawLives() {
     var y = H - 70;
+    hud.textAlign = 'left'; hud.fillStyle = UI_DIM(); hud.font = '700 16px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    hud.fillText('LIVES', 34, y - 48);
+    hudRule(34, y - 21, 180, false);
     for (var i = 0; i < G.lives; i++) {
       var x = 46 + i * 56;
       hud.save(); hud.translate(x, y); hud.fillStyle = UI_CYAN;
@@ -7275,9 +7317,12 @@
   function drawBossBar() {
     var e = G.boss, x = 120, y = 40, w = W - 240, h = 16, by = y + 60;
     var frac = Math.max(0, e.hp / e.maxhp);
-    hud.textAlign = 'center'; hud.font = '700 30px Consolas, monospace'; hud.fillStyle = UI_GOLD;
+    hud.textAlign = 'center'; hud.font = '700 30px "SFMono-Regular", "Cascadia Mono", Consolas, monospace'; hud.fillStyle = UI_GOLD;
     hud.fillText(e.name, W / 2, 60);
-    hud.fillStyle = 'rgba(40,10,25,0.7)'; roundRect(hud, x, by, w, h, 6); hud.fill();
+    hud.fillStyle = 'rgba(3,8,12,0.88)'; roundRect(hud, x - 5, by - 5, w + 10, h + 10, 9); hud.fill();
+    hud.strokeStyle = 'rgba(255,215,102,0.24)'; hud.lineWidth = 1.5;
+    roundRect(hud, x - 5, by - 5, w + 10, h + 10, 9); hud.stroke();
+    hud.fillStyle = 'rgba(40,10,25,0.78)'; roundRect(hud, x, by, w, h, 6); hud.fill();
     var grd = hud.createLinearGradient(x, 0, x + w, 0); grd.addColorStop(0, '#ff3b7b'); grd.addColorStop(1, '#ffd766');
     hud.fillStyle = grd; roundRect(hud, x, by, w * frac, h, 6); hud.fill();
     // segment ticks — one per spellcard boundary (remaining-hp fraction = 1 - cum),
@@ -7291,14 +7336,14 @@
       }
       // PHASE counter sits at the bar's LEFT edge, BELOW it — clear of the top-right
       // HI/score block, which it used to overlap once HI grew to 7+ digits.
-      hud.textAlign = 'left'; hud.font = '700 20px Consolas, monospace'; hud.fillStyle = UI_CYAN;
+      hud.textAlign = 'left'; hud.font = '700 20px "SFMono-Regular", "Cascadia Mono", Consolas, monospace'; hud.fillStyle = UI_CYAN;
       hud.fillText('PHASE ' + (e.phase + 1) + '/' + bounds.length, x, by + h + 26);
     }
     // MIDAS GOLD-THEFT hoard readout — a small gold-tinted counter; the eaten loot
     // erupts back as a jackpot when he dies. Sits to the RIGHT of the PHASE counter
     // on the same below-bar row (offset clears the widest 'PHASE n/N').
     if (e.isMidas) {
-      hud.textAlign = 'left'; hud.font = '700 22px Consolas, monospace';
+      hud.textAlign = 'left'; hud.font = '700 22px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
       hud.fillStyle = e.hoardCount > 0 ? UI_GOLD : 'rgba(255,215,102,0.5)';
       hud.fillText('◆ HOARD ' + e.hoardCount, x + 220, by + h + 26);
     }
@@ -7309,8 +7354,8 @@
   }
   function drawGodTags() {
     var gods = Run.GODS;
-    hud.textAlign = 'right'; hud.font = '700 24px Consolas, monospace';
-    var y = 150;
+    hud.textAlign = 'right'; hud.font = '700 24px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    var y = 210;
     if (G.attackGod && gods[G.attackGod]) { hud.fillStyle = gods[G.attackGod].css; hud.fillText('ATK ▸ ' + gods[G.attackGod].name + ' ' + tierStars(G.attackR), W - 34, y); y += 30; }
     if (G.specialGod && gods[G.specialGod]) { hud.fillStyle = gods[G.specialGod].css; hud.fillText('SPC ▸ ' + gods[G.specialGod].name + ' ' + tierStars(G.specialR), W - 34, y); y += 30; }
     // Ares frenzy pips
@@ -7324,7 +7369,7 @@
     }
     // Pantheon Communion badge
     if (G.communion) {
-      hud.textAlign = 'right'; hud.font = '700 22px Consolas, monospace';
+      hud.textAlign = 'right'; hud.font = '700 22px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
       var cc = { OLYMPUS: '#9fd8ff', ASGARD: '#cfd6e0', KEMET: '#ffe89a' };
       hud.fillStyle = cc[G.communion] || '#ffd766';
       hud.fillText('✦ COMMUNION · ' + G.communion, W - 34, y + 8);
@@ -7338,8 +7383,8 @@
   function drawLoadout() {
     var lines = Game.upgradeSummary();
     hud.textAlign = 'right';
-    var y = 244;
-    hud.font = '500 22px Consolas, monospace';
+    var y = 294;
+    hud.font = '500 22px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     for (var i = 0; i < lines.length; i++) {
       hud.fillStyle = 'rgba(150,220,235,0.7)'; hud.fillText(lines[i], W - 34, y + i * 26);
       // charm lines get their §7 relic icon stamped to the left of the text
@@ -7351,7 +7396,7 @@
     }
     var dy = y + lines.length * 26 + 6;
     if (Run.DUOS) {
-      hud.font = '700 20px Consolas, monospace';
+      hud.font = '700 20px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
       for (var k in G.duos) {
         if (G.duos[k] && Run.DUOS[k]) { hud.fillStyle = '#ffd766'; hud.fillText('◆ ' + Run.DUOS[k].name, W - 34, dy); dy += 24; }
       }
@@ -7361,7 +7406,7 @@
     hud.textAlign = 'center'; var arr = G.popups;
     for (var i = 0; i < arr.length; i++) {
       var p = arr[i]; if (!p.active) continue;
-      hud.globalAlpha = 1 - p.age / p.life; hud.fillStyle = p.col; hud.font = '700 ' + p.size + 'px Consolas, monospace';
+      hud.globalAlpha = 1 - p.age / p.life; hud.fillStyle = p.col; hud.font = '700 ' + p.size + 'px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
       hud.fillText(p.text, p.x, p.y);
     }
     hud.globalAlpha = 1;
@@ -7381,9 +7426,9 @@
       }
     }
     hud.globalAlpha = a; hud.textAlign = 'center';
-    hud.fillStyle = UI_GOLD; hud.font = '700 66px Consolas, monospace';
+    hud.fillStyle = UI_GOLD; hud.font = '700 66px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     drawSpaced(an.text, W / 2, H * 0.30, 10 + (1 - a) * 30);
-    if (an.sub) { hud.fillStyle = UI_CYAN; hud.font = '500 30px Consolas, monospace'; hud.fillText(an.sub, W / 2, H * 0.30 + 66); }
+    if (an.sub) { hud.fillStyle = UI_CYAN; hud.font = '500 30px "SFMono-Regular", "Cascadia Mono", Consolas, monospace'; hud.fillText(an.sub, W / 2, H * 0.30 + 66); }
     hud.globalAlpha = 1;
   }
   function drawSpaced(text, cx, y, spacing) {
@@ -7396,12 +7441,22 @@
     hud.textAlign = 'center';
   }
   function pauseOverlay() {
-    hud.fillStyle = 'rgba(0,0,0,0.55)'; hud.fillRect(0, 0, W, H);
-    hud.textAlign = 'center'; hud.fillStyle = UI_CYAN; hud.font = '700 80px Consolas, monospace';
-    drawSpaced('PAUSED', W / 2, H * 0.42, 12);
-    hud.fillStyle = UI_DIM(); hud.font = '500 34px Consolas, monospace';
-    hud.fillText('Z / P / Esc — resume   ·   X — abandon to title', W / 2, H * 0.42 + 90);
-    hud.fillText('F — auto-fire: ' + (Run.meta.autoFire ? 'ON' : 'OFF'), W / 2, H * 0.42 + 138);
+    hud.fillStyle = 'rgba(1,5,8,0.7)'; hud.fillRect(0, 0, W, H);
+    var x = 150, y = H * 0.35, w = W - 300, h = 390;
+    var pg = hud.createLinearGradient(0, y, 0, y + h);
+    pg.addColorStop(0, 'rgba(10,28,36,0.97)'); pg.addColorStop(1, 'rgba(3,10,15,0.97)');
+    hud.fillStyle = pg; roundRect(hud, x, y, w, h, 24); hud.fill();
+    hud.strokeStyle = 'rgba(95,230,255,0.5)'; hud.lineWidth = 3;
+    roundRect(hud, x, y, w, h, 24); hud.stroke();
+    hud.textAlign = 'center'; hud.fillStyle = UI_CYAN; hud.font = '700 80px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    drawSpaced('PAUSED', W / 2, y + 64, 12);
+    hudRule(x + 70, y + 166, w - 140, false);
+    hud.fillStyle = '#eefcff'; hud.font = '600 30px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    hud.fillText('Z / P / Esc   RESUME', W / 2, y + 196);
+    hud.fillStyle = UI_DIM(); hud.font = '500 26px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    hud.fillText('X   ABANDON TO TITLE', W / 2, y + 244);
+    hud.fillStyle = Run.meta.autoFire ? UI_GOLD : UI_DIM(); hud.font = '600 26px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    hud.fillText('F   AUTO-FIRE  ' + (Run.meta.autoFire ? 'ON' : 'OFF'), W / 2, y + 292);
   }
   function roundRect(ctx, x, y, w, h, r) {
     if (w < 2 * r) r = w / 2; if (h < 2 * r) r = h / 2;
