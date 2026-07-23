@@ -2065,6 +2065,21 @@
   var DUAT_PULL_REF = 520;     // px reference distance for the close-in acceleration falloff
   var DUAT_GATE_HOLD = 0.08;   // s a foe stays flagged "gated" (scripted MOVEMENT suspended; firing continues) after the last pull tick
   var DUAT_KILL_RADIUS = 230;  // px within which a gate-kill throws a gold burst
+  // GATE OF DUAT bullet lensing (owner 2026-07-23 "slightly warp the path of enemy bullets that
+  // go around it"). An enemy bullet inside the gate's pull radius gets a SLIGHT gravitational bend
+  // of its HEADING toward the maw — a lensing effect, not a magnet. The bend is a PURE direction
+  // rotation: the bullet's SPEED is never touched, so a lensed bullet can never travel faster than
+  // its base speed (danmaku-safe by construction, no readability spikes). A per-bullet accumulation
+  // cap (DUAT_LENS_MAX) hard-limits the TOTAL bend so no bullet can ever be curled into an orbit,
+  // regardless of how slow it is / how long it lingers. A bullet that crosses the maw's inner core
+  // is DEVOURED — plain despawn + a tiny sand puff, NO gold (matches the pillar-block / serpent-slam
+  // non-paying cancels; the gold-paying cancels are the DIVINE INTERVENTION / decoy / eat variants),
+  // so the gate can never become a gold printer. Runs per enemy bullet per frame while a gate lives,
+  // guarded by a cheap bounding-box reject before the sqrt.
+  var DUAT_LENS_TURN = 0.22;   // rad/s reference bend rate of a bullet's heading toward the maw at the falloff cap (tuned SLIGHT: ~a few deg at mid-radius)
+  var DUAT_LENS_REF  = 180;    // px: within this the bend rate caps (falloff = min(1, REF/di)); farther out it falls ~1/di
+  var DUAT_LENS_MAX  = 0.11;   // rad (~6.3°) hard cap on the TOTAL heading-bend spent to one bullet — the SLIGHT ceiling (guarantees "curve, never orbit"); outer-radius crossings bend less than this via the ~1/di falloff
+  var DUAT_LENS_CORE = 46;     // px: a bullet crossing inside the maw core is eaten (devoured by the maw, no gold)
   function updateDuat(dt) {
     var d = G.duat; if (!d.active) return;
     d.timer -= dt;
@@ -2105,25 +2120,36 @@
   function drawDuat() {
     var d = G.duat; if (!d.active) return;
     var t = G.time, life = Math.min(1, d.timer / 0.4);
-    // T5: amped sand-vortex — a deeper stack of counter-spinning rings + a hot maw core so
-    // the gate reads as an active, hungry whirlpool rather than a faint decal.
-    GL.draw(GL.SPR.GLOW, d.x, d.y, 460, 240, 0, 0.65, 0.5, 0.2, 0.5 * life);              // broad dust haze
-    // SPIRAL SAND-STREAK ARMS feeding the maw (replaces the concentric shells; owner ring
-    // law). Each arm is a run of tangential sand streaks twisting inward toward the maw.
-    for (var arm = 0; arm < 4; arm++) {
-      var a0 = t * 1.2 + arm * (TAU / 4);
-      for (var seg = 0; seg < 9; seg++) {
-        var sr = 40 + seg * 46, sa = a0 + seg * 0.5;
-        var sx3 = d.x + Math.cos(sa) * sr, sy3 = d.y + Math.sin(sa) * sr * 0.55;
-        GL.draw(GL.SPR.STREAK, sx3, sy3, 10 + seg * 1.5, 46, sa + Math.PI / 2, 0.9, 0.72, 0.32, (0.6 - seg * 0.05) * life);
-      }
+    // TRUE SAND-VORTEX (owner 2026-07-23 "I don't like the scythe graphic get rid of it").
+    // The counter-spinning TILTED ELLIPTICAL shells / streak arms (the `*0.55` y-squash + STREAK
+    // capsules that read as curved scythe blades) are GONE. Rebuilt so it reads as a hole in the
+    // world with sand pouring in: a dark occluding maw with a hot rim, perfectly CIRCULAR concentric
+    // rings (zero eccentricity/tilt — nothing can read as a blade edge), and a dense inward sand-grain
+    // spiral on circular orbits. Additive doctrine + Anubis amber / gold / dark-sand palette.
+    GL.draw(GL.SPR.GLOW, d.x, d.y, 470, 470, 0, 0.6, 0.46, 0.2, 0.5 * life);              // broad CIRCULAR dust haze
+    // DARK OCCLUDING MAW — the hole itself. Punch a dark-sand well into the field with the one
+    // darkening path in the additive pass (premult-over ONE, ONE_MINUS_SRC_ALPHA — same as the
+    // honest hitbox dot), then restore additive so the rim + grains glow on top.
+    GL.blendPremult();
+    GL.draw(GL.SPR.CORE, d.x, d.y, 156, 156, 0, 0.05, 0.035, 0.025, 0.92 * life);         // dark-sand well: an absence of world
+    GL.blendAdditive();
+    GL.draw(GL.SPR.GLOW, d.x, d.y, 150, 150, 0, 1, 0.66, 0.26, 0.6 * life);               // hot amber rim around the maw
+    GL.draw(GL.SPR.CORE, d.x, d.y, 42, 42, t * 3, 1, 0.9, 0.55, 0.5 * life);              // hot inner ember at the throat
+    // CONCENTRIC CIRCULAR RINGS — perfectly round (equal w/h, zero rotation), radius PULSING per
+    // ring for a subtle radial-distortion / suck-in read. Warm sand-gold, fading outward.
+    for (var ri = 0; ri < 5; ri++) {
+      var rr = (92 + ri * 78) * (1 + 0.06 * Math.sin(t * 3 - ri * 0.9));                  // gentle in/out breathing
+      GL.draw(GL.SPR.RING, d.x, d.y, rr, rr, 0, 0.92, 0.74 - ri * 0.04, 0.34, (0.5 - ri * 0.07) * life);
     }
-    GL.draw(GL.SPR.GLOW, d.x, d.y, 150, 90, 0, 1, 0.85, 0.4, 0.55 * life);                 // hot maw
-    GL.draw(GL.SPR.CORE, d.x, d.y, 40, 22, t * 3, 1, 0.92, 0.6, 0.5 * life);
-    for (var w = 0; w < 12; w++) {                                   // soul-wisps spiralling INTO the maw
-      var ph = t * 1.4 + w * 0.52, spiral = (1 - ((t * 0.6 + w * 0.5) % 1));               // radius shrinks toward center
-      var wr = 30 + spiral * 200, wx = d.x + Math.cos(ph) * wr, wy = d.y + Math.sin(ph) * wr * 0.55;
-      GL.draw(GL.SPR.CORE, wx, wy, 8 + spiral * 6, 14 + spiral * 12, ph, 0.9, 0.85, 0.55, 0.55 * life * (0.4 + 0.6 * spiral));
+    // DENSE INWARD SAND SPIRAL — grains streaming down the throat on CIRCULAR orbits (no y-squash),
+    // radius shrinking toward the maw so they read as pouring in. Amped from the old 12 wisps to 40,
+    // brightening as they fall (the life-drain wisps torn off gated foes still stream in from updateDuat).
+    for (var w = 0; w < 40; w++) {
+      var spiral = 1 - ((t * 0.55 + w * 0.137) % 1);                                      // 1 (outer) → 0 (maw): radius collapses inward
+      var wr = 34 + spiral * 250, wa = t * 1.5 + w * 0.61 + spiral * 5.0;                 // twist tightens toward the center
+      var wx = d.x + Math.cos(wa) * wr, wy = d.y + Math.sin(wa) * wr;                     // CIRCULAR — no eccentricity
+      var wsz = 4 + spiral * 7;
+      GL.draw(GL.SPR.CORE, wx, wy, wsz, wsz, 0, 0.96, 0.82 + 0.1 * spiral, 0.45, 0.5 * life * (0.3 + 0.7 * (1 - spiral)));
     }
   }
   function shadowTwin() {
@@ -4974,9 +5000,36 @@
     var hbR = PLAYER_R * G.up.hitboxMul;
     var dec = G.decoy;
     var flipDmg = 2.0 * G.attackR * G.stats.atkDmg;
+    // GATE OF DUAT lensing gate: hoisted out of the loop so the per-bullet cost is one boolean when no gate lives.
+    var duat = G.duat.active ? G.duat : null, duatR = duat ? duat.r : 0, duatR2 = duatR * duatR;
     Engine.bullets.forEach(function (b) {
       Engine.updateBullet(b, dt);
       if (b.x < -90 || b.x > W + 90 || b.y < -90 || b.y > H + 120 || b.life <= 0) { Engine.bullets.release(b); return; }
+      // GATE OF DUAT — BULLET LENSING (enemy bullets only). Slight gravitational bend of the heading
+      // toward the maw; core-crossers are devoured. Cheap bbox reject precedes the sqrt (see DUAT_LENS_*).
+      if (duat && !b.friendly) {
+        var lx = duat.x - b.x, ly = duat.y - b.y;
+        if (lx > -duatR && lx < duatR && ly > -duatR && ly < duatR) {          // bbox reject — no sqrt on the majority
+          var l2 = lx * lx + ly * ly;
+          if (l2 < duatR2) {                                                    // inside the pull radius: lensed
+            var ld = Math.sqrt(l2) || 1;
+            if (ld < DUAT_LENS_CORE) {                                          // crossed the maw core → devoured (plain despawn, NO gold)
+              spark(b.x, b.y, [0.86, 0.72, 0.4], 2, 130, 15);                   // tiny sand puff into the gate
+              Engine.bullets.release(b); return;
+            }
+            var room = DUAT_LENS_MAX - b.lensAcc;                              // total-bend budget left (guarantees no orbit)
+            if (room > 0) {
+              var lga = Math.atan2(ly, lx), ldd = lga - b.dir;                  // signed angle from heading to the maw
+              while (ldd > Math.PI) ldd -= TAU;
+              while (ldd < -Math.PI) ldd += TAU;
+              var lstep = DUAT_LENS_TURN * Math.min(1, DUAT_LENS_REF / ld) * dt; // per-frame turn, ~1/di falloff, capped near the core
+              if (lstep > room) lstep = room;                                   // never exceed the per-bullet total-bend cap
+              if (ldd > lstep) ldd = lstep; else if (ldd < -lstep) ldd = -lstep;
+              b.dir += ldd; b.lensAcc += Math.abs(ldd);                         // pure rotation: speed untouched → total speed ≤ base
+            }
+          }
+        }
+      }
       // TALOS HURLED STONES: an XL boulder bursts into pellet shrapnel at its depth
       // line (the shrapnel inherits the boulder's warm tint). Released after bursting.
       if (b.burstY && b.y >= b.burstY) {

@@ -93,6 +93,7 @@
       flash: 0, age: 0, grazed: false,
       life: 1e9,
       timeScale: 1, slowT: 0,         // bullet time-slow (horn shoves)
+      lensAcc: 0,                     // GATE OF DUAT: total heading-bend already spent to this bullet (radians; capped so it never orbits)
       friendly: false, srcId: -1,     // player-faction flipped bullet (Loki PILFER, Pass 2)
       gardenerId: -1,                 // Bullet Gardener ownership
       ownerId: -1                     // emitter ownership (midship cancel-to-gold on death)

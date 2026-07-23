@@ -130,6 +130,7 @@
     b.grazed = false;
     b.life = o.life || 30;
     b.timeScale = 1; b.slowT = 0;
+    b.lensAcc = 0;                       // GATE OF DUAT lensing budget resets per pooled reuse
     b.friendly = false; b.srcId = -1;   // enemy bullets are hostile (PILFER flips them later, Pass 2)
     b.gardenerId = -1;
     // emitter ownership — lets a midship cancel its own remaining pattern to
