@@ -1117,22 +1117,31 @@
     topFade.addColorStop(1, 'rgba(1,4,7,0.78)');
     ctx.fillStyle = topFade; ctx.fillRect(0, 0, W, H);
 
+    // The authored landscape title lockup is real game art, not deployment
+    // metadata. Fit the full composition across the portrait canvas so the
+    // crown, faceted wordmark, and subtitle remain exactly as designed.
+    var titleArt = getArt('1a-hubris-title-banner');
     ctx.textAlign = 'center';
-    ctx.shadowColor = 'rgba(255,188,66,0.5)'; ctx.shadowBlur = 34;
-    ctx.fillStyle = '#ffdc83';
-    ctx.font = '700 176px "Palatino Linotype", "Book Antiqua", Georgia, serif';
-    spaced(ctx, 'HUBRIS', W / 2, 152, 18);
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#9be9f5';
-    ctx.font = '700 24px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
-    spaced(ctx, 'A DIVINE-INTERVENTION BULLET HELL', W / 2, 342, 5);
-    rule(ctx, W / 2, 400, 500, 'rgba(255,215,102,0.68)');
-    ctx.fillStyle = 'rgba(224,241,244,0.82)';
-    ctx.font = '500 27px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
-    ctx.fillText('Descend. Defy the gods. Return gilded.', W / 2, 432);
+    if (titleArt) {
+      var titleH = W * titleArt.height / titleArt.width;
+      ctx.drawImage(titleArt, 0, 0, W, titleH);
+      var titleFade = ctx.createLinearGradient(0, titleH - 110, 0, titleH + 70);
+      titleFade.addColorStop(0, 'rgba(2,7,11,0)');
+      titleFade.addColorStop(1, 'rgba(2,7,11,0.9)');
+      ctx.fillStyle = titleFade; ctx.fillRect(0, titleH - 110, W, 180);
+    } else {
+      ctx.shadowColor = 'rgba(255,188,66,0.5)'; ctx.shadowBlur = 34;
+      ctx.fillStyle = '#ffdc83';
+      ctx.font = '700 176px "Palatino Linotype", "Book Antiqua", Georgia, serif';
+      spaced(ctx, 'HUBRIS', W / 2, 152, 18);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#9be9f5';
+      ctx.font = '700 24px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
+      spaced(ctx, 'A DIVINE-INTERVENTION BULLET HELL', W / 2, 342, 5);
+    }
 
     var pulse = 0.5 + 0.5 * Math.sin(perfNow() * 0.005);
-    var bx = 190, by = 520, bw = W - 380, bh = 126;
+    var bx = 190, by = 600, bw = W - 380, bh = 126;
     ctx.save();
     ctx.shadowColor = 'rgba(255,198,74,' + (0.24 + pulse * 0.24) + ')';
     ctx.shadowBlur = 30 + pulse * 12;
@@ -1152,7 +1161,7 @@
     spaced(ctx, 'BEGIN DESCENT', W / 2, by + 66, 2);
     ctx.restore();
 
-    var sy = 760;
+    var sy = 820;
     rule(ctx, W / 2, sy, 760, 'rgba(95,230,255,0.34)');
     ctx.fillStyle = 'rgba(155,233,245,0.72)';
     ctx.font = '700 20px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
@@ -1170,7 +1179,7 @@
     }
     rule(ctx, W / 2, sy + 170, 760, 'rgba(95,230,255,0.20)');
 
-    var cx = 138, cy = 1030, cw = W - 276, ch = 300;
+    var cx = 138, cy = 1080, cw = W - 276, ch = 300;
     ctx.fillStyle = 'rgba(2,9,13,0.66)'; roundRect(ctx, cx, cy, cw, ch, 20); ctx.fill();
     ctx.strokeStyle = 'rgba(95,230,255,0.16)'; ctx.lineWidth = 1.5;
     roundRect(ctx, cx, cy, cw, ch, 20); ctx.stroke();
@@ -1190,18 +1199,18 @@
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(155,233,245,0.7)';
     ctx.font = '700 20px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
-    spaced(ctx, 'YOUR LEGACY', W / 2, 1438, 4);
+    spaced(ctx, 'YOUR LEGACY', W / 2, 1488, 4);
     ctx.fillStyle = COL_GOLD;
     ctx.font = '700 30px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-    ctx.fillText(commas(Run.meta.careerGold) + ' GOLD   ·   ' + legacyCount + ' / 3 BOONS AWAKENED', W / 2, 1484);
-    rule(ctx, W / 2, 1540, 560, 'rgba(255,215,102,0.34)');
+    ctx.fillText(commas(Run.meta.careerGold) + ' GOLD   ·   ' + legacyCount + ' / 3 BOONS AWAKENED', W / 2, 1534);
+    rule(ctx, W / 2, 1590, 560, 'rgba(255,215,102,0.34)');
 
     ctx.fillStyle = 'rgba(224,241,244,0.58)';
     ctx.font = '600 22px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
-    spaced(ctx, 'THE PANTHEONS AWAIT', W / 2, 1690, 5);
+    spaced(ctx, 'THE PANTHEONS AWAIT', W / 2, 1710, 5);
     ctx.fillStyle = 'rgba(121,168,181,0.62)';
     ctx.font = '600 18px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-    ctx.fillText('ARROWS  CHOOSE   ·   R  RESTART   ·   M  MUTE', W / 2, 1740);
+    ctx.fillText('ARROWS  CHOOSE   ·   R  RESTART   ·   M  MUTE', W / 2, 1760);
   }
 
   // sector → tradition for the intro emblem stamp (S1 Bronze Coast/TALOS = Greek,
