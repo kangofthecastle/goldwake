@@ -914,7 +914,7 @@
   // 2026-07-19 DELTA batch — cells 51+ (BOLT owns 50). Signature projectiles,
   // owned-entity segments, field objects, and the glyph/flame sheets. All authored
   // nose-UP (or orientation-free glyphs) so rot 0 — the draw site rotates to travel.
-  // The 8x16 atlas fits these as cells 51..90 (37 free cells remain, 91..127).
+  // The 8x16 atlas fits these as cells 51..94 (33 free cells remain, 95..127).
   var AUTH_NAMES2 = [
     // A — signature projectiles
     '33-10-green-dragon-crescent', '33-11-hunt-arrow', '33-12-ankh-bolt',
