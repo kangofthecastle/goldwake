@@ -269,8 +269,11 @@ still a material surface—not an empty void.
   pseudo-3D isometric-diorama rendering.
 - The quiet combat channel should contain one broad, uninterrupted material
   plane with only a handful of low-contrast current, fissure, or inlay marks.
-  Edge landmarks may be ornate and richly authored so long as that density
-  falls away decisively before the combat channel.
+  Edge landmarks use the same clean-plane and selective-detail law as their
+  destination plate. Give them strong silhouettes and a few meaningful seams,
+  chips, bands, inlays, or folds; do not switch back to dense material rendering
+  merely because they sit in the foreground. Their density still falls away
+  decisively before the combat channel.
 - Avoid cinematic matte-painting density, glossy 3D materials, photoreal
   micro-texture, global grain, all-over mottling, full-surface scratches, tiny
   repeated machinery, volumetric clutter, and busy particles.

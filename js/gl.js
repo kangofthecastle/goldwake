@@ -1101,12 +1101,18 @@
         loadSlot(destinationSlot, destinations[destinationSlot], false);
       }
     }
-    // One sparse physical crossing per sector. Destination plates carry the
-    // geography; foreground collision art stays exceptional.
+    // One sparse physical crossing per sector. Keep the old detailed WebPs in
+    // art/landmarks; this variant matches the active sparse-detail environments.
+    var landmarkVariant = 'sparse-detail';
+    var landmarkRevision = '20260724-sparse-detail-1';
+    var landmarkBase = 'art/landmark-variants/' + landmarkVariant + '/browser/';
+    GL.landmarkVariant = landmarkVariant;
+    // Destination plates carry the geography; foreground collision art stays
+    // exceptional.
     var landmarks = {
-      's1-landmark': 'art/landmarks/s1-bronze-crossing.webp',
-      's2-landmark': 'art/landmarks/s2-funerary-crossing.webp',
-      's3-landmark': 'art/landmarks/s3-jade-crossing.webp'
+      's1-landmark': landmarkBase + 's1-bronze-crossing.png?v=' + landmarkRevision,
+      's2-landmark': landmarkBase + 's2-funerary-crossing.png?v=' + landmarkRevision,
+      's3-landmark': landmarkBase + 's3-jade-crossing.png?v=' + landmarkRevision
     };
     for (var landmarkSlot in landmarks) {
       if (Object.prototype.hasOwnProperty.call(landmarks, landmarkSlot)) {
