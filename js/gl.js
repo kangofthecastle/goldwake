@@ -1090,12 +1090,19 @@
         loadSlot(destinationSlot, destinations[destinationSlot]);
       }
     }
-    // Mid-level foreground crossings. These alpha plates carry the visible
-    // silhouette for the matching collision geometry in game.js.
+    // Three foreground journey events per sector: an entrance landmark, a
+    // middle crossing, and a late destination threshold. Selected plates carry
+    // matching collision geometry in game.js; all nine physically scroll by.
     var landmarks = {
-      's1-landmark': 'art/landmarks/s1-bronze-crossing.webp',
-      's2-landmark': 'art/landmarks/s2-funerary-crossing.webp',
-      's3-landmark': 'art/landmarks/s3-jade-crossing.webp'
+      's1-landmark1': 'art/landmarks/s1-fleet-wreckage.webp',
+      's1-landmark2': 'art/landmarks/s1-bronze-crossing.webp',
+      's1-landmark3': 'art/landmarks/s1-forge-threshold.webp',
+      's2-landmark1': 'art/landmarks/s2-dead-reed-harbor.webp',
+      's2-landmark2': 'art/landmarks/s2-funerary-crossing.webp',
+      's2-landmark3': 'art/landmarks/s2-hall-of-scales.webp',
+      's3-landmark1': 'art/landmarks/s3-cloud-garden.webp',
+      's3-landmark2': 'art/landmarks/s3-jade-crossing.webp',
+      's3-landmark3': 'art/landmarks/s3-throne-terraces.webp'
     };
     for (var landmarkSlot in landmarks) {
       if (Object.prototype.hasOwnProperty.call(landmarks, landmarkSlot)) {

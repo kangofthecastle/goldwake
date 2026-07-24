@@ -393,7 +393,7 @@
       // Three authored places per sector. The opening plate is already present
       // on sector entry; later places physically travel down into the field.
       sceneIndex: 0, sceneFrom: 0, sceneBlend: 1, sceneTitleT: 2.8,
-      landmark: null,
+      landmark: null, landmarkIndex: -1,
       obstacles: [],
       setpiece: { active: false, x: 0, y: 0, vy: 0, alpha: 0, parts: null },
       bossShadow: { active: false, y: 0, t: 0, alpha: 0 }
@@ -416,41 +416,53 @@
     var wi = Run && typeof Run.waveIdx === 'number' ? Run.waveIdx : 0;
     return Math.min(2, Math.floor((wi * 3) / Math.max(1, count)));
   }
-  function makeDestinationLandmark(sector) {
-    // One authored architectural crossing per sector, reserved for the
-    // mid-level destination. Collision follows the image but leaves a generous
-    // central lane; decorative overhangs are intentionally non-solid.
+  function makeDestinationLandmark(sector, destination) {
+    // Every destination has a distinct foreground event. The middle event is
+    // the physical crossing; entrance/finale plates pass beneath the flight
+    // plane as large place markers without pretending every decoration is a wall.
     var specs = [
-      { slot: 's1-landmark', w: 1160, h: 653, dy: 174, ch: 330, lw: 340, rw: 340, speed: 108, kind: 'bronze' },
-      { slot: 's2-landmark', w: 1160, h: 773, dy: 138, ch: 455, lw: 352, rw: 352, speed: 98, kind: 'pylon' },
-      { slot: 's3-landmark', w: 1160, h: 653, dy: 52, ch: 530, lw: 350, rw: 350, speed: 114, kind: 'jade' }
+      [
+        { slot: 's1-landmark1', w: 1160, h: 773, speed: 126, kind: 'bronze', collides: false },
+        { slot: 's1-landmark2', w: 1160, h: 653, dy: 174, ch: 330, lw: 340, rw: 340, speed: 108, kind: 'bronze', collides: true },
+        { slot: 's1-landmark3', w: 1160, h: 653, speed: 138, kind: 'bronze', collides: false }
+      ],
+      [
+        { slot: 's2-landmark1', w: 1160, h: 773, speed: 118, kind: 'pylon', collides: false },
+        { slot: 's2-landmark2', w: 1160, h: 773, dy: 138, ch: 455, lw: 352, rw: 352, speed: 98, kind: 'pylon', collides: true },
+        { slot: 's2-landmark3', w: 1160, h: 773, speed: 132, kind: 'pylon', collides: false }
+      ],
+      [
+        { slot: 's3-landmark1', w: 1160, h: 704, speed: 130, kind: 'jade', collides: false },
+        { slot: 's3-landmark2', w: 1160, h: 653, dy: 52, ch: 530, lw: 350, rw: 350, speed: 114, kind: 'jade', collides: true },
+        { slot: 's3-landmark3', w: 1160, h: 773, speed: 142, kind: 'jade', collides: false }
+      ]
     ];
-    var s = specs[sector] || specs[0];
+    var sectorSpecs = specs[sector] || specs[0];
+    var s = sectorSpecs[destination] || sectorSpecs[0];
     var landmark = {
       slot: s.slot, w: s.w, h: s.h, y: -s.h * 0.42, vy: s.speed,
-      kind: s.kind, telegraph: 2.15, solid: false, exit: false
+      kind: s.kind, collides: s.collides, telegraph: s.collides ? 2.15 : 0,
+      solid: false, exit: false
     };
-    landmark.obstacles = [
+    landmark.obstacles = s.collides ? [
       { x: 0, y: landmark.y + s.dy, dy: s.dy, w: s.lw, h: s.ch, side: -1, kind: s.kind, solid: false },
       { x: W - s.rw, y: landmark.y + s.dy, dy: s.dy, w: s.rw, h: s.ch, side: 1, kind: s.kind, solid: false }
-    ];
+    ] : [];
     return landmark;
   }
   function enterDestination(idx) {
     var b = G.bg;
     idx = Math.max(0, Math.min(2, idx | 0));
-    if (idx === b.sceneIndex) return;
-    b.sceneFrom = b.sceneIndex;
-    b.sceneIndex = idx;
-    b.sceneBlend = 0;
-    b.sceneTitleT = 3.2;
-    if (idx === 1) {
-      b.landmark = makeDestinationLandmark(b.sector);
+    if (idx !== b.sceneIndex) {
+      b.sceneFrom = b.sceneIndex;
+      b.sceneIndex = idx;
+      b.sceneBlend = 0;
+      b.sceneTitleT = 3.2;
+    }
+    if (idx !== b.landmarkIndex) {
+      b.landmarkIndex = idx;
+      b.landmark = makeDestinationLandmark(b.sector, idx);
       b.obstacles = b.landmark.obstacles;
-    } else {
-      // Let architecture from the previous place clear the field quickly
-      // instead of vanishing during the spatial scene change.
-      if (b.landmark) b.landmark.exit = true;
     }
   }
 
@@ -533,7 +545,7 @@
     var lm = b.landmark;
     if (lm) {
       lm.y += (lm.exit ? 360 : lm.vy * sm) * dt;
-      if (lm.telegraph > 0) {
+      if (lm.collides && lm.telegraph > 0) {
         lm.telegraph -= dt;
         if (lm.telegraph <= 0) { lm.telegraph = 0; lm.solid = true; }
       }
@@ -563,7 +575,8 @@
       destinationIndex: b.sceneIndex,
       destination: DESTINATION_NAMES[b.sector][b.sceneIndex],
       destinationBlend: b.sceneBlend,
-      landmark: b.landmark ? { slot: b.landmark.slot, y: b.landmark.y, solid: b.landmark.solid, exit: b.landmark.exit } : null,
+      landmarkIndex: b.landmarkIndex,
+      landmark: b.landmark ? { slot: b.landmark.slot, y: b.landmark.y, solid: b.landmark.solid, collides: b.landmark.collides, exit: b.landmark.exit } : null,
       obstacles: b.obstacles.map(function (o) { return { x: o.x, y: o.y, w: o.w, h: o.h, kind: o.kind, solid: o.solid }; }),
       structCol: b.env.structCol.slice(), starCol: b.env.star.slice(),
       units: b.units.length, setpiece: b.setpiece.active, bossShadow: b.bossShadow.active, bossShadowY: b.bossShadow.y,
