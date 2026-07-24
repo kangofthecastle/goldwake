@@ -310,6 +310,11 @@
       structCol: [0.125, 0.102, 0.055], structKind: 'lattice',
       debrisCol: [0.17, 0.135, 0.070], debrisKind: 'gild' }
   ];
+  var DESTINATION_NAMES = [
+    ['THE SHATTERED FLEET', 'THE FLOODED COLONNADE', 'THE TALOS FORGE'],
+    ['THE DEAD REED DELTA', 'PROCESSIONAL OF KINGS', 'THE HALL OF SCALES'],
+    ['THE CLOUD GARDEN', 'THE JADE CAUSEWAY', 'THE THRONE TERRACES']
+  ];
 
   var bgRng = Engine.mulberry32;   // shared seeded PRNG (single source; see engine.js)
 
@@ -385,6 +390,11 @@
       // at breather/boss) exactly like the procedural layers — not on wall-clock.
       scrollY: 0,
       role: 'opener', dimFactor: 1,
+      // Three authored places per sector. The opening plate is already present
+      // on sector entry; later plates crossfade in as the run reaches the middle
+      // and final thirds of the sector.
+      sceneIndex: 0, sceneFrom: 0, sceneBlend: 1, sceneTitleT: 2.8,
+      obstacles: [],
       setpiece: { active: false, x: 0, y: 0, vy: 0, alpha: 0, parts: null },
       bossShadow: { active: false, y: 0, t: 0, alpha: 0 }
     };
@@ -399,11 +409,50 @@
   }
   Game.bgDimFor = bgDimFor;
 
+  function destinationIndexFor(role) {
+    if (role === 'boss') return 2;
+    var sec = Run && Run.sectors && Run.sectors[Run.sectorIdx];
+    var count = sec && sec.waves ? sec.waves.length : 1;
+    var wi = Run && typeof Run.waveIdx === 'number' ? Run.waveIdx : 0;
+    return Math.min(2, Math.floor((wi * 3) / Math.max(1, count)));
+  }
+  function makeDestinationObstacles(sector) {
+    // One authored architectural narrows per sector, reserved for the mid-level
+    // destination. The centre remains generous enough for danmaku routing.
+    var specs = [
+      { lw: 252, rw: 226, h: 720, speed: 62, kind: 'bronze' },
+      { lw: 238, rw: 254, h: 760, speed: 56, kind: 'pylon' },
+      { lw: 270, rw: 286, h: 700, speed: 68, kind: 'jade' }
+    ];
+    var s = specs[sector] || specs[0], y = -360;
+    return [
+      { x: 0, y: y, w: s.lw, h: s.h, vy: s.speed, side: -1, kind: s.kind, telegraph: 1.15, solid: false, exit: false },
+      { x: W - s.rw, y: y - 80, w: s.rw, h: s.h + 80, vy: s.speed, side: 1, kind: s.kind, telegraph: 1.15, solid: false, exit: false }
+    ];
+  }
+  function enterDestination(idx) {
+    var b = G.bg;
+    idx = Math.max(0, Math.min(2, idx | 0));
+    if (idx === b.sceneIndex) return;
+    b.sceneFrom = b.sceneIndex;
+    b.sceneIndex = idx;
+    b.sceneBlend = 0;
+    b.sceneTitleT = 3.2;
+    if (idx === 1) {
+      b.obstacles = makeDestinationObstacles(b.sector);
+    } else {
+      // Let architecture from the previous place clear the field quickly
+      // instead of vanishing on the crossfade.
+      for (var i = 0; i < b.obstacles.length; i++) b.obstacles[i].exit = true;
+    }
+  }
+
   // Choreograph the background with the wave-slot arc. Called from beginWave/
   // beginBoss with the role already known there.
   function setBgRole(role) {
     var b = G.bg; if (!b) return;
     b.role = role;
+    enterDestination(destinationIndexFor(role));
     b.structTarget = 1;
     if (role === 'opener') { b.structAlpha = Math.min(b.structAlpha, 0.05); b.structTarget = 1; b.brightTarget = 1.0; b.scrollTarget = 1.0; }
     else if (role === 'build') { b.brightTarget = 1.0; b.scrollTarget = 1.0; }
@@ -433,6 +482,8 @@
     b.structAlpha += (b.structTarget - b.structAlpha) * (b.role === 'opener' ? Math.min(1, dt * 0.7) : k);
     b.bright += (b.brightTarget - b.bright) * k;
     b.scrollMul += (b.scrollTarget - b.scrollMul) * k;
+    if (b.sceneBlend < 1) b.sceneBlend = Math.min(1, b.sceneBlend + dt * 0.42);
+    if (b.sceneTitleT > 0) b.sceneTitleT -= dt;
     // readability dim from live bullet count
     var target = bgDimFor(Engine.bullets.count());
     b.dimFactor += (target - b.dimFactor) * Math.min(1, dt * 4);
@@ -472,6 +523,15 @@
       bs.alpha = G.boss && G.boss.arrived ? Math.max(0, bs.alpha - dt * 0.8) : Math.min(1, bs.alpha + dt * 1.3);
       if (G.boss && G.boss.arrived && bs.alpha <= 0.01) bs.active = false;
     }
+    for (i = b.obstacles.length - 1; i >= 0; i--) {
+      var ob = b.obstacles[i];
+      if (ob.telegraph > 0) {
+        ob.telegraph -= dt;
+        if (ob.telegraph <= 0) { ob.telegraph = 0; ob.solid = true; }
+      }
+      ob.y += (ob.exit ? 360 : ob.vy * sm) * dt;
+      if (ob.y > H + 100) b.obstacles.splice(i, 1);
+    }
   }
 
   // Reconfigure the environment for a sector (called before its waves). Resets
@@ -486,6 +546,10 @@
       sector: b.sector, slot: b.env.slot, role: b.role,
       structAlpha: b.structAlpha, bright: b.bright, scrollMul: b.scrollMul, scrollTarget: b.scrollTarget,
       scrollY: b.scrollY, bossArrived: !!(G.boss && G.boss.arrived), dimFactor: b.dimFactor,
+      destinationIndex: b.sceneIndex,
+      destination: DESTINATION_NAMES[b.sector][b.sceneIndex],
+      destinationBlend: b.sceneBlend,
+      obstacles: b.obstacles.map(function (o) { return { x: o.x, y: o.y, w: o.w, h: o.h, kind: o.kind, solid: o.solid }; }),
       structCol: b.env.structCol.slice(), starCol: b.env.star.slice(),
       units: b.units.length, setpiece: b.setpiece.active, bossShadow: b.bossShadow.active, bossShadowY: b.bossShadow.y,
       bulletCount: Engine.bullets.count()
@@ -3024,6 +3088,43 @@
     }
     // JADE EMPEROR: edicts are now the attack itself (fired as a fan in fireStreams),
     // not a periodic side-shot — so no separate edict cadence here.
+  }
+  function circleHitsRect(x, y, r, ob) {
+    return x + r > ob.x && x - r < ob.x + ob.w && y + r > ob.y && y - r < ob.y + ob.h;
+  }
+  function resolveEnvironmentPlayer() {
+    var p = G.player, obs = G.bg.obstacles;
+    if (!p.alive || !obs.length) return;
+    var r = PLAYER_R * (G.up.hitboxMul || 1);
+    for (var i = 0; i < obs.length; i++) {
+      var ob = obs[i];
+      if (!ob.solid || !circleHitsRect(p.x, p.y, r, ob)) continue;
+      // Side architecture is attached to the field edge, so its inner face is
+      // the only escape plane. This keeps the collision deterministic even
+      // during a dash and never traps the player inside a corner.
+      p.x = ob.side < 0 ? ob.x + ob.w + r + 3 : ob.x - r - 3;
+      G.dash.active = 0;
+    }
+  }
+  function resolveEnvironmentProjectiles() {
+    var obs = G.bg.obstacles;
+    if (!obs.length) return;
+    Engine.bullets.forEach(function (b) {
+      for (var i = 0; i < obs.length; i++) {
+        if (obs[i].solid && circleHitsRect(b.x, b.y, b.radius, obs[i])) {
+          Engine.bullets.release(b);
+          return;
+        }
+      }
+    });
+    Engine.shots.forEach(function (s) {
+      for (var i = 0; i < obs.length; i++) {
+        if (obs[i].solid && circleHitsRect(s.x, s.y, s.radius, obs[i])) {
+          Engine.shots.release(s);
+          return;
+        }
+      }
+    });
   }
   // JADE EMPEROR IMPERIAL EDICTS — the attack IS the fan: 5 homing scroll-talismans per
   // volley (~0.5 rad spread, ~0.28 focused). Each homes via the Jade block (kind 7) and
@@ -5730,12 +5831,14 @@
     updateHammers(dt);
     updateDebris(dt);
     updateClones(dt);
+    resolveEnvironmentPlayer();
     // THE GREAT HUNT ultimate slows only the FIELD (enemies + their bullets) to ~0.12;
     // the player + the ult clock above run at full dt, so you fly through frozen time.
     var edt = (G.ult.god === 'greathunt') ? dt * 0.12 : dt;
     updateEnemies(edt);
     updateHazards(dt);
     updateBullets(edt);
+    resolveEnvironmentProjectiles();
     updateGold(dt);
     updateParticles(dt);
     updateBolts(dt);            // shared lightning bolt renderer (flicker + re-strikes)
@@ -6262,6 +6365,7 @@
     hud.clearRect(0, 0, hudCanvas.width, hudCanvas.height);
     hud.setTransform(scale, 0, 0, scale, lb.x, lb.y);
     hud.textBaseline = 'top';
+    if (m !== 'title') drawEnvironmentObstaclesHUD();
     if (m === 'playing' || m === 'clearing' || m === 'draft' || m === 'shop') drawCombatHUD();
     Run.draw(hud);
     if (G.paused && (m === 'playing' || m === 'clearing')) pauseOverlay();
@@ -6270,10 +6374,19 @@
   function drawBackground() {
     var b = G.bg, i, dim = b.dimFactor, bright = b.bright;
     var deepA = dim * Math.min(1.15, bright);         // deep field follows brightness + dim law
-    var structBase = dim * bright * b.structAlpha;    // structure layer reveal + dim
+    var structBase = dim * bright * b.structAlpha * 0.42; // destinations already carry major architecture
     var sc = b.env.structCol, st = b.env.star;
-    // DEEP FIELD — nebula tint then stars. Painted layer overrides if present.
-    if (GL.backdropReady(b.env.slot + '-deep')) {
+    var sceneSlot = b.env.slot + '-scene' + (b.sceneIndex + 1);
+    var fromSlot = b.env.slot + '-scene' + (b.sceneFrom + 1);
+    // DESTINATION PLATE — actual place changes through the sector. The previous
+    // place stays beneath the incoming plate for a slow, readable crossfade.
+    if (GL.backdropReady(sceneSlot)) {
+      var sceneA = deepA * 0.82;
+      if (b.sceneBlend < 1 && GL.backdropReady(fromSlot)) {
+        GL.drawBackdrop(fromSlot, W / 2, H / 2, W, H, 1, 1, 1, sceneA * (1 - b.sceneBlend), 0);
+      }
+      GL.drawBackdrop(sceneSlot, W / 2, H / 2, W, H, 1, 1, 1, sceneA * b.sceneBlend, 0);
+    } else if (GL.backdropReady(b.env.slot + '-deep')) {
       GL.drawBackdrop(b.env.slot + '-deep', W / 2, H / 2, W, H, 1, 1, 1, deepA, (b.scrollY * 0.006) % 1);
     } else {
       for (i = 0; i < b.nebula.length; i++) { var n = b.nebula[i]; GL.draw(GL.SPR.GLOW, n.x, n.y, n.r, n.r, 0, n.col[0], n.col[1], n.col[2], deepA); }
@@ -6314,6 +6427,60 @@
     }
   }
   function drawStructUnit(u, col, alpha) { drawStructUnitAt(u.x, u.y, u.parts, col, alpha); }
+  function drawEnvironmentObstaclesHUD() {
+    var b = G.bg, obs = b.obstacles;
+    if (!obs.length) return;
+    for (var i = 0; i < obs.length; i++) {
+      var ob = obs[i], pulse = 0.5 + 0.5 * Math.sin(G.time * 11 + i * 2.1);
+      hud.save();
+      hud.beginPath(); hud.rect(ob.x, ob.y, ob.w, ob.h); hud.clip();
+      var g = hud.createLinearGradient(ob.x, 0, ob.x + ob.w, 0);
+      if (ob.kind === 'bronze') {
+        g.addColorStop(0, '#100c08'); g.addColorStop(0.72, '#30200f'); g.addColorStop(1, '#7d5019');
+      } else if (ob.kind === 'pylon') {
+        g.addColorStop(0, '#070a12'); g.addColorStop(0.7, '#111d33'); g.addColorStop(1, '#80682c');
+      } else {
+        g.addColorStop(0, '#07100e'); g.addColorStop(0.72, '#103126'); g.addColorStop(1, '#9b7b2d');
+      }
+      if (ob.side > 0) {
+        g = hud.createLinearGradient(ob.x + ob.w, 0, ob.x, 0);
+        if (ob.kind === 'bronze') {
+          g.addColorStop(0, '#100c08'); g.addColorStop(0.72, '#30200f'); g.addColorStop(1, '#7d5019');
+        } else if (ob.kind === 'pylon') {
+          g.addColorStop(0, '#070a12'); g.addColorStop(0.7, '#111d33'); g.addColorStop(1, '#80682c');
+        } else {
+          g.addColorStop(0, '#07100e'); g.addColorStop(0.72, '#103126'); g.addColorStop(1, '#9b7b2d');
+        }
+      }
+      hud.globalAlpha = ob.solid ? 0.92 : 0.3 + pulse * 0.18;
+      hud.fillStyle = g; hud.fillRect(ob.x, ob.y, ob.w, ob.h);
+      hud.globalAlpha = ob.solid ? 0.7 : 0.22;
+      hud.strokeStyle = ob.kind === 'jade' ? '#79e5c2' : (ob.kind === 'pylon' ? '#66bde8' : '#e0a548');
+      hud.lineWidth = 5;
+      for (var yy = ob.y + 70; yy < ob.y + ob.h; yy += 118) {
+        hud.beginPath(); hud.moveTo(ob.x, yy); hud.lineTo(ob.x + ob.w, yy + (ob.kind === 'jade' ? 70 : 0)); hud.stroke();
+      }
+      if (ob.kind === 'jade') {
+        for (var xx = ob.x - ob.h; xx < ob.x + ob.w + ob.h; xx += 104) {
+          hud.beginPath(); hud.moveTo(xx, ob.y); hud.lineTo(xx + ob.h, ob.y + ob.h); hud.stroke();
+        }
+      } else if (ob.kind === 'pylon') {
+        hud.lineWidth = 3;
+        for (var py = ob.y + 54; py < ob.y + ob.h; py += 150) {
+          hud.strokeRect(ob.x + ob.w * 0.26, py, ob.w * 0.48, 56);
+        }
+      }
+      hud.restore();
+      var edgeX = ob.side < 0 ? ob.x + ob.w : ob.x;
+      hud.save();
+      hud.strokeStyle = ob.solid ? (ob.kind === 'jade' ? '#86ffd3' : '#ffd766') : 'rgba(95,230,255,' + (0.5 + pulse * 0.5) + ')';
+      hud.lineWidth = ob.solid ? 7 : 4;
+      hud.shadowColor = hud.strokeStyle; hud.shadowBlur = ob.solid ? 18 : 30;
+      if (!ob.solid) hud.setLineDash([24, 18]);
+      hud.beginPath(); hud.moveTo(edgeX, ob.y); hud.lineTo(edgeX, ob.y + ob.h); hud.stroke();
+      hud.restore();
+    }
+  }
   function drawGold() {
     // §34d authored coin — PERF: one instanced quad per coin either way (same as the
     // procedural GOLD shard), resolved ONCE per frame not per coin. size ≈ procedural.
@@ -7212,6 +7379,7 @@
     roundRect(hud, W / 2 - sw / 2, 18, sw, 38, 12); hud.stroke();
     hud.fillStyle = G.aff.name ? UI_GOLD : UI_CYAN;
     hud.fillText(stxt, W / 2, 27);
+    drawDestinationTitle();
 
     drawGauge();
     drawSpecialMeter();
@@ -7221,6 +7389,24 @@
     drawGodTags();
     drawPopups();
     drawAnnounce();
+  }
+  function drawDestinationTitle() {
+    var b = G.bg;
+    if (!b || b.sceneTitleT <= 0) return;
+    var age = 3.2 - b.sceneTitleT;
+    var a = Math.min(1, age * 2.2, b.sceneTitleT * 1.2);
+    hud.save();
+    hud.globalAlpha = a;
+    hud.textAlign = 'center';
+    hud.font = '700 15px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    hud.letterSpacing = '4px';
+    hud.fillStyle = UI_CYAN;
+    hud.fillText('ENTERING', W / 2, 76);
+    hud.font = '800 25px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    hud.letterSpacing = '2px';
+    hud.fillStyle = UI_GOLD;
+    hud.fillText(DESTINATION_NAMES[b.sector][b.sceneIndex], W / 2, 101);
+    hud.restore();
   }
 
   // HUBRIS meter — the persistent multiplier + a thin stepped progress bar, sat

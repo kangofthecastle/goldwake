@@ -1052,20 +1052,41 @@
     var isChromium = /Chrome\/|Chromium\/|HeadlessChrome/.test(navigator.userAgent);
     var canProbe = !(location.protocol === 'file:' && isChromium);
     var sectors = ['s1', 's2', 's3'], layers = ['deep', 'structure', 'debris'];
+    function loadSlot(slot, fallbackSrc) {
+      var src = registry[slot] ? registry[slot] : (canProbe ? fallbackSrc : null);
+      if (!src) return;
+      var img = new Image();
+      img.onload = function () {
+        try { backdrops[slot] = { tex: makeImageTexture(img), ready: true, w: img.width, h: img.height }; }
+        catch (e) { /* tainted / bad image: procedural layer stays */ }
+      };
+      img.onerror = function () { /* no art for this slot */ };
+      img.src = src;
+    }
     for (var si = 0; si < sectors.length; si++) {
       for (var li = 0; li < layers.length; li++) {
-        (function (slot) {
-          var src = registry[slot] ? registry[slot]
-            : (canProbe ? 'art/backdrops/' + slot + '.png' : null);
-          if (!src) return;
-          var img = new Image();
-          img.onload = function () {
-            try { backdrops[slot] = { tex: makeImageTexture(img), ready: true, w: img.width, h: img.height }; }
-            catch (e) { /* tainted / bad image: procedural layer stays */ }
-          };
-          img.onerror = function () { /* no art for this slot */ };
-          img.src = src;
-        })(sectors[si] + '-' + layers[li]);
+        var layerSlot = sectors[si] + '-' + layers[li];
+        loadSlot(layerSlot, 'art/backdrops/' + layerSlot + '.png');
+      }
+    }
+    // Authored journey destinations: three actual places per sector, reached
+    // during the wave arc rather than reserved for the boss. These are static
+    // full-frame plates; game.js crossfades them while the existing structure
+    // and debris layers retain a restrained amount of parallax above them.
+    var destinations = {
+      's1-scene1': 'art/environments/s1-01-shattered-fleet.avif',
+      's1-scene2': 'art/environments/s1-02-flooded-colonnade.avif',
+      's1-scene3': 'art/environments/s1-03-talos-forge.avif',
+      's2-scene1': 'art/environments/s2-01-dead-reed-delta.avif',
+      's2-scene2': 'art/environments/s2-02-processional-kings.avif',
+      's2-scene3': 'art/environments/s2-03-hall-of-scales.avif',
+      's3-scene1': 'art/environments/s3-01-cloud-garden.avif',
+      's3-scene2': 'art/environments/s3-02-jade-causeway.avif',
+      's3-scene3': 'art/environments/s3-03-throne-terraces.avif'
+    };
+    for (var destinationSlot in destinations) {
+      if (Object.prototype.hasOwnProperty.call(destinations, destinationSlot)) {
+        loadSlot(destinationSlot, destinations[destinationSlot]);
       }
     }
   }
