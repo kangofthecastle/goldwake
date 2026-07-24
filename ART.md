@@ -256,8 +256,18 @@ edges, and keep the middle 50% nearly empty.
 - Backdrops must stay **near-black and low-contrast** so additive neon sings over
   them; they are scenery, not spectacle.
 - Foreground elements are used **sparingly** and never conceal enemies or bullets.
+- A physical foreground landmark constrains **player movement only**. It never
+  intercepts player fire, enemy fire, or boss fire, and its own scroll never
+  pushes or snaps the player; collision only rejects movement into its boundary.
 - Treat sacred imagery with **specificity** — borrow structure and symbolism from
   **one** chosen tradition (§4), never a magpie mix of "cool" symbols.
+
+**Environment style north star.** Aim for the graphic, hand-drawn mythic clarity
+of *33 Immortals* without copying its specific designs: flattened stage-like
+depth, bold silhouette shapes, restrained interior linework, and small pools of
+accent color against broad dark fields. Build each layer from a few large value
+masses that read instantly at playfield scale. Avoid cinematic matte-painting
+detail, glossy 3D materials, photoreal micro-texture, and volumetric clutter.
 
 ---
 

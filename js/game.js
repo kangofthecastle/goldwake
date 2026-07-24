@@ -174,7 +174,8 @@
       hitstopT: 0,   // micro-hitstop remaining (s of SIM frozen); see JUICE + update()
       player: {
         x: W / 2, y: H - 300, alive: true, invuln: 2.0, blink: 0,
-        fireT: 0, respawnT: 0, dead: false, drones: [], recoil: 0, hammerT: 0, volleyN: 0
+        fireT: 0, respawnT: 0, dead: false, drones: [], recoil: 0, hammerT: 0, volleyN: 0,
+        envPrevX: W / 2, envPrevY: H - 300
       },
       vaunt: { gauge: (opts.gaugePct || 0) * GAUGE_MAX, active: false, timer: 0, duration: VAUNT_DUR, killCount: 0, mercy: 0, ready: (opts.gaugePct || 0) >= 1 },
       // special weapon
@@ -390,11 +391,11 @@
       // at breather/boss) exactly like the procedural layers — not on wall-clock.
       scrollY: 0,
       role: 'opener', dimFactor: 1,
-      // Three authored places per sector. Later places emerge through a slow
-      // continuous dissolve at the existing travel speed—never a full-screen
-      // plate shove. Queues prevent rapid waves from skipping intermediate art.
-      sceneIndex: 0, sceneFrom: 0, sceneBlend: 1, sceneHold: 0, sceneQueue: [], sceneTitleT: 2.8,
-      landmark: null, landmarkIndex: -1, landmarkGap: 0, landmarkQueue: [],
+      // Route names mark progress through one coherent staged environment. The
+      // visual journey comes from deep/structure/debris choreography rather
+      // than stitched full-frame destination paintings (ART.md §8).
+      sceneIndex: 0, sceneTitleT: 2.8,
+      landmark: null, landmarkIndex: -1,
       obstacles: [],
       setpiece: { active: false, x: 0, y: 0, vy: 0, alpha: 0, parts: null },
       bossShadow: { active: false, y: 0, t: 0, alpha: 0 }
@@ -417,65 +418,37 @@
     var wi = Run && typeof Run.waveIdx === 'number' ? Run.waveIdx : 0;
     return Math.min(2, Math.floor((wi * 3) / Math.max(1, count)));
   }
-  function makeDestinationLandmark(sector, destination) {
-    // Every destination has a distinct foreground event. The middle event is
-    // the physical crossing; entrance/finale plates pass beneath the flight
-    // plane as large place markers without pretending every decoration is a wall.
+  function makeDestinationLandmark(sector) {
+    // One sparse physical crossing per sector. It is a foreground silhouette,
+    // not a replacement background, and leaves the middle half readable.
     var specs = [
-      [
-        { slot: 's1-landmark1', w: 1160, h: 773, speed: 126, kind: 'bronze', collides: false },
-        { slot: 's1-landmark2', w: 1160, h: 653, dy: 174, ch: 330, lw: 340, rw: 340, speed: 108, kind: 'bronze', collides: true },
-        { slot: 's1-landmark3', w: 1160, h: 653, speed: 138, kind: 'bronze', collides: false }
-      ],
-      [
-        { slot: 's2-landmark1', w: 1160, h: 773, speed: 118, kind: 'pylon', collides: false },
-        { slot: 's2-landmark2', w: 1160, h: 773, dy: 138, ch: 455, lw: 352, rw: 352, speed: 98, kind: 'pylon', collides: true },
-        { slot: 's2-landmark3', w: 1160, h: 773, speed: 132, kind: 'pylon', collides: false }
-      ],
-      [
-        { slot: 's3-landmark1', w: 1160, h: 704, speed: 130, kind: 'jade', collides: false },
-        { slot: 's3-landmark2', w: 1160, h: 653, dy: 52, ch: 530, lw: 350, rw: 350, speed: 114, kind: 'jade', collides: true },
-        { slot: 's3-landmark3', w: 1160, h: 773, speed: 142, kind: 'jade', collides: false }
-      ]
+      { slot: 's1-landmark', w: 1160, h: 653, dy: 174, ch: 330, lw: 340, rw: 340, speed: 108, kind: 'bronze' },
+      { slot: 's2-landmark', w: 1160, h: 773, dy: 138, ch: 455, lw: 352, rw: 352, speed: 98, kind: 'pylon' },
+      { slot: 's3-landmark', w: 1160, h: 653, dy: 52, ch: 530, lw: 350, rw: 350, speed: 114, kind: 'jade' }
     ];
-    var sectorSpecs = specs[sector] || specs[0];
-    var s = sectorSpecs[destination] || sectorSpecs[0];
+    var s = specs[sector] || specs[0];
     var landmark = {
       slot: s.slot, w: s.w, h: s.h, y: -s.h * 0.42, vy: s.speed,
-      kind: s.kind, collides: s.collides, telegraph: s.collides ? 2.15 : 0,
+      kind: s.kind, collides: true, telegraph: 2.15,
       solid: false
     };
-    landmark.obstacles = s.collides ? [
+    landmark.obstacles = [
       { x: 0, y: landmark.y + s.dy, dy: s.dy, w: s.lw, h: s.ch, side: -1, kind: s.kind, solid: false },
       { x: W - s.rw, y: landmark.y + s.dy, dy: s.dy, w: s.rw, h: s.ch, side: 1, kind: s.kind, solid: false }
-    ] : [];
+    ];
     return landmark;
-  }
-  function queued(list, idx) {
-    for (var i = 0; i < list.length; i++) if (list[i] === idx) return true;
-    return false;
-  }
-  function startSceneTransition(b, idx) {
-    b.sceneFrom = b.sceneIndex;
-    b.sceneIndex = idx;
-    b.sceneBlend = 0;
-    b.sceneTitleT = 3.2;
-  }
-  function startLandmark(b, idx) {
-    b.landmarkIndex = idx;
-    b.landmark = makeDestinationLandmark(b.sector, idx);
-    b.obstacles = b.landmark.obstacles;
   }
   function enterDestination(idx) {
     var b = G.bg;
     idx = Math.max(0, Math.min(2, idx | 0));
     if (idx !== b.sceneIndex) {
-      if (b.sceneBlend >= 1 && b.sceneHold <= 0) startSceneTransition(b, idx);
-      else if (!queued(b.sceneQueue, idx)) b.sceneQueue.push(idx);
+      b.sceneIndex = idx;
+      b.sceneTitleT = 3.2;
     }
-    if (idx !== b.landmarkIndex) {
-      if (!b.landmark && b.landmarkGap <= 0) startLandmark(b, idx);
-      else if (!queued(b.landmarkQueue, idx)) b.landmarkQueue.push(idx);
+    if (idx === 1 && b.landmarkIndex < 1 && !b.landmark) {
+      b.landmarkIndex = 1;
+      b.landmark = makeDestinationLandmark(b.sector);
+      b.obstacles = b.landmark.obstacles;
     }
   }
 
@@ -514,14 +487,6 @@
     b.structAlpha += (b.structTarget - b.structAlpha) * (b.role === 'opener' ? Math.min(1, dt * 0.7) : k);
     b.bright += (b.brightTarget - b.bright) * k;
     b.scrollMul += (b.scrollTarget - b.scrollMul) * k;
-    if (b.sceneBlend < 1) {
-      b.sceneBlend = Math.min(1, b.sceneBlend + dt * 0.09);
-      if (b.sceneBlend >= 1) b.sceneHold = 3.0;
-    } else if (b.sceneHold > 0) {
-      b.sceneHold = Math.max(0, b.sceneHold - dt);
-    } else if (b.sceneQueue.length) {
-      startSceneTransition(b, b.sceneQueue.shift());
-    }
     if (b.sceneTitleT > 0) b.sceneTitleT -= dt;
     // readability dim from live bullet count
     var target = bgDimFor(Engine.bullets.count());
@@ -576,12 +541,7 @@
       if (lm.y > H + 100) {
         b.landmark = null;
         b.obstacles = [];
-        b.landmarkGap = 1.8;
       }
-    }
-    if (!b.landmark) {
-      if (b.landmarkGap > 0) b.landmarkGap = Math.max(0, b.landmarkGap - dt);
-      else if (b.landmarkQueue.length) startLandmark(b, b.landmarkQueue.shift());
     }
   }
 
@@ -599,10 +559,7 @@
       scrollY: b.scrollY, bossArrived: !!(G.boss && G.boss.arrived), dimFactor: b.dimFactor,
       destinationIndex: b.sceneIndex,
       destination: DESTINATION_NAMES[b.sector][b.sceneIndex],
-      destinationBlend: b.sceneBlend,
-      destinationQueue: b.sceneQueue.slice(),
       landmarkIndex: b.landmarkIndex,
-      landmarkQueue: b.landmarkQueue.slice(),
       landmark: b.landmark ? { slot: b.landmark.slot, y: b.landmark.y, solid: b.landmark.solid, collides: b.landmark.collides } : null,
       obstacles: b.obstacles.map(function (o) { return { x: o.x, y: o.y, w: o.w, h: o.h, kind: o.kind, solid: o.solid }; }),
       structCol: b.env.structCol.slice(), starCol: b.env.star.slice(),
@@ -3077,6 +3034,9 @@
       return;
     }
     if (G.freeze.graceT > 0) G.freeze.graceT -= dt;
+    // Collision is resolved against the start-of-frame position. A landmark
+    // can reject the attempted move, but its own scroll never shoves the ship.
+    p.envPrevX = p.x; p.envPrevY = p.y;
     var mv = Engine.readMove();
     var focus = Engine.focusHeld();
     // Ghost dodge — tap-vs-hold discrimination, dash fires on RELEASE:
@@ -3117,6 +3077,7 @@
     var m = 40;
     if (p.x < m) p.x = m; if (p.x > W - m) p.x = W - m;
     if (p.y < m) p.y = m; if (p.y > H - m) p.y = H - m;
+    resolveEnvironmentPlayer();
     if (p.invuln > 0) p.invuln -= dt;
     p.blink += dt;
     // Ra replaces projectile fire with a continuous solar beam
@@ -3154,32 +3115,15 @@
     for (var i = 0; i < obs.length; i++) {
       var ob = obs[i];
       if (!ob.solid || !circleHitsRect(p.x, p.y, r, ob)) continue;
-      // Side architecture is attached to the field edge, so its inner face is
-      // the only escape plane. This keeps the collision deterministic even
-      // during a dash and never traps the player inside a corner.
-      p.x = ob.side < 0 ? ob.x + ob.w + r + 3 : ob.x - r - 3;
+      var px = p.envPrevX, py = p.envPrevY;
+      // If scrolling scenery reaches the ship, do not displace it. Only reject
+      // movement that crosses from a valid position into the solid boundary.
+      if (circleHitsRect(px, py, r, ob)) continue;
+      if (!circleHitsRect(px, p.y, r, ob)) p.x = px;
+      else if (!circleHitsRect(p.x, py, r, ob)) p.y = py;
+      else { p.x = px; p.y = py; }
       G.dash.active = 0;
     }
-  }
-  function resolveEnvironmentProjectiles() {
-    var obs = G.bg.obstacles;
-    if (!obs.length) return;
-    Engine.bullets.forEach(function (b) {
-      for (var i = 0; i < obs.length; i++) {
-        if (obs[i].solid && circleHitsRect(b.x, b.y, b.radius, obs[i])) {
-          Engine.bullets.release(b);
-          return;
-        }
-      }
-    });
-    Engine.shots.forEach(function (s) {
-      for (var i = 0; i < obs.length; i++) {
-        if (obs[i].solid && circleHitsRect(s.x, s.y, s.radius, obs[i])) {
-          Engine.shots.release(s);
-          return;
-        }
-      }
-    });
   }
   // JADE EMPEROR IMPERIAL EDICTS — the attack IS the fan: 5 homing scroll-talismans per
   // volley (~0.5 rad spread, ~0.28 focused). Each homes via the Jade block (kind 7) and
@@ -5886,14 +5830,12 @@
     updateHammers(dt);
     updateDebris(dt);
     updateClones(dt);
-    resolveEnvironmentPlayer();
     // THE GREAT HUNT ultimate slows only the FIELD (enemies + their bullets) to ~0.12;
     // the player + the ult clock above run at full dt, so you fly through frozen time.
     var edt = (G.ult.god === 'greathunt') ? dt * 0.12 : dt;
     updateEnemies(edt);
     updateHazards(dt);
     updateBullets(edt);
-    resolveEnvironmentProjectiles();
     updateGold(dt);
     updateParticles(dt);
     updateBolts(dt);            // shared lightning bolt renderer (flicker + re-strikes)
@@ -6429,27 +6371,13 @@
 
   function drawBackground() {
     var b = G.bg, i, dim = b.dimFactor, bright = b.bright;
-    var deepA = dim * Math.min(1.15, bright);         // deep field follows brightness + dim law
-    var structBase = dim * bright * b.structAlpha * 0.28; // destinations already carry major architecture
+    var deepA = dim * Math.min(1.08, bright) * 0.88;  // scenery stays below combat brightness
+    var structBase = dim * bright * b.structAlpha * 0.28;
     var sc = b.env.structCol, st = b.env.star;
-    var sceneSlot = b.env.slot + '-scene' + (b.sceneIndex + 1);
-    var fromSlot = b.env.slot + '-scene' + (b.sceneFrom + 1);
-    // DESTINATION GROUND — both plates keep the same normal travel motion while
-    // the next place emerges gradually. There is deliberately no moving join:
-    // a hard edge between unrelated paintings reads as a splice and turns the
-    // transition into an unwanted fast-forward.
-    if (GL.backdropReady(sceneSlot)) {
-      var sceneA = deepA * 0.96;
-      var sceneScroll = (-b.scrollY * 0.018) % 1;
-      if (b.sceneBlend < 1 && GL.backdropReady(fromSlot)) {
-        var ease = b.sceneBlend * b.sceneBlend * (3 - 2 * b.sceneBlend);
-        GL.drawBackdrop(fromSlot, W / 2, H / 2, W, H, 1.08, 1.08, 1.08, sceneA * Math.sqrt(1 - ease), sceneScroll, 0.74, 0.012);
-        GL.drawBackdrop(sceneSlot, W / 2, H / 2, W, H, 1.08, 1.08, 1.08, sceneA * Math.sqrt(ease), sceneScroll, 0.74, 0.012);
-      } else {
-        GL.drawBackdrop(sceneSlot, W / 2, H / 2, W, H, 1.08, 1.08, 1.08, sceneA, sceneScroll, 0.74, 0.012);
-      }
-    } else if (GL.backdropReady(b.env.slot + '-deep')) {
-      GL.drawBackdrop(b.env.slot + '-deep', W / 2, H / 2, W, H, 1, 1, 1, deepA, (b.scrollY * 0.006) % 1);
+    // ART.md §8 contract: one tileable deep field, with independently
+    // choreographed structure and debris. No full-frame destination postcards.
+    if (GL.backdropReady(b.env.slot + '-deep')) {
+      GL.drawBackdrop(b.env.slot + '-deep', W / 2, H / 2, W, H, 0.84, 0.88, 0.9, deepA, (b.scrollY * 0.006) % 1, 1.08, 0);
     } else {
       for (i = 0; i < b.nebula.length; i++) { var n = b.nebula[i]; GL.draw(GL.SPR.GLOW, n.x, n.y, n.r, n.r, 0, n.col[0], n.col[1], n.col[2], deepA); }
       for (i = 0; i < b.stars.length; i++) { var s = b.stars[i]; var tw = 0.7 + 0.3 * Math.sin(s.tw); GL.draw(GL.SPR.CORE, s.x, s.y, s.sz, s.sz, 0, st[0], st[1], st[2], s.a * tw * deepA); }
@@ -6476,7 +6404,7 @@
     if (sp.active && sp.parts) drawStructUnitAt(sp.x, sp.y, sp.parts, sc, structBase * 1.1 * sp.alpha);
     // NEAR-DEBRIS WEATHER — fast sparse motes/embers. Procedural flecks remain
     // over painted debris at low alpha so forward motion is always legible.
-    var dc = b.env.debrisCol, debA = deepA * 0.9;
+    var dc = b.env.debrisCol, debA = deepA * 0.58;
     var paintedDebris = GL.backdropReady(b.env.slot + '-debris');
     if (paintedDebris) {
       GL.drawBackdrop(b.env.slot + '-debris', W / 2, H / 2, W, H, 1, 1, 1, debA, (b.scrollY * 0.03) % 1);
@@ -6491,8 +6419,8 @@
     if (!lm || !GL.backdropReady(lm.slot)) return;
     // Important terrain retains enough presence under bullet-density dimming to
     // remain navigable; it still sits below every hazard, projectile and actor.
-    var alpha = (0.48 + b.dimFactor * 0.52) * Math.min(1, b.bright);
-    GL.drawBackdrop(lm.slot, W / 2, lm.y + lm.h / 2, lm.w, lm.h, 1, 1, 1, alpha, 0, 1, 0);
+    var alpha = (0.34 + b.dimFactor * 0.42) * Math.min(1, b.bright);
+    GL.drawBackdrop(lm.slot, W / 2, lm.y + lm.h / 2, lm.w, lm.h, 0.82, 0.86, 0.88, alpha, 0, 1.08, 0);
   }
   function drawStructUnitAt(ox, oy, parts, col, alpha) {
     for (var i = 0; i < parts.length; i++) {

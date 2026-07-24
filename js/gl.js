@@ -1071,38 +1071,12 @@
         loadSlot(layerSlot, 'art/backdrops/' + layerSlot + '.png');
       }
     }
-    // Authored journey destinations: three actual places per sector, reached
-    // during the wave arc rather than reserved for the boss. game.js advances
-    // them through the playfield as contiguous stretches of physical ground.
-    var destinations = {
-      's1-scene1': 'art/environments/s1-01-shattered-fleet.avif',
-      's1-scene2': 'art/environments/s1-02-flooded-colonnade.avif',
-      's1-scene3': 'art/environments/s1-03-talos-forge.avif',
-      's2-scene1': 'art/environments/s2-01-dead-reed-delta.avif',
-      's2-scene2': 'art/environments/s2-02-processional-kings.avif',
-      's2-scene3': 'art/environments/s2-03-hall-of-scales.avif',
-      's3-scene1': 'art/environments/s3-01-cloud-garden.avif',
-      's3-scene2': 'art/environments/s3-02-jade-causeway.avif',
-      's3-scene3': 'art/environments/s3-03-throne-terraces.avif'
-    };
-    for (var destinationSlot in destinations) {
-      if (Object.prototype.hasOwnProperty.call(destinations, destinationSlot)) {
-        loadSlot(destinationSlot, destinations[destinationSlot]);
-      }
-    }
-    // Three foreground journey events per sector: an entrance landmark, a
-    // middle crossing, and a late destination threshold. Selected plates carry
-    // matching collision geometry in game.js; all nine physically scroll by.
+    // One sparse physical crossing per sector. The continuous environment is
+    // carried by deep/structure/debris above; foreground art stays exceptional.
     var landmarks = {
-      's1-landmark1': 'art/landmarks/s1-fleet-wreckage.webp',
-      's1-landmark2': 'art/landmarks/s1-bronze-crossing.webp',
-      's1-landmark3': 'art/landmarks/s1-forge-threshold.webp',
-      's2-landmark1': 'art/landmarks/s2-dead-reed-harbor.webp',
-      's2-landmark2': 'art/landmarks/s2-funerary-crossing.webp',
-      's2-landmark3': 'art/landmarks/s2-hall-of-scales.webp',
-      's3-landmark1': 'art/landmarks/s3-cloud-garden.webp',
-      's3-landmark2': 'art/landmarks/s3-jade-crossing.webp',
-      's3-landmark3': 'art/landmarks/s3-throne-terraces.webp'
+      's1-landmark': 'art/landmarks/s1-bronze-crossing.webp',
+      's2-landmark': 'art/landmarks/s2-funerary-crossing.webp',
+      's3-landmark': 'art/landmarks/s3-jade-crossing.webp'
     };
     for (var landmarkSlot in landmarks) {
       if (Object.prototype.hasOwnProperty.call(landmarks, landmarkSlot)) {
