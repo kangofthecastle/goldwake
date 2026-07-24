@@ -390,10 +390,11 @@
       // at breather/boss) exactly like the procedural layers — not on wall-clock.
       scrollY: 0,
       role: 'opener', dimFactor: 1,
-      // Three authored places per sector. The opening plate is already present
-      // on sector entry; later places physically travel down into the field.
-      sceneIndex: 0, sceneFrom: 0, sceneBlend: 1, sceneTitleT: 2.8,
-      landmark: null, landmarkIndex: -1,
+      // Three authored places per sector. Later places emerge through a slow
+      // continuous dissolve at the existing travel speed—never a full-screen
+      // plate shove. Queues prevent rapid waves from skipping intermediate art.
+      sceneIndex: 0, sceneFrom: 0, sceneBlend: 1, sceneHold: 0, sceneQueue: [], sceneTitleT: 2.8,
+      landmark: null, landmarkIndex: -1, landmarkGap: 0, landmarkQueue: [],
       obstacles: [],
       setpiece: { active: false, x: 0, y: 0, vy: 0, alpha: 0, parts: null },
       bossShadow: { active: false, y: 0, t: 0, alpha: 0 }
@@ -442,7 +443,7 @@
     var landmark = {
       slot: s.slot, w: s.w, h: s.h, y: -s.h * 0.42, vy: s.speed,
       kind: s.kind, collides: s.collides, telegraph: s.collides ? 2.15 : 0,
-      solid: false, exit: false
+      solid: false
     };
     landmark.obstacles = s.collides ? [
       { x: 0, y: landmark.y + s.dy, dy: s.dy, w: s.lw, h: s.ch, side: -1, kind: s.kind, solid: false },
@@ -450,19 +451,31 @@
     ] : [];
     return landmark;
   }
+  function queued(list, idx) {
+    for (var i = 0; i < list.length; i++) if (list[i] === idx) return true;
+    return false;
+  }
+  function startSceneTransition(b, idx) {
+    b.sceneFrom = b.sceneIndex;
+    b.sceneIndex = idx;
+    b.sceneBlend = 0;
+    b.sceneTitleT = 3.2;
+  }
+  function startLandmark(b, idx) {
+    b.landmarkIndex = idx;
+    b.landmark = makeDestinationLandmark(b.sector, idx);
+    b.obstacles = b.landmark.obstacles;
+  }
   function enterDestination(idx) {
     var b = G.bg;
     idx = Math.max(0, Math.min(2, idx | 0));
     if (idx !== b.sceneIndex) {
-      b.sceneFrom = b.sceneIndex;
-      b.sceneIndex = idx;
-      b.sceneBlend = 0;
-      b.sceneTitleT = 3.2;
+      if (b.sceneBlend >= 1 && b.sceneHold <= 0) startSceneTransition(b, idx);
+      else if (!queued(b.sceneQueue, idx)) b.sceneQueue.push(idx);
     }
     if (idx !== b.landmarkIndex) {
-      b.landmarkIndex = idx;
-      b.landmark = makeDestinationLandmark(b.sector, idx);
-      b.obstacles = b.landmark.obstacles;
+      if (!b.landmark && b.landmarkGap <= 0) startLandmark(b, idx);
+      else if (!queued(b.landmarkQueue, idx)) b.landmarkQueue.push(idx);
     }
   }
 
@@ -477,8 +490,8 @@
     else if (role === 'build') { b.brightTarget = 1.0; b.scrollTarget = 1.0; }
     else if (role === 'feature') { b.brightTarget = 0.92; b.scrollTarget = 1.0; triggerSetpiece(); }
     else if (role === 'breather') { b.brightTarget = 1.28; b.scrollTarget = 0.65; }        // brightest, calmest
-    else if (role === 'crescendo') { b.brightTarget = 0.68; b.scrollTarget = 1.7; }         // darken + accelerate
-    else if (role === 'boss') { b.brightTarget = 0.16; b.scrollTarget = 1.3; triggerBossShadow(); }  // dim to near-black; boss arrives FROM the environment
+    else if (role === 'crescendo') { b.brightTarget = 0.68; b.scrollTarget = 1.15; }        // visual intensity rises without fast-forwarding the world
+    else if (role === 'boss') { b.brightTarget = 0.16; b.scrollTarget = 0.8; triggerBossShadow(); }  // dim to near-black; boss arrives FROM the environment
   }
   function triggerSetpiece() {
     var b = G.bg, sp = b.setpiece;
@@ -501,7 +514,14 @@
     b.structAlpha += (b.structTarget - b.structAlpha) * (b.role === 'opener' ? Math.min(1, dt * 0.7) : k);
     b.bright += (b.brightTarget - b.bright) * k;
     b.scrollMul += (b.scrollTarget - b.scrollMul) * k;
-    if (b.sceneBlend < 1) b.sceneBlend = Math.min(1, b.sceneBlend + dt * 0.32);
+    if (b.sceneBlend < 1) {
+      b.sceneBlend = Math.min(1, b.sceneBlend + dt * 0.09);
+      if (b.sceneBlend >= 1) b.sceneHold = 3.0;
+    } else if (b.sceneHold > 0) {
+      b.sceneHold = Math.max(0, b.sceneHold - dt);
+    } else if (b.sceneQueue.length) {
+      startSceneTransition(b, b.sceneQueue.shift());
+    }
     if (b.sceneTitleT > 0) b.sceneTitleT -= dt;
     // readability dim from live bullet count
     var target = bgDimFor(Engine.bullets.count());
@@ -544,7 +564,7 @@
     }
     var lm = b.landmark;
     if (lm) {
-      lm.y += (lm.exit ? 360 : lm.vy * sm) * dt;
+      lm.y += lm.vy * sm * dt;
       if (lm.collides && lm.telegraph > 0) {
         lm.telegraph -= dt;
         if (lm.telegraph <= 0) { lm.telegraph = 0; lm.solid = true; }
@@ -556,7 +576,12 @@
       if (lm.y > H + 100) {
         b.landmark = null;
         b.obstacles = [];
+        b.landmarkGap = 1.8;
       }
+    }
+    if (!b.landmark) {
+      if (b.landmarkGap > 0) b.landmarkGap = Math.max(0, b.landmarkGap - dt);
+      else if (b.landmarkQueue.length) startLandmark(b, b.landmarkQueue.shift());
     }
   }
 
@@ -575,8 +600,10 @@
       destinationIndex: b.sceneIndex,
       destination: DESTINATION_NAMES[b.sector][b.sceneIndex],
       destinationBlend: b.sceneBlend,
+      destinationQueue: b.sceneQueue.slice(),
       landmarkIndex: b.landmarkIndex,
-      landmark: b.landmark ? { slot: b.landmark.slot, y: b.landmark.y, solid: b.landmark.solid, collides: b.landmark.collides, exit: b.landmark.exit } : null,
+      landmarkQueue: b.landmarkQueue.slice(),
+      landmark: b.landmark ? { slot: b.landmark.slot, y: b.landmark.y, solid: b.landmark.solid, collides: b.landmark.collides } : null,
       obstacles: b.obstacles.map(function (o) { return { x: o.x, y: o.y, w: o.w, h: o.h, kind: o.kind, solid: o.solid }; }),
       structCol: b.env.structCol.slice(), starCol: b.env.star.slice(),
       units: b.units.length, setpiece: b.setpiece.active, bossShadow: b.bossShadow.active, bossShadowY: b.bossShadow.y,
@@ -6407,16 +6434,17 @@
     var sc = b.env.structCol, st = b.env.star;
     var sceneSlot = b.env.slot + '-scene' + (b.sceneIndex + 1);
     var fromSlot = b.env.slot + '-scene' + (b.sceneFrom + 1);
-    // DESTINATION GROUND — the outgoing place travels below the player as the
-    // next place enters from the top. This reads as forward flight through one
-    // world instead of a slideshow dissolve.
+    // DESTINATION GROUND — both plates keep the same normal travel motion while
+    // the next place emerges gradually. There is deliberately no moving join:
+    // a hard edge between unrelated paintings reads as a splice and turns the
+    // transition into an unwanted fast-forward.
     if (GL.backdropReady(sceneSlot)) {
       var sceneA = deepA * 0.96;
       var sceneScroll = (-b.scrollY * 0.018) % 1;
       if (b.sceneBlend < 1 && GL.backdropReady(fromSlot)) {
         var ease = b.sceneBlend * b.sceneBlend * (3 - 2 * b.sceneBlend);
-        GL.drawBackdrop(fromSlot, W / 2, H / 2 + H * ease, W, H, 1.08, 1.08, 1.08, sceneA, sceneScroll, 0.74, 0.012);
-        GL.drawBackdrop(sceneSlot, W / 2, -H / 2 + H * ease, W, H, 1.08, 1.08, 1.08, sceneA, sceneScroll, 0.74, 0.012);
+        GL.drawBackdrop(fromSlot, W / 2, H / 2, W, H, 1.08, 1.08, 1.08, sceneA * Math.sqrt(1 - ease), sceneScroll, 0.74, 0.012);
+        GL.drawBackdrop(sceneSlot, W / 2, H / 2, W, H, 1.08, 1.08, 1.08, sceneA * Math.sqrt(ease), sceneScroll, 0.74, 0.012);
       } else {
         GL.drawBackdrop(sceneSlot, W / 2, H / 2, W, H, 1.08, 1.08, 1.08, sceneA, sceneScroll, 0.74, 0.012);
       }
