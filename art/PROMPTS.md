@@ -713,12 +713,13 @@ black #000000, no text or lettering, no busy particle noise, no watermark.
 ## Section 5 — Runtime destination plates (3 sectors × 3 places)
 
 These are sequential full-field environments. The renderer loads them as
-`sN-scene1`, `sN-scene2`, and `sN-scene3` and performs a long full-frame
-dissolve while travel continues at normal speed. They do **not** need to tile.
-Their job is Jamestown-like geographic pacing: each destination is clearly new,
-but the bottom of one plausibly leads toward the top of the next.
-Runtime clamps rather than wraps each plate, overscales it slightly, and pans
-from the lower approach to the upper arrival, so crop-safe side detail matters.
+`sN-scene1`, `sN-scene2`, and `sN-scene3`, overlaps their ends, and moves the
+whole physical strip through the viewport at one capped world speed. They do
+**not** tile or dissolve as static screens. Their job is Jamestown-like
+geographic pacing: each destination is clearly new, but the bottom of one
+plausibly leads toward the top of the next. Runtime clamps rather than wraps
+each plate, so crop-safe side detail and compatible approach/arrival edges
+matter.
 
 **Shared contract (treat as part of every prompt):**
 
@@ -727,20 +728,30 @@ Use case: stylized-concept
 Asset type: production environment plate for a vertical-scrolling bullet-hell
 game. Deliver exactly one opaque AVIF, 9:16 portrait, 1080x1920.
 Style/medium: hand-drawn graphic mythic game illustration; flattened stage-like
-depth; bold warm-dark contours; broad confident color planes; restrained
-interior linework; 4-6 large value masses; premium animated action-game
-readability, not cinematic concept art.
+depth; slightly warped silhouettes; clean matte color planes; warm near-black
+outer contours roughly 3x heavier than interior lines; selective thin gilded
+accents; a clear hierarchy of major silhouettes. Add detail only where it names
+an object or action: oars and wakes, structural seams, chips, grouped reeds,
+banner folds, inlays, or broad ripples. This is authored 2D game art, not
+minimal vector art, an isometric diorama, or cinematic concept art.
 Composition: high-oblique/top-down scrolling-shooter camera; a continuous
 traversable route from bottom to top; center 48% calm and navigable but visibly
 made from colored water, paving, earth or cloud, never an empty black void;
 structural weight and landmarks stay primarily at the side edges; no horizon;
-generous crop-safe side margins.
+generous crop-safe side margins. The central route is one broad uninterrupted
+material plane with only a handful of low-contrast current, fissure or inlay
+marks. Concentrate richer linework and ornament into 3-5 framed edge clusters
+and let that density fall away before the combat lane.
 Color/readability: use real sector color and readable mid-values. Background
 cores stay below player/enemy projectile brightness, but never reduce the world
 to shades of black. The route must read in one second behind combat.
 Constraints: no player ship, enemies, boss, bullets, UI, text, logos or
-watermark; no seam or triptych; no photorealism; no glossy 3D; no micro-detail
-carpet; no dense particles or volumetric clutter.
+watermark; no seam or triptych; no photorealism; no glossy 3D; no clean vector
+geometry; no pseudo-3D isometric-diorama rendering; no micro-detail carpet; no
+stone-by-stone, brick-by-brick, plank-by-plank, reed-by-reed, roof-tile-by-tile,
+or repeated-machine-part rendering; no global grain, all-over mottling,
+full-surface scratches, uncontrolled filigree, tiny props, dense particles or
+volumetric clutter. Never add texture merely because a surface is empty.
 ```
 
 ### 26. SECTOR 1 — THE BRONZE COAST / TALOS

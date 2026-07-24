@@ -381,16 +381,16 @@
       sector: sector, env: env, stars: stars, nebula: nebula, units: units, debris: debris,
       // choreography state (eased toward targets)
       structAlpha: 0, structTarget: 1, bright: 1, brightTarget: 1, scrollMul: 1, scrollTarget: 1,
-      // journey odometer: accumulates at the arc-modulated scroll speed so the
-      // PAINTED layers travel with the wave arc (accelerate at crescendo, settle
-      // at breather/boss) exactly like the procedural layers — not on wall-clock.
+      // Legacy parallax odometer. The authored destination strip has its own
+      // fixed physical pace so wave choreography can never fast-forward it.
       scrollY: 0,
       role: 'opener', dimFactor: 1,
-      // Three authored destinations per sector. Later places emerge through a
-      // slow continuous dissolve at normal travel speed; queues prevent rapid
-      // waves from skipping intermediate art.
-      sceneIndex: 0, sceneFrom: 0, sceneBlend: 1, sceneHold: 0, sceneQueue: [],
-      sceneTravel: 0, sceneFromTravel: 0, sceneTitleT: 2.8,
+      // The three authored plates form one physical vertical route. Adjacent
+      // plates overlap; routeY advances the entire strip downward at a capped,
+      // constant speed. Wave progress only unlocks more route to travel.
+      sceneIndex: 0, sceneGoal: 0, sceneTitleT: 2.8,
+      sceneSpan: H * 0.88, scenePlateH: H * 1.18,
+      routeY: 0, routeTarget: H * 0.39, routeSpeed: 58,
       landmark: null, landmarkIndex: -1,
       obstacles: [],
       setpiece: { active: false, x: 0, y: 0, vy: 0, alpha: 0, parts: null },
@@ -418,41 +418,32 @@
     // One sparse physical crossing per sector. It is a foreground silhouette,
     // not a replacement background, and leaves the middle half readable.
     var specs = [
-      { slot: 's1-landmark', w: 1160, h: 653, dy: 174, ch: 330, lw: 340, rw: 340, speed: 108, kind: 'bronze' },
-      { slot: 's2-landmark', w: 1160, h: 773, dy: 138, ch: 455, lw: 352, rw: 352, speed: 98, kind: 'pylon' },
-      { slot: 's3-landmark', w: 1160, h: 653, dy: 52, ch: 530, lw: 350, rw: 350, speed: 114, kind: 'jade' }
+      { slot: 's1-landmark', w: 1160, h: 653, dy: 174, ch: 330, lw: 425, rw: 425, speed: 108, kind: 'bronze' },
+      { slot: 's2-landmark', w: 1160, h: 773, dy: 138, ch: 455, lw: 425, rw: 425, speed: 98, kind: 'pylon' },
+      { slot: 's3-landmark', w: 1160, h: 653, dy: 52, ch: 530, lw: 425, rw: 425, speed: 114, kind: 'jade' }
     ];
     var s = specs[sector] || specs[0];
     var landmark = {
       slot: s.slot, w: s.w, h: s.h, y: -s.h * 0.42, vy: s.speed,
       kind: s.kind, collides: true, telegraph: 2.15,
-      solid: false
+      // The cyan arrival treatment is presentation, not a grace period.
+      // Terrain is a player boundary from the first visible frame.
+      solid: true
     };
     landmark.obstacles = [
-      { x: 0, y: landmark.y + s.dy, dy: s.dy, w: s.lw, h: s.ch, side: -1, kind: s.kind, solid: false },
-      { x: W - s.rw, y: landmark.y + s.dy, dy: s.dy, w: s.rw, h: s.ch, side: 1, kind: s.kind, solid: false }
+      { x: 0, y: landmark.y + s.dy, dy: s.dy, w: s.lw, h: s.ch, side: -1, kind: s.kind, solid: true, telegraph: true },
+      { x: W - s.rw, y: landmark.y + s.dy, dy: s.dy, w: s.rw, h: s.ch, side: 1, kind: s.kind, solid: true, telegraph: true }
     ];
     return landmark;
-  }
-  function queued(list, idx) {
-    for (var i = 0; i < list.length; i++) if (list[i] === idx) return true;
-    return false;
-  }
-  function startSceneTransition(b, idx) {
-    b.sceneFrom = b.sceneIndex;
-    b.sceneFromTravel = b.sceneTravel;
-    b.sceneIndex = idx;
-    b.sceneBlend = 0;
-    b.sceneTravel = 0;
-    b.sceneTitleT = 3.2;
   }
   function enterDestination(idx) {
     var b = G.bg;
     idx = Math.max(0, Math.min(2, idx | 0));
-    if (idx !== b.sceneIndex) {
-      if (b.sceneBlend >= 1 && b.sceneHold <= 0) startSceneTransition(b, idx);
-      else if (!queued(b.sceneQueue, idx)) b.sceneQueue.push(idx);
-    }
+    b.sceneGoal = Math.max(b.sceneGoal, idx);
+    // Stop just before the next destination's midpoint until the level earns
+    // it. Unlocking never changes routeSpeed, so pacing stays physical.
+    var stops = [0.44, 1.44, 2.0];
+    b.routeTarget = Math.max(b.routeTarget, b.sceneSpan * stops[b.sceneGoal]);
     if (idx === 1 && b.landmarkIndex < 1 && !b.landmark) {
       b.landmarkIndex = 1;
       b.landmark = makeDestinationLandmark(b.sector);
@@ -495,24 +486,22 @@
     b.structAlpha += (b.structTarget - b.structAlpha) * (b.role === 'opener' ? Math.min(1, dt * 0.7) : k);
     b.bright += (b.brightTarget - b.bright) * k;
     b.scrollMul += (b.scrollTarget - b.scrollMul) * k;
-    if (b.sceneBlend < 1) {
-      b.sceneBlend = Math.min(1, b.sceneBlend + dt * 0.09);
-      if (b.sceneBlend >= 1) b.sceneHold = 3.0;
-    } else if (b.sceneHold > 0) {
-      b.sceneHold = Math.max(0, b.sceneHold - dt);
-    } else if (b.sceneQueue.length) {
-      startSceneTransition(b, b.sceneQueue.shift());
-    }
     if (b.sceneTitleT > 0) b.sceneTitleT -= dt;
     // readability dim from live bullet count
     var target = bgDimFor(Engine.bullets.count());
     b.dimFactor += (target - b.dimFactor) * Math.min(1, dt * 4);
     var sm = b.scrollMul;
-    // Advance the journey odometer at the arc-modulated speed. At sm=1 it
-    // tracks seconds, so authored destination travel never fast-forwards.
     b.scrollY += sm * dt;
-    b.sceneTravel += sm * dt;
-    if (b.sceneBlend < 1) b.sceneFromTravel += sm * dt;
+    // Move through the authored route in world space. This speed is deliberately
+    // independent of crescendo/breather scroll multipliers.
+    if (b.routeY < b.routeTarget) {
+      b.routeY = Math.min(b.routeTarget, b.routeY + b.routeSpeed * dt);
+    }
+    var routeScene = Math.max(0, Math.min(b.sceneGoal, Math.floor((b.routeY + b.sceneSpan * 0.5) / b.sceneSpan)));
+    if (routeScene !== b.sceneIndex) {
+      b.sceneIndex = routeScene;
+      b.sceneTitleT = 3.2;
+    }
     for (i = 0; i < b.stars.length; i++) {
       var s = b.stars[i];
       s.y += s.sp * sm * dt; s.tw += dt * 3;
@@ -549,12 +538,12 @@
     if (lm) {
       lm.y += lm.vy * sm * dt;
       if (lm.collides && lm.telegraph > 0) {
-        lm.telegraph -= dt;
-        if (lm.telegraph <= 0) { lm.telegraph = 0; lm.solid = true; }
+        lm.telegraph = Math.max(0, lm.telegraph - dt);
       }
       for (i = 0; i < lm.obstacles.length; i++) {
         lm.obstacles[i].y = lm.y + lm.obstacles[i].dy;
-        lm.obstacles[i].solid = lm.solid;
+        lm.obstacles[i].solid = true;
+        lm.obstacles[i].telegraph = lm.telegraph > 0;
       }
       if (lm.y > H + 100) {
         b.landmark = null;
@@ -577,9 +566,9 @@
       scrollY: b.scrollY, bossArrived: !!(G.boss && G.boss.arrived), dimFactor: b.dimFactor,
       destinationIndex: b.sceneIndex,
       destination: DESTINATION_NAMES[b.sector][b.sceneIndex],
-      destinationBlend: b.sceneBlend,
-      destinationQueue: b.sceneQueue.slice(),
-      destinationTravel: b.sceneTravel,
+      destinationGoal: b.sceneGoal,
+      destinationTravel: b.routeY,
+      destinationTarget: b.routeTarget,
       landmarkIndex: b.landmarkIndex,
       landmark: b.landmark ? { slot: b.landmark.slot, y: b.landmark.y, solid: b.landmark.solid, collides: b.landmark.collides } : null,
       obstacles: b.obstacles.map(function (o) { return { x: o.x, y: o.y, w: o.w, h: o.h, kind: o.kind, solid: o.solid }; }),
@@ -3129,21 +3118,37 @@
   function circleHitsRect(x, y, r, ob) {
     return x + r > ob.x && x - r < ob.x + ob.w && y + r > ob.y && y - r < ob.y + ob.h;
   }
+  function circleRectPenetration(x, y, r, ob) {
+    var nx = Math.max(ob.x, Math.min(x, ob.x + ob.w));
+    var ny = Math.max(ob.y, Math.min(y, ob.y + ob.h));
+    var dx = x - nx, dy = y - ny;
+    var d2 = dx * dx + dy * dy;
+    if (d2 > 0) return d2 < r * r ? r - Math.sqrt(d2) : 0;
+    // Center is inside (or exactly on) the rectangle: include the distance to
+    // its nearest face so penetration decreases monotonically toward escape.
+    return r + Math.max(0, Math.min(
+      x - ob.x, ob.x + ob.w - x,
+      y - ob.y, ob.y + ob.h - y
+    ));
+  }
   function resolveEnvironmentPlayer() {
     var p = G.player, obs = G.bg.obstacles;
     if (!p.alive || !obs.length) return;
     var r = PLAYER_R * (G.up.hitboxMul || 1);
     for (var i = 0; i < obs.length; i++) {
       var ob = obs[i];
-      if (!ob.solid || !circleHitsRect(p.x, p.y, r, ob)) continue;
+      if (!ob.solid) continue;
       var px = p.envPrevX, py = p.envPrevY;
-      // If scrolling scenery reaches the ship, do not displace it. Only reject
-      // movement that crosses from a valid position into the solid boundary.
-      if (circleHitsRect(px, py, r, ob)) continue;
-      if (!circleHitsRect(px, p.y, r, ob)) p.x = px;
-      else if (!circleHitsRect(p.x, py, r, ob)) p.y = py;
-      else { p.x = px; p.y = py; }
-      G.dash.active = 0;
+      var nextPen = circleRectPenetration(p.x, p.y, r, ob);
+      if (nextPen <= 0) continue;
+      var prevPen = circleRectPenetration(px, py, r, ob);
+      // From outside, reject entry from every direction. If the scrolling
+      // landmark has already reached the ship, allow only moves that strictly
+      // reduce overlap; this provides escape without a shove or center snap.
+      if (prevPen <= 0 || nextPen >= prevPen - 0.01) {
+        p.x = px; p.y = py;
+        G.dash.active = 0;
+      }
     }
   }
   // JADE EMPEROR IMPERIAL EDICTS — the attack IS the fan: 5 homing scroll-talismans per
@@ -6394,32 +6399,25 @@
     var b = G.bg, i, dim = b.dimFactor, bright = b.bright;
     var deepA = dim * Math.min(1.15, bright);
     var sc = b.env.structCol, st = b.env.star;
-    var sceneSlot = b.env.slot + '-scene' + (b.sceneIndex + 1);
-    var fromSlot = b.env.slot + '-scene' + (b.sceneFrom + 1);
-    var hasScene = GL.backdropReady(sceneSlot);
+    var hasScene = GL.backdropReady(b.env.slot + '-scene1');
     // The legacy parallax textures are fallback/support only. When authored
     // destination art is present, keep procedural staging but do not repaint
     // the place with the old structure layer.
     var structBase = dim * bright * b.structAlpha * (hasScene ? 0.08 : 0.28);
-    // Authored destination ground advances at one steady travel speed. Places
-    // change through a long full-frame dissolve, never a moving seam or a
-    // fast-forward shove. The art itself carries the geographic progression.
+    // Three overlapping paintings form one continuously moving physical strip.
+    // Their broad feathered joins travel through the frame with the geography;
+    // there is no full-frame dissolve, crop-pan, jump, or speed change.
     if (hasScene) {
       var sceneA = deepA * 0.9;
-      // Overscan each non-tileable destination and pan from its lower approach
-      // toward its upper arrival. This produces physical travel without ever
-      // wrapping the painting or exposing a stitched edge.
-      var sceneScale = 1.18;
-      var sceneProgress = Math.min(1, b.sceneTravel / 42);
-      var sceneY = H / 2 - H * 0.09 + H * 0.18 * sceneProgress;
-      if (b.sceneBlend < 1 && GL.backdropReady(fromSlot)) {
-        var ease = b.sceneBlend * b.sceneBlend * (3 - 2 * b.sceneBlend);
-        var fromProgress = Math.min(1, b.sceneFromTravel / 42);
-        var fromY = H / 2 - H * 0.09 + H * 0.18 * fromProgress;
-        GL.drawBackdrop(fromSlot, W / 2, fromY, W * sceneScale, H * sceneScale, 0.78, 0.8, 0.82, sceneA * Math.sqrt(1 - ease), 0, 1.08, 0, false);
-        GL.drawBackdrop(sceneSlot, W / 2, sceneY, W * sceneScale, H * sceneScale, 0.78, 0.8, 0.82, sceneA * Math.sqrt(ease), 0, 1.08, 0, false);
-      } else {
-        GL.drawBackdrop(sceneSlot, W / 2, sceneY, W * sceneScale, H * sceneScale, 0.78, 0.8, 0.82, sceneA, 0, 1.08, 0, false);
+      var plateH = b.scenePlateH, plateW = W * (plateH / H);
+      for (i = 0; i < 3; i++) {
+        var sceneSlot = b.env.slot + '-scene' + (i + 1);
+        if (!GL.backdropReady(sceneSlot)) continue;
+        var sceneY = H / 2 + b.routeY - i * b.sceneSpan;
+        if (sceneY + plateH / 2 < 0 || sceneY - plateH / 2 > H) continue;
+        GL.drawBackdrop(sceneSlot, W / 2, sceneY, plateW, plateH,
+          0.78, 0.8, 0.82, sceneA, 0, 1.08, 0, false,
+          i > 0 ? 0.26 : 0, i < 2 ? 0.26 : 0);
       }
     } else if (GL.backdropReady(b.env.slot + '-deep')) {
       GL.drawBackdrop(b.env.slot + '-deep', W / 2, H / 2, W, H, 1, 1, 1, deepA, (b.scrollY * 0.006) % 1);
@@ -6480,32 +6478,28 @@
     var b = G.bg, obs = b.obstacles;
     if (!obs.length) return;
     for (var i = 0; i < obs.length; i++) {
-      var ob = obs[i], pulse = 0.5 + 0.5 * Math.sin(G.time * 11 + i * 2.1);
+      var ob = obs[i];
       var edgeX = ob.side < 0 ? ob.x + ob.w : ob.x;
+      var zoneTop = Math.max(0, ob.y), zoneBottom = Math.min(H, ob.y + ob.h);
+      if (zoneBottom <= zoneTop) continue;
       hud.save();
-      if (!ob.solid) {
-        hud.fillStyle = 'rgba(95,230,255,' + (0.025 + pulse * 0.035) + ')';
-        hud.fillRect(ob.x, ob.y, ob.w, ob.h);
-      }
-      hud.strokeStyle = ob.solid
-        ? (ob.kind === 'jade' ? 'rgba(134,255,211,0.36)' : 'rgba(255,215,102,0.34)')
-        : 'rgba(95,230,255,' + (0.58 + pulse * 0.34) + ')';
-      hud.lineWidth = ob.solid ? 3 : 4;
+      // This is the collision contract made visible: the complete rectangle
+      // used by physics, plus sparse chevrons pointing into solid terrain.
+      hud.fillStyle = 'rgba(255,90,110,0.075)';
+      hud.fillRect(ob.x, zoneTop, ob.w, zoneBottom - zoneTop);
+      hud.strokeStyle = ob.kind === 'jade' ? 'rgba(134,255,211,0.78)' : 'rgba(255,215,102,0.78)';
+      hud.lineWidth = 4;
       hud.shadowColor = hud.strokeStyle;
-      hud.shadowBlur = ob.solid ? 9 : 28;
-      if (!ob.solid) hud.setLineDash([22, 17]);
-      hud.beginPath(); hud.moveTo(edgeX, ob.y); hud.lineTo(edgeX, ob.y + ob.h); hud.stroke();
-      // Sparse inward chevrons mark the safe channel without repainting the
-      // authored landmark with opaque rectangles.
-      if (!ob.solid) {
-        hud.setLineDash([]);
-        for (var yy = ob.y + 48; yy < ob.y + ob.h; yy += 86) {
-          hud.beginPath();
-          hud.moveTo(edgeX, yy);
-          hud.lineTo(edgeX + ob.side * 20, yy + 16);
-          hud.lineTo(edgeX, yy + 32);
-          hud.stroke();
-        }
+      hud.shadowBlur = 12;
+      hud.setLineDash([20, 14]);
+      hud.strokeRect(ob.x, zoneTop, ob.w, zoneBottom - zoneTop);
+      hud.setLineDash([]);
+      for (var yy = zoneTop + 42; yy < zoneBottom - 20; yy += 96) {
+        hud.beginPath();
+        hud.moveTo(edgeX, yy);
+        hud.lineTo(edgeX + ob.side * 24, yy + 17);
+        hud.lineTo(edgeX, yy + 34);
+        hud.stroke();
       }
       hud.restore();
     }

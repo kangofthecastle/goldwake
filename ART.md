@@ -222,11 +222,11 @@ fallback and atmospheric support, but it must never replace destination art.
 Use *Jamestown* as the pacing model: the camera advances at a steady physical
 speed while the route itself supplies novelty. A new place is earned through
 travel and staging, never announced by accelerating or shoving the whole world.
-At runtime adjacent plates overlap in a long full-frame dissolve; there is no
-horizontal seam, wipe, jump cut, or fast-forward between them.
-Each plate is clamped rather than tiled, drawn with modest overscan, and slowly
-panned from its lower approach toward its upper arrival. Never re-enable UV
-wrapping for destination art.
+At runtime the three plates are laid into one physical vertical strip with broad
+feathered overlaps. The whole strip advances through the viewport at one capped
+world speed; wave progress only unlocks more route. There is no full-frame
+dissolve, crop-pan, wipe, jump cut, or fast-forward between places. Plates are
+clamped rather than tiled. Never re-enable UV wrapping for destination art.
 
 Each sector has a legible route:
 
@@ -258,15 +258,28 @@ papyrus ochre, and other sector-specific mids so the player knows where they are
 at a glance. The middle 45–50% remains compositionally quiet for play, but it is
 still a material surface—not an empty void.
 
-- Build from 4–6 large value masses; reserve small detail for a few landmarks.
-- Prefer flattened stage-like depth, bold silhouettes, warm hand-drawn contours,
-  restrained interior linework, and controlled pools of light.
+- Build from clean, confident color planes and a hierarchy of major silhouettes.
+  Richness comes from **meaningful object and action marks**: oars cutting white
+  wakes, a hull seam, a chipped column, grouped reeds, banner folds, court
+  inlays, or a few broad ripples. Do not use blanket texture as a substitute for
+  art direction.
+- Prefer flattened stage-like depth, slightly warped silhouettes, matte painted
+  planes, and the STORYBOOK contour law from §3: a warm near-black outer contour
+  roughly 3× the interior line weight. Avoid clean vector geometry and avoid
+  pseudo-3D isometric-diorama rendering.
+- The quiet combat channel should contain one broad, uninterrupted material
+  plane with only a handful of low-contrast current, fissure, or inlay marks.
+  Edge landmarks may be ornate and richly authored so long as that density
+  falls away decisively before the combat channel.
 - Avoid cinematic matte-painting density, glossy 3D materials, photoreal
-  micro-texture, tiny repeated machinery, volumetric clutter, and busy particles.
+  micro-texture, global grain, all-over mottling, full-surface scratches, tiny
+  repeated machinery, volumetric clutter, and busy particles.
 - Foreground elements are used sparingly and never conceal enemies or bullets.
 - A physical foreground landmark constrains **player movement only**. It never
   intercepts player fire, enemy fire, or boss fire, and its own scroll never
-  pushes or snaps the player; collision only rejects movement into its boundary.
+  pushes or snaps the player; collision only rejects movement into its complete
+  rectangular no-go volume. That exact volume must be visibly outlined while it
+  is on screen.
 - Treat sacred imagery with **specificity** — borrow structure and symbolism from
   **one** chosen tradition (§4), never a magpie mix of "cool" symbols.
 

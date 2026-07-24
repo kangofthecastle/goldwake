@@ -1012,12 +1012,15 @@
 'uniform vec4 u_tint;\n' +
 'uniform vec2 u_grade;\n' +          // gamma, lift
 'uniform float u_wrap;\n' +
+'uniform vec2 u_edgeFade;\n' +       // normalized top, bottom feather widths
 'out vec4 frag;\n' +
 'void main(){\n' +
 '  vec2 sampleUV = mix(v_uv, fract(v_uv), u_wrap);\n' +
 '  vec4 t = texture(u_tex, sampleUV);\n' +
 '  vec3 graded = pow(max(t.rgb, vec3(0.0)), vec3(u_grade.x)) + vec3(u_grade.y) * t.a;\n' +
-'  frag = vec4(graded * u_tint.rgb, t.a) * u_tint.a;\n' +   // premultiplied-over
+'  float topFade = u_edgeFade.x > 0.0 ? smoothstep(0.0, u_edgeFade.x, v_uv.y) : 1.0;\n' +
+'  float bottomFade = u_edgeFade.y > 0.0 ? smoothstep(0.0, u_edgeFade.y, 1.0 - v_uv.y) : 1.0;\n' +
+'  frag = vec4(graded * u_tint.rgb, t.a) * u_tint.a * topFade * bottomFade;\n' +   // premultiplied-over
 '}\n';
 
   var progBackdrop = null, uBackdrop = null, backdropVAO = null;
@@ -1026,7 +1029,7 @@
   function buildBackdropGL() {
     progBackdrop = link(VS_BACKDROP, FS_BACKDROP);
     if (!progBackdrop) return;
-    uBackdrop = uniforms(progBackdrop, ['u_rect', 'u_playfield', 'u_scroll', 'u_tex', 'u_tint', 'u_grade', 'u_wrap']);
+    uBackdrop = uniforms(progBackdrop, ['u_rect', 'u_playfield', 'u_scroll', 'u_tex', 'u_tint', 'u_grade', 'u_wrap', 'u_edgeFade']);
     backdropVAO = gl.createVertexArray();
     gl.bindVertexArray(backdropVAO);
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVBO);   // reuse the unit quad
@@ -1073,19 +1076,25 @@
         loadSlot(layerSlot, 'art/backdrops/' + layerSlot + '.png', true);
       }
     }
-    // Three authored destinations per sector. These full-field plates carry
-    // the Jamestown-like geographic progression; game.js crossfades them at
-    // normal travel speed so reaching a new place never reads as fast-forward.
+    // Three authored destinations per sector. Keep every generated art pass in
+    // art/environment-variants; changing this one value swaps the full route
+    // without overwriting or regenerating any source art.
+    var environmentVariant = 'sparse-detail';
+    var environmentRevision = '20260723-sparse-detail-1';
+    var environmentBase = 'art/environment-variants/' + environmentVariant + '/browser/';
+    GL.environmentVariant = environmentVariant;
+    // game.js positions these as one overlapping physical strip with a fixed
+    // traversal speed.
     var destinations = {
-      's1-scene1': 'art/environments/s1-01-shattered-fleet.avif',
-      's1-scene2': 'art/environments/s1-02-flooded-colonnade.avif',
-      's1-scene3': 'art/environments/s1-03-talos-forge.avif',
-      's2-scene1': 'art/environments/s2-01-dead-reed-delta.avif',
-      's2-scene2': 'art/environments/s2-02-processional-kings.avif',
-      's2-scene3': 'art/environments/s2-03-hall-of-scales.avif',
-      's3-scene1': 'art/environments/s3-01-cloud-garden.avif',
-      's3-scene2': 'art/environments/s3-02-jade-causeway.avif',
-      's3-scene3': 'art/environments/s3-03-throne-terraces.avif'
+      's1-scene1': environmentBase + 's1-01-shattered-fleet.avif?v=' + environmentRevision,
+      's1-scene2': environmentBase + 's1-02-flooded-colonnade.avif?v=' + environmentRevision,
+      's1-scene3': environmentBase + 's1-03-talos-forge.avif?v=' + environmentRevision,
+      's2-scene1': environmentBase + 's2-01-dead-reed-delta.avif?v=' + environmentRevision,
+      's2-scene2': environmentBase + 's2-02-processional-kings.avif?v=' + environmentRevision,
+      's2-scene3': environmentBase + 's2-03-hall-of-scales.avif?v=' + environmentRevision,
+      's3-scene1': environmentBase + 's3-01-cloud-garden.avif?v=' + environmentRevision,
+      's3-scene2': environmentBase + 's3-02-jade-causeway.avif?v=' + environmentRevision,
+      's3-scene3': environmentBase + 's3-03-throne-terraces.avif?v=' + environmentRevision
     };
     for (var destinationSlot in destinations) {
       if (Object.prototype.hasOwnProperty.call(destinations, destinationSlot)) {
@@ -1112,7 +1121,7 @@
   // scrollY in uv units). Self-contained blend: flushes the additive batch,
   // draws premultiplied-over, then restores additive so the caller's next
   // GL.draw picks up where it left off.
-  GL.drawBackdrop = function (slot, cx, cy, w, h, r, g, b, a, scrollY, gamma, lift, repeat) {
+  GL.drawBackdrop = function (slot, cx, cy, w, h, r, g, b, a, scrollY, gamma, lift, repeat, fadeTop, fadeBottom) {
     var bd = backdrops[slot];
     if (!bd || !bd.ready || !progBackdrop) return;
     flushSprites();
@@ -1127,6 +1136,7 @@
     gl.uniform4f(uBackdrop.u_tint, r, g, b, a);
     gl.uniform2f(uBackdrop.u_grade, gamma == null ? 1 : gamma, lift || 0);
     gl.uniform1f(uBackdrop.u_wrap, repeat === false ? 0 : 1);
+    gl.uniform2f(uBackdrop.u_edgeFade, fadeTop || 0, fadeBottom || 0);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindVertexArray(null);
     gl.blendFunc(gl.ONE, gl.ONE);   // restore additive base pass
