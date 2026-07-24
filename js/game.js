@@ -280,15 +280,10 @@
 
   // ---------------------------------------------------------------------
   // environments — the world under the fight (DANMAKU.md "Environments").
-  // Three procedural parallax layers per sector: deep field (slow stars +
-  // nebula tint), a structure layer (large drifting silhouettes in the sector's
-  // pantheon architecture), and near-debris weather (fast sparse motes/embers).
-  // All layers draw in the ADDITIVE base pass as LOW-saturation, LOW-alpha marks
-  // so they never leave the #05080b dim band, never read as enemy warm/magenta,
-  // and never additive-bright — an additive dim shape over pure black reads as a
-  // dark silhouette, not a glow. The background dims further as live bullet
-  // count rises (readability law) and is choreographed with the slot arc.
-  // Painted layers drop in later via GL.drawBackdrop (slot s{n}-{layer}).
+  // Three authored destination plates per sector carry the actual geographic
+  // journey. Procedural deep/structure/debris fields remain as fallbacks and
+  // restrained motion support only. Every path dims as live bullet count rises
+  // (readability law) and destination arrival follows the authored wave arc.
   //
   // Palettes pull from ART.md sector/pantheon tables, held dim:
   //  S1 TALOS      — bronze colonnades / temple fragments (CELESTIAL-adjacent).
@@ -391,10 +386,11 @@
       // at breather/boss) exactly like the procedural layers — not on wall-clock.
       scrollY: 0,
       role: 'opener', dimFactor: 1,
-      // Route names mark progress through one coherent staged environment. The
-      // visual journey comes from deep/structure/debris choreography rather
-      // than stitched full-frame destination paintings (ART.md §8).
-      sceneIndex: 0, sceneTitleT: 2.8,
+      // Three authored destinations per sector. Later places emerge through a
+      // slow continuous dissolve at normal travel speed; queues prevent rapid
+      // waves from skipping intermediate art.
+      sceneIndex: 0, sceneFrom: 0, sceneBlend: 1, sceneHold: 0, sceneQueue: [],
+      sceneTravel: 0, sceneFromTravel: 0, sceneTitleT: 2.8,
       landmark: null, landmarkIndex: -1,
       obstacles: [],
       setpiece: { active: false, x: 0, y: 0, vy: 0, alpha: 0, parts: null },
@@ -438,12 +434,24 @@
     ];
     return landmark;
   }
+  function queued(list, idx) {
+    for (var i = 0; i < list.length; i++) if (list[i] === idx) return true;
+    return false;
+  }
+  function startSceneTransition(b, idx) {
+    b.sceneFrom = b.sceneIndex;
+    b.sceneFromTravel = b.sceneTravel;
+    b.sceneIndex = idx;
+    b.sceneBlend = 0;
+    b.sceneTravel = 0;
+    b.sceneTitleT = 3.2;
+  }
   function enterDestination(idx) {
     var b = G.bg;
     idx = Math.max(0, Math.min(2, idx | 0));
     if (idx !== b.sceneIndex) {
-      b.sceneIndex = idx;
-      b.sceneTitleT = 3.2;
+      if (b.sceneBlend >= 1 && b.sceneHold <= 0) startSceneTransition(b, idx);
+      else if (!queued(b.sceneQueue, idx)) b.sceneQueue.push(idx);
     }
     if (idx === 1 && b.landmarkIndex < 1 && !b.landmark) {
       b.landmarkIndex = 1;
@@ -487,14 +495,24 @@
     b.structAlpha += (b.structTarget - b.structAlpha) * (b.role === 'opener' ? Math.min(1, dt * 0.7) : k);
     b.bright += (b.brightTarget - b.bright) * k;
     b.scrollMul += (b.scrollTarget - b.scrollMul) * k;
+    if (b.sceneBlend < 1) {
+      b.sceneBlend = Math.min(1, b.sceneBlend + dt * 0.09);
+      if (b.sceneBlend >= 1) b.sceneHold = 3.0;
+    } else if (b.sceneHold > 0) {
+      b.sceneHold = Math.max(0, b.sceneHold - dt);
+    } else if (b.sceneQueue.length) {
+      startSceneTransition(b, b.sceneQueue.shift());
+    }
     if (b.sceneTitleT > 0) b.sceneTitleT -= dt;
     // readability dim from live bullet count
     var target = bgDimFor(Engine.bullets.count());
     b.dimFactor += (target - b.dimFactor) * Math.min(1, dt * 4);
     var sm = b.scrollMul;
-    // advance the journey odometer at the arc-modulated speed (drives painted-layer
-    // parallax; at sm=1 it tracks seconds so painted scroll rate is unchanged).
+    // Advance the journey odometer at the arc-modulated speed. At sm=1 it
+    // tracks seconds, so authored destination travel never fast-forwards.
     b.scrollY += sm * dt;
+    b.sceneTravel += sm * dt;
+    if (b.sceneBlend < 1) b.sceneFromTravel += sm * dt;
     for (i = 0; i < b.stars.length; i++) {
       var s = b.stars[i];
       s.y += s.sp * sm * dt; s.tw += dt * 3;
@@ -559,6 +577,9 @@
       scrollY: b.scrollY, bossArrived: !!(G.boss && G.boss.arrived), dimFactor: b.dimFactor,
       destinationIndex: b.sceneIndex,
       destination: DESTINATION_NAMES[b.sector][b.sceneIndex],
+      destinationBlend: b.sceneBlend,
+      destinationQueue: b.sceneQueue.slice(),
+      destinationTravel: b.sceneTravel,
       landmarkIndex: b.landmarkIndex,
       landmark: b.landmark ? { slot: b.landmark.slot, y: b.landmark.y, solid: b.landmark.solid, collides: b.landmark.collides } : null,
       obstacles: b.obstacles.map(function (o) { return { x: o.x, y: o.y, w: o.w, h: o.h, kind: o.kind, solid: o.solid }; }),
@@ -6371,13 +6392,37 @@
 
   function drawBackground() {
     var b = G.bg, i, dim = b.dimFactor, bright = b.bright;
-    var deepA = dim * Math.min(1.08, bright) * 0.88;  // scenery stays below combat brightness
-    var structBase = dim * bright * b.structAlpha * 0.28;
+    var deepA = dim * Math.min(1.15, bright);
     var sc = b.env.structCol, st = b.env.star;
-    // ART.md §8 contract: one tileable deep field, with independently
-    // choreographed structure and debris. No full-frame destination postcards.
-    if (GL.backdropReady(b.env.slot + '-deep')) {
-      GL.drawBackdrop(b.env.slot + '-deep', W / 2, H / 2, W, H, 0.84, 0.88, 0.9, deepA, (b.scrollY * 0.006) % 1, 1.08, 0);
+    var sceneSlot = b.env.slot + '-scene' + (b.sceneIndex + 1);
+    var fromSlot = b.env.slot + '-scene' + (b.sceneFrom + 1);
+    var hasScene = GL.backdropReady(sceneSlot);
+    // The legacy parallax textures are fallback/support only. When authored
+    // destination art is present, keep procedural staging but do not repaint
+    // the place with the old structure layer.
+    var structBase = dim * bright * b.structAlpha * (hasScene ? 0.08 : 0.28);
+    // Authored destination ground advances at one steady travel speed. Places
+    // change through a long full-frame dissolve, never a moving seam or a
+    // fast-forward shove. The art itself carries the geographic progression.
+    if (hasScene) {
+      var sceneA = deepA * 0.9;
+      // Overscan each non-tileable destination and pan from its lower approach
+      // toward its upper arrival. This produces physical travel without ever
+      // wrapping the painting or exposing a stitched edge.
+      var sceneScale = 1.18;
+      var sceneProgress = Math.min(1, b.sceneTravel / 42);
+      var sceneY = H / 2 - H * 0.09 + H * 0.18 * sceneProgress;
+      if (b.sceneBlend < 1 && GL.backdropReady(fromSlot)) {
+        var ease = b.sceneBlend * b.sceneBlend * (3 - 2 * b.sceneBlend);
+        var fromProgress = Math.min(1, b.sceneFromTravel / 42);
+        var fromY = H / 2 - H * 0.09 + H * 0.18 * fromProgress;
+        GL.drawBackdrop(fromSlot, W / 2, fromY, W * sceneScale, H * sceneScale, 0.78, 0.8, 0.82, sceneA * Math.sqrt(1 - ease), 0, 1.08, 0, false);
+        GL.drawBackdrop(sceneSlot, W / 2, sceneY, W * sceneScale, H * sceneScale, 0.78, 0.8, 0.82, sceneA * Math.sqrt(ease), 0, 1.08, 0, false);
+      } else {
+        GL.drawBackdrop(sceneSlot, W / 2, sceneY, W * sceneScale, H * sceneScale, 0.78, 0.8, 0.82, sceneA, 0, 1.08, 0, false);
+      }
+    } else if (GL.backdropReady(b.env.slot + '-deep')) {
+      GL.drawBackdrop(b.env.slot + '-deep', W / 2, H / 2, W, H, 1, 1, 1, deepA, (b.scrollY * 0.006) % 1);
     } else {
       for (i = 0; i < b.nebula.length; i++) { var n = b.nebula[i]; GL.draw(GL.SPR.GLOW, n.x, n.y, n.r, n.r, 0, n.col[0], n.col[1], n.col[2], deepA); }
       for (i = 0; i < b.stars.length; i++) { var s = b.stars[i]; var tw = 0.7 + 0.3 * Math.sin(s.tw); GL.draw(GL.SPR.CORE, s.x, s.y, s.sz, s.sz, 0, st[0], st[1], st[2], s.a * tw * deepA); }
@@ -6393,10 +6438,12 @@
     }
     // STRUCTURE LAYER — drifting architecture silhouettes (painted override or
     // procedural units).
-    if (GL.backdropReady(b.env.slot + '-structure')) {
-      GL.drawBackdrop(b.env.slot + '-structure', W / 2, H / 2, W, H, 1, 1, 1, structBase, (b.scrollY * 0.012) % 1);
-    } else if (structBase > 0.01) {
-      for (i = 0; i < b.units.length; i++) drawStructUnit(b.units[i], sc, structBase);
+    if (!hasScene) {
+      if (GL.backdropReady(b.env.slot + '-structure')) {
+        GL.drawBackdrop(b.env.slot + '-structure', W / 2, H / 2, W, H, 1, 1, 1, structBase, (b.scrollY * 0.012) % 1);
+      } else if (structBase > 0.01) {
+        for (i = 0; i < b.units.length; i++) drawStructUnit(b.units[i], sc, structBase);
+      }
     }
     // SET-PIECE — one big silhouette crossing under the fight on a feature wave;
     // dims further while a crest is live (dimFactor already low then).
@@ -6404,8 +6451,8 @@
     if (sp.active && sp.parts) drawStructUnitAt(sp.x, sp.y, sp.parts, sc, structBase * 1.1 * sp.alpha);
     // NEAR-DEBRIS WEATHER — fast sparse motes/embers. Procedural flecks remain
     // over painted debris at low alpha so forward motion is always legible.
-    var dc = b.env.debrisCol, debA = deepA * 0.58;
-    var paintedDebris = GL.backdropReady(b.env.slot + '-debris');
+    var dc = b.env.debrisCol, debA = deepA * (hasScene ? 0.22 : 0.72);
+    var paintedDebris = !hasScene && GL.backdropReady(b.env.slot + '-debris');
     if (paintedDebris) {
       GL.drawBackdrop(b.env.slot + '-debris', W / 2, H / 2, W, H, 1, 1, 1, debA, (b.scrollY * 0.03) % 1);
     }
@@ -6420,7 +6467,7 @@
     // Important terrain retains enough presence under bullet-density dimming to
     // remain navigable; it still sits below every hazard, projectile and actor.
     var alpha = (0.34 + b.dimFactor * 0.42) * Math.min(1, b.bright);
-    GL.drawBackdrop(lm.slot, W / 2, lm.y + lm.h / 2, lm.w, lm.h, 0.82, 0.86, 0.88, alpha, 0, 1.08, 0);
+    GL.drawBackdrop(lm.slot, W / 2, lm.y + lm.h / 2, lm.w, lm.h, 0.82, 0.86, 0.88, alpha, 0, 1.08, 0, false);
   }
   function drawStructUnitAt(ox, oy, parts, col, alpha) {
     for (var i = 0; i < parts.length; i++) {

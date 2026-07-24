@@ -1011,9 +1011,11 @@
 'uniform sampler2D u_tex;\n' +
 'uniform vec4 u_tint;\n' +
 'uniform vec2 u_grade;\n' +          // gamma, lift
+'uniform float u_wrap;\n' +
 'out vec4 frag;\n' +
 'void main(){\n' +
-'  vec4 t = texture(u_tex, fract(v_uv));\n' +
+'  vec2 sampleUV = mix(v_uv, fract(v_uv), u_wrap);\n' +
+'  vec4 t = texture(u_tex, sampleUV);\n' +
 '  vec3 graded = pow(max(t.rgb, vec3(0.0)), vec3(u_grade.x)) + vec3(u_grade.y) * t.a;\n' +
 '  frag = vec4(graded * u_tint.rgb, t.a) * u_tint.a;\n' +   // premultiplied-over
 '}\n';
@@ -1024,7 +1026,7 @@
   function buildBackdropGL() {
     progBackdrop = link(VS_BACKDROP, FS_BACKDROP);
     if (!progBackdrop) return;
-    uBackdrop = uniforms(progBackdrop, ['u_rect', 'u_playfield', 'u_scroll', 'u_tex', 'u_tint', 'u_grade']);
+    uBackdrop = uniforms(progBackdrop, ['u_rect', 'u_playfield', 'u_scroll', 'u_tex', 'u_tint', 'u_grade', 'u_wrap']);
     backdropVAO = gl.createVertexArray();
     gl.bindVertexArray(backdropVAO);
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVBO);   // reuse the unit quad
@@ -1034,7 +1036,7 @@
     gl.bindVertexArray(null);
   }
 
-  function makeImageTexture(img) {
+  function makeImageTexture(img, repeat) {
     var tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
@@ -1044,8 +1046,8 @@
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE);
     return tex;
   }
 
@@ -1054,12 +1056,12 @@
     var isChromium = /Chrome\/|Chromium\/|HeadlessChrome/.test(navigator.userAgent);
     var canProbe = !(location.protocol === 'file:' && isChromium);
     var sectors = ['s1', 's2', 's3'], layers = ['deep', 'structure', 'debris'];
-    function loadSlot(slot, fallbackSrc) {
+    function loadSlot(slot, fallbackSrc, repeat) {
       var src = registry[slot] ? registry[slot] : (canProbe ? fallbackSrc : null);
       if (!src) return;
       var img = new Image();
       img.onload = function () {
-        try { backdrops[slot] = { tex: makeImageTexture(img), ready: true, w: img.width, h: img.height }; }
+        try { backdrops[slot] = { tex: makeImageTexture(img, repeat), ready: true, w: img.width, h: img.height }; }
         catch (e) { /* tainted / bad image: procedural layer stays */ }
       };
       img.onerror = function () { /* no art for this slot */ };
@@ -1068,11 +1070,30 @@
     for (var si = 0; si < sectors.length; si++) {
       for (var li = 0; li < layers.length; li++) {
         var layerSlot = sectors[si] + '-' + layers[li];
-        loadSlot(layerSlot, 'art/backdrops/' + layerSlot + '.png');
+        loadSlot(layerSlot, 'art/backdrops/' + layerSlot + '.png', true);
       }
     }
-    // One sparse physical crossing per sector. The continuous environment is
-    // carried by deep/structure/debris above; foreground art stays exceptional.
+    // Three authored destinations per sector. These full-field plates carry
+    // the Jamestown-like geographic progression; game.js crossfades them at
+    // normal travel speed so reaching a new place never reads as fast-forward.
+    var destinations = {
+      's1-scene1': 'art/environments/s1-01-shattered-fleet.avif',
+      's1-scene2': 'art/environments/s1-02-flooded-colonnade.avif',
+      's1-scene3': 'art/environments/s1-03-talos-forge.avif',
+      's2-scene1': 'art/environments/s2-01-dead-reed-delta.avif',
+      's2-scene2': 'art/environments/s2-02-processional-kings.avif',
+      's2-scene3': 'art/environments/s2-03-hall-of-scales.avif',
+      's3-scene1': 'art/environments/s3-01-cloud-garden.avif',
+      's3-scene2': 'art/environments/s3-02-jade-causeway.avif',
+      's3-scene3': 'art/environments/s3-03-throne-terraces.avif'
+    };
+    for (var destinationSlot in destinations) {
+      if (Object.prototype.hasOwnProperty.call(destinations, destinationSlot)) {
+        loadSlot(destinationSlot, destinations[destinationSlot], false);
+      }
+    }
+    // One sparse physical crossing per sector. Destination plates carry the
+    // geography; foreground collision art stays exceptional.
     var landmarks = {
       's1-landmark': 'art/landmarks/s1-bronze-crossing.webp',
       's2-landmark': 'art/landmarks/s2-funerary-crossing.webp',
@@ -1080,7 +1101,7 @@
     };
     for (var landmarkSlot in landmarks) {
       if (Object.prototype.hasOwnProperty.call(landmarks, landmarkSlot)) {
-        loadSlot(landmarkSlot, landmarks[landmarkSlot]);
+        loadSlot(landmarkSlot, landmarks[landmarkSlot], false);
       }
     }
   }
@@ -1091,7 +1112,7 @@
   // scrollY in uv units). Self-contained blend: flushes the additive batch,
   // draws premultiplied-over, then restores additive so the caller's next
   // GL.draw picks up where it left off.
-  GL.drawBackdrop = function (slot, cx, cy, w, h, r, g, b, a, scrollY, gamma, lift) {
+  GL.drawBackdrop = function (slot, cx, cy, w, h, r, g, b, a, scrollY, gamma, lift, repeat) {
     var bd = backdrops[slot];
     if (!bd || !bd.ready || !progBackdrop) return;
     flushSprites();
@@ -1105,6 +1126,7 @@
     gl.uniform2f(uBackdrop.u_scroll, 0, scrollY || 0);
     gl.uniform4f(uBackdrop.u_tint, r, g, b, a);
     gl.uniform2f(uBackdrop.u_grade, gamma == null ? 1 : gamma, lift || 0);
+    gl.uniform1f(uBackdrop.u_wrap, repeat === false ? 0 : 1);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindVertexArray(null);
     gl.blendFunc(gl.ONE, gl.ONE);   // restore additive base pass
@@ -1405,7 +1427,7 @@
     loadAuthored();    // async; per-archetype / projectile / owned-entity sprites (cells 19+)
     buildBatcher();
     buildBackdropGL();
-    loadBackdrops();   // async; painted parallax layers drop in, else procedural
+    loadBackdrops();   // async; destination plates first, parallax/procedural fallback
     GL.resize();
 
     gl.disable(gl.DEPTH_TEST);

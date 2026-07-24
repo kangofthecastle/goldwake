@@ -212,50 +212,58 @@ distinct impact/end state.**
 
 ## 8. Environments & backdrops
 
-**(STORYBOOK layer, composited behind COMBAT.)** A sector is a **staged living
-environment**, not a wallpaper and not three stitched postcards. The shipped
-renderer already defines the correct production contract: every sector has
-three simultaneous, vertically tileable parallax textures — **deep**,
-**structure**, and **debris** — loaded as `sN-deep`, `sN-structure`, and
-`sN-debris`. The level creates forward motion by choreographing those layers
-through the authored wave arc:
+**(STORYBOOK layer, composited behind COMBAT.)** A sector is a continuous
+geographic journey through **three authored destinations**, not a single
+near-black texture with different decoration on top. The full-field plates
+loaded as `sN-scene1`, `sN-scene2`, and `sN-scene3` are the primary environment
+contract. The old `deep / structure / debris` parallax set may remain as
+fallback and atmospheric support, but it must never replace destination art.
 
-- **opener:** deep atmosphere establishes the place; structure barely present;
-- **build:** structure fades in and scrolls faster;
-- **feature:** one large procedural set-piece crosses beneath combat;
-- **breather:** the clearest, calmest environmental read;
-- **crescendo:** structure/debris accelerate while the whole field darkens;
-- **boss threshold:** a huge shadow arrives from the environment, then every
-  layer dims toward near-black for the fight.
+Use *Jamestown* as the pacing model: the camera advances at a steady physical
+speed while the route itself supplies novelty. A new place is earned through
+travel and staging, never announced by accelerating or shoving the whole world.
+At runtime adjacent plates overlap in a long full-frame dissolve; there is no
+horizontal seam, wipe, jump cut, or fast-forward between them.
+Each plate is clamped rather than tiled, drawn with modest overscan, and slowly
+panned from its lower approach toward its upper arrival. Never re-enable UV
+wrapping for destination art.
 
-This is the journey: one coherent place revealing its depth and danger over
-time. Do not bake literal approach/passage/threshold landmarks into separate
-paintings; they fight the parallax system, create brittle seams, and cannot map
-to the runtime slots.
+Each sector has a legible route:
 
-The three sector environments:
+- **SECTOR 1 — THE BRONZE COAST / TALOS:** shattered fleet graveyard →
+  flooded bronze colonnade → volcanic Talos forge-island.
+- **SECTOR 2 — THE RIVER OF NIGHT / AMMIT:** dead-reed delta → processional
+  avenue of kings → monumental hall of scales.
+- **SECTOR 3 — THE GILDED COURT / MIDAS:** suspended cloud garden → jade
+  causeway → stacked imperial throne terraces.
 
-- **SECTOR 1 — THE BRONZE COAST / TALOS:** moonless sea haze in the deep layer;
-  broken bronze colonnades, colossus fragments and guarded-island architecture
-  in structure; sparse wreck-gold, salt spray and ember flecks in debris.
-- **SECTOR 2 — THE RIVER OF NIGHT / AMMIT:** lapis Duat darkness in deep;
-  tomb-wall riverbanks, pylon fragments and colossal seated guardians in
-  structure; sparse papyrus scraps, tomb dust and dim gold-leaf flecks in
-  debris. The center remains a dark river channel.
-- **SECTOR 3 — THE GILDED COURT / MIDAS:** violet-black cloud void in deep;
-  stacked jade balustrades, hanging curtains and palace lattice in structure;
-  sparse coin glints, torn edict scraps and gilded dust in debris. Richer than
-  the first two sectors, but still safely below combat brightness.
+Those destinations must be unmistakably different in silhouette, floor
+material, side architecture, weather, and accent palette while still sharing
+geographic connective tissue with their neighbors. The bottom of one plate
+should plausibly lead toward the top of the next. The level arc controls when
+each destination appears:
 
-Every texture must tile cleanly top-to-bottom because the shader scrolls with
-`fract(v_uv)`. Deep is an opaque near-black atmospheric field. Structure and
-debris use transparent ground so layers remain independently choreographable.
-Build large readable masses first, keep all structural weight against the side
-edges, and keep the middle 50% nearly empty.
+- **opener:** establish destination one and its traversal language;
+- **build:** introduce route-specific side masses and weather;
+- **feature:** pass one memorable environmental set-piece at normal speed;
+- **mid-level arrival:** destination two becomes fully readable;
+- **breather:** provide the clearest scenic view and widest visual rest;
+- **crescendo:** enter destination three with greater scale and danger;
+- **boss threshold:** arrive at a specific arena belonging to destination three.
 
-- Backdrops must stay **near-black and low-contrast** so additive neon sings over
-  them; they are scenery, not spectacle.
-- Foreground elements are used **sparingly** and never conceal enemies or bullets.
+Backdrops are allowed real color and readable ground. Do **not** reduce the
+world to different shades of black. Keep values below projectile cores, but use
+deep teal water, lapis stone, oxidized bronze, ember orange, jade, violet cloth,
+papyrus ochre, and other sector-specific mids so the player knows where they are
+at a glance. The middle 45–50% remains compositionally quiet for play, but it is
+still a material surface—not an empty void.
+
+- Build from 4–6 large value masses; reserve small detail for a few landmarks.
+- Prefer flattened stage-like depth, bold silhouettes, warm hand-drawn contours,
+  restrained interior linework, and controlled pools of light.
+- Avoid cinematic matte-painting density, glossy 3D materials, photoreal
+  micro-texture, tiny repeated machinery, volumetric clutter, and busy particles.
+- Foreground elements are used sparingly and never conceal enemies or bullets.
 - A physical foreground landmark constrains **player movement only**. It never
   intercepts player fire, enemy fire, or boss fire, and its own scroll never
   pushes or snaps the player; collision only rejects movement into its boundary.
@@ -264,10 +272,8 @@ edges, and keep the middle 50% nearly empty.
 
 **Environment style north star.** Aim for the graphic, hand-drawn mythic clarity
 of *33 Immortals* without copying its specific designs: flattened stage-like
-depth, bold silhouette shapes, restrained interior linework, and small pools of
-accent color against broad dark fields. Build each layer from a few large value
-masses that read instantly at playfield scale. Avoid cinematic matte-painting
-detail, glossy 3D materials, photoreal micro-texture, and volumetric clutter.
+depth, bold silhouette shapes, restrained interior linework, and confident
+color blocking. Its lesson is clarity and authored shape—not darkness.
 
 ---
 

@@ -12,7 +12,7 @@ exception (owner call 2026-07-18, BOONS.md §12) — the procedural draw stays t
 live fallback until each sprite is wired in.
 
 Sections: 1 title keyart · 2 pantheon emblems (5) · 3 god card portraits (15) ·
-4 boss portraits (4) · 5 sector parallax sets (3 sectors × 3 layers = 9) · 6 shop dressing (1) ·
+4 boss portraits (4) · 5 sector destination plates (3 sectors × 3 places = 9) · 6 shop dressing (1) ·
 7 charm-relic icon batch (1 template × 15 subjects) ·
 8 combat sprites (1 player ship + 1 enemy template × 18 subjects) ·
 9 signature player-side sprites (2 templates × 14 subjects).
@@ -39,7 +39,7 @@ subagent per batch, on high reasoning effort, all batches in parallel**:
 | A | §1 title + §2 emblems | 6 |
 | B | §3 god portraits | 15 |
 | C | §4 boss portraits | 4 |
-| D | §5 runtime parallax layers (3 sectors × deep/structure/debris) + §6 shop | 10 |
+| D | §5 runtime destination plates (3 sectors × 3 places) + §6 shop | 10 |
 | E | §7 relic icon template ×15 rows | 15 |
 | F | §8 player ship + enemy template ×18 rows | 19 |
 | G | §9 projectile template ×9 rows | 9 |
@@ -63,8 +63,8 @@ below. Suggested groupings:
   the Ruyi staff (33.9) alone (needs the full frame height).
 - H: all 5 owned entities as one sheet.
 
-Full-composition pieces — title, emblems, every §3/§4 portrait, each backdrop
-layer, shop — stay **one request each**: each needs full-frame resolution and
+Full-composition pieces — title, emblems, every §3/§4 portrait, each destination
+plate, shop — stay **one request each**: each needs full-frame resolution and
 its own ground/alpha contract. Judgment call throughout: group only while
 per-subject resolution stays comfortably above its read size.
 
@@ -710,166 +710,136 @@ black #000000, no text or lettering, no busy particle noise, no watermark.
 
 ---
 
-## Section 5 — Runtime sector parallax layers (3 sectors × deep/structure/debris)
+## Section 5 — Runtime destination plates (3 sectors × 3 places)
 
-Each sector is one staged living environment built from three simultaneous,
-independently choreographed textures. The renderer scrolls every texture with
-`fract(v_uv)`, so **every image must tile seamlessly top-to-bottom**. These are
-not sequential scenes and must contain no baked approach/passage/threshold
-landmarks. The level creates its journey by changing layer opacity, speed and
-darkness across the wave arc.
+These are sequential full-field environments. The renderer loads them as
+`sN-scene1`, `sN-scene2`, and `sN-scene3` and performs a long full-frame
+dissolve while travel continues at normal speed. They do **not** need to tile.
+Their job is Jamestown-like geographic pacing: each destination is clearly new,
+but the bottom of one plausibly leads toward the top of the next.
+Runtime clamps rather than wraps each plate, overscales it slightly, and pans
+from the lower approach to the upper arrival, so crop-safe side detail matters.
 
-**Shared contract (treat as part of every prompt):** Painted backdrop layer for
-a vertical bullet-hell playfield, storybook style. Deliver exactly one PNG,
-9:16 portrait, 1080×1920. Extreme dark value range; nothing above a dim
-mid-tone. Preserve the middle 50% of the width as quiet negative space for the
-player and dense glowing bullets. Put structural weight at the side edges. Use
-large flat painted masses, minimal localized texture and no false lanes. The
-top edge must continue perfectly into the bottom edge when vertically repeated.
-No text or watermark. No photorealism, airbrushed/plastic gradients, glossy 3D,
-mixed mythological traditions, bright central detail, busy particle noise or
-white/light ground.
+**Shared contract (treat as part of every prompt):**
 
-For **deep** layers: opaque near-black atmospheric ground, no alpha, no
-structures or landmarks. For **structure** and **debris** layers: isolate the
-painted subjects over perfectly flat solid `#00ff00` chroma green — no gradient,
-shadow, texture or spill in the green and no green in the subjects — then remove
-the green to deliver a transparent RGBA PNG. Transparent corners and center are
-mandatory. Do not leave green pixels in the delivered file.
+```
+Use case: stylized-concept
+Asset type: production environment plate for a vertical-scrolling bullet-hell
+game. Deliver exactly one opaque AVIF, 9:16 portrait, 1080x1920.
+Style/medium: hand-drawn graphic mythic game illustration; flattened stage-like
+depth; bold warm-dark contours; broad confident color planes; restrained
+interior linework; 4-6 large value masses; premium animated action-game
+readability, not cinematic concept art.
+Composition: high-oblique/top-down scrolling-shooter camera; a continuous
+traversable route from bottom to top; center 48% calm and navigable but visibly
+made from colored water, paving, earth or cloud, never an empty black void;
+structural weight and landmarks stay primarily at the side edges; no horizon;
+generous crop-safe side margins.
+Color/readability: use real sector color and readable mid-values. Background
+cores stay below player/enemy projectile brightness, but never reduce the world
+to shades of black. The route must read in one second behind combat.
+Constraints: no player ship, enemies, boss, bullets, UI, text, logos or
+watermark; no seam or triptych; no photorealism; no glossy 3D; no micro-detail
+carpet; no dense particles or volumetric clutter.
+```
 
 ### 26. SECTOR 1 — THE BRONZE COAST / TALOS
 
-Greek only: carved marble frieze and black-figure pottery manner. Dim
-desaturated bronze, marble-ivory, sea-green and moss; faint restrained gold
-`#ffd766`; warm near-black painted outlines `#231A20`.
+Palette: teal sea, oxidized copper, dark basalt, bronze-gold, ivory salt and
+controlled ember orange. Greek bronze-age architecture only.
 
-#### 26.1 DEEP — `art/backdrops/s1-deep.png`
-
-```
-Paint an opaque deep-atmosphere layer for THE BRONZE COAST: moonless sea haze,
-subtle horizon-free swells and faint cold sea glow suspended in near-black
-#05080b. It should feel like open water at night without depicting a shoreline,
-ship, island, architecture, statue or landmark. Keep the center quiet and dark.
-Make the top and bottom edges match perfectly for seamless vertical repetition.
-Apply the Section 5 shared contract. Deliver opaque RGB/RGBA PNG with no
-transparent pixels at art/backdrops/s1-deep.png.
-```
-
-#### 26.2 STRUCTURE — `art/backdrops/s1-structure.png`
+#### 26.1 THE SHATTERED FLEET — `art/environments/s1-01-shattered-fleet.avif`
 
 ```
-Paint a transparent structure layer for THE BRONZE COAST: fragmented bronze
-colonnades, cropped colossus limbs and pieces of guarded-island marble
-architecture forming two sparse irregular edge banks. Keep every form confined
-to the outer left and right quarters; nothing spans the playfield and the center
-50% stays completely empty. No intact character, ship, gate or single dominant
-landmark. Shapes must continue seamlessly from top to bottom. Generate over a
-perfectly flat solid #00ff00 chroma ground for removal, with no green in the
-painted subjects. Apply the Section 5 shared contract. Remove chroma and deliver
-transparent RGBA PNG at art/backdrops/s1-structure.png.
+Apply the Section 5 shared contract. A broad teal sea channel passes through a
+mythic bronze-age ship graveyard. Enormous broken hull ribs, snapped oars,
+oxidized plates and sparse amber lanterns frame both sides. Bottom: open coastal
+water. Top: flooded bronze colonnade foundations begin to appear.
 ```
 
-#### 26.3 DEBRIS — `art/backdrops/s1-debris.png`
+#### 26.2 THE FLOODED COLONNADE — `art/environments/s1-02-flooded-colonnade.avif`
 
 ```
-Paint a transparent sparse debris layer for THE BRONZE COAST: a few tiny pieces
-of wreck-gold, salt-spray curls and dim ember flecks drifting mainly along the
-outer edges. Keep density very low, vary spacing broadly and leave the center
-50% completely empty; no ships, hulls, silhouettes, large objects or particle
-wall. The distribution must continue seamlessly top-to-bottom. Generate over a
-perfectly flat solid #00ff00 chroma ground for removal, with no green in the
-subjects. Apply the Section 5 shared contract. Remove chroma and deliver
-transparent RGBA PNG at art/backdrops/s1-debris.png.
+Apply the Section 5 shared contract and match 26.1's camera, scale and drawing
+language. A ceremonial teal water road crosses submerged bronze paving between
+colossal oxidized columns, broken arcades and one fallen colossus hand at an
+outer edge. Bottom continues 26.1's column foundations. Top introduces chains,
+basalt and forge-orange reflection.
+```
+
+#### 26.3 THE TALOS FORGE — `art/environments/s1-03-talos-forge.avif`
+
+```
+Apply the Section 5 shared contract and match 26.2. Flooded paving becomes a
+wide basalt-and-bronze route between narrow lava channels, incomplete colossal
+bronze limbs, chains, anvils and simple furnace arches. Bottom retains turquoise
+runoff. Top resolves into one monumental circular forge-gate boss arena.
 ```
 
 ### 27. SECTOR 2 — THE RIVER OF NIGHT / AMMIT
 
-Egyptian only: tomb-wall painting and papyrus manner, flat profile forms and
-gold leaf on lapis. Dim lapis, oxidized turquoise and tomb-gold `#e8c46a`;
-warm near-black painted outlines `#231A20`.
+Palette: royal lapis, papyrus ochre, warm sandstone, turquoise inlay, muted
+malachite, crimson cloth and controlled funeral gold. Egyptian only.
 
-#### 27.1 DEEP — `art/backdrops/s2-deep.png`
-
-```
-Paint an opaque deep-atmosphere layer for THE RIVER OF NIGHT: lapis-black Duat
-darkness with a broad nearly black central river channel, faint flat ripples and
-subtle blue depth at the far side edges. No banks, reeds, architecture,
-guardians, boats, symbols or landmark. Keep the center exceptionally quiet and
-dark. Make the top and bottom edges match perfectly for seamless vertical
-repetition. Apply the Section 5 shared contract. Deliver opaque RGB/RGBA PNG
-with no transparent pixels at art/backdrops/s2-deep.png.
-```
-
-#### 27.2 STRUCTURE — `art/backdrops/s2-structure.png`
+#### 27.1 THE DEAD REED DELTA — `art/environments/s2-01-dead-reed-delta.avif`
 
 ```
-Paint a transparent structure layer for THE RIVER OF NIGHT: broken tomb-wall
-riverbanks, cropped pylon fragments and occasional partial seated guardians in
-flat Egyptian profile, arranged as sparse edge banks. Confine everything to the
-outer left and right quarters so the center 50% remains a completely empty dark
-river channel. No spanning gate, Hall of Judgment doorway, scales centerpiece
-or single dominant landmark. Shapes must continue seamlessly top-to-bottom.
-Generate over a perfectly flat solid #00ff00 chroma ground for removal, with no
-green in the subjects. Apply the Section 5 shared contract. Remove chroma and
-deliver transparent RGBA PNG at art/backdrops/s2-structure.png.
+Apply the Section 5 shared contract. A rich lapis river winds through ochre reed
+islands, low mudbrick tomb jetties, papyrus fans, funerary skiffs and monumental
+guardian fragments at the side edges. Bottom: tangled delta water. Top:
+paired pylons and ordered paving begin the royal processional.
 ```
 
-#### 27.3 DEBRIS — `art/backdrops/s2-debris.png`
+#### 27.2 PROCESSIONAL OF KINGS — `art/environments/s2-02-processional-kings.avif`
 
 ```
-Paint a transparent sparse debris layer for THE RIVER OF NIGHT: a few small
-papyrus scraps, tomb-dust wisps and dim gold-leaf flecks drifting near the side
-edges. Keep density very low and the center 50% completely empty; no boats,
-human figures, hieroglyph text, symbols, large objects or particle wall. The
-distribution must continue seamlessly top-to-bottom. Generate over a perfectly
-flat solid #00ff00 chroma ground for removal, with no green in the subjects.
-Apply the Section 5 shared contract. Remove chroma and deliver transparent RGBA
-PNG at art/backdrops/s2-debris.png.
+Apply the Section 5 shared contract and match 27.1. The organic delta becomes a
+long raised lapis-and-sandstone avenue over side canals, rhythmically flanked by
+seated royal guardians, low braziers and broken pylons. Bottom emerges from the
+delta gate. Top converges on the monumental doorway of the Hall of Scales.
+```
+
+#### 27.3 THE HALL OF SCALES — `art/environments/s2-03-hall-of-scales.avif`
+
+```
+Apply the Section 5 shared contract and match 27.2. The avenue enters an immense
+open-roof judgment hall with scale-beam mechanisms, Anubis guardian reliefs,
+pylon walls, lapis pools and crimson standards along the sides. Top resolves
+into a circular weighing dais with an enormous balanced scale and two dark
+doorways: the boss destination.
 ```
 
 ### 28. SECTOR 3 — THE GILDED COURT / MIDAS
 
-Chinese imperial only: Ming court-scroll manner, cloud bands, gold-on-jade,
-curtains and palace lattice. Dim jade and imperial violet `#c99aff`, restrained
-gold `#ffd766`; warm near-black painted outlines `#231A20`.
+Palette: dark jade, pale ivory, turquoise water, orchid violet, peach-blossom
+coral and controlled gold. Chinese imperial garden and palace forms only.
 
-#### 28.1 DEEP — `art/backdrops/s3-deep.png`
-
-```
-Paint an opaque deep-atmosphere layer for THE GILDED COURT: a violet-black cloud
-void with broad dim cloud currents and barely visible vertical depth in
-near-black #05080b. It should suggest impossible altitude without a horizon,
-palace, terrace, stairs, lanterns, throne or landmark. Keep the center quiet and
-dark. Make the top and bottom edges match perfectly for seamless vertical
-repetition. Apply the Section 5 shared contract. Deliver opaque RGB/RGBA PNG
-with no transparent pixels at art/backdrops/s3-deep.png.
-```
-
-#### 28.2 STRUCTURE — `art/backdrops/s3-structure.png`
+#### 28.1 THE CLOUD GARDEN — `art/environments/s3-01-cloud-garden.avif`
 
 ```
-Paint a transparent structure layer for THE GILDED COURT: stacked cropped jade
-balustrades, hanging curtain edges and fragments of imperial palace lattice,
-arranged as sparse asymmetric side architecture. Confine every form to the
-outer left and right quarters; the center 50% stays completely empty. No stairs,
-censer, dais, throne, readable edict, spanning arch or single dominant landmark.
-Shapes must continue seamlessly top-to-bottom. Generate over a perfectly flat
-solid #00ff00 chroma ground for removal, with no green in the subjects. Apply
-the Section 5 shared contract. Remove chroma and deliver transparent RGBA PNG at
-art/backdrops/s3-structure.png.
+Apply the Section 5 shared contract. A pale-jade path and turquoise reflecting
+stream wind through suspended gardens above luminous violet clouds, framed by
+peach trees, moon gates, cloud hedges, gold lanterns and floating rock islands.
+Bottom: open garden terraces. Top: paired jade rails narrow into the causeway.
 ```
 
-#### 28.3 DEBRIS — `art/backdrops/s3-debris.png`
+#### 28.2 THE JADE CAUSEWAY — `art/environments/s3-02-jade-causeway.avif`
 
 ```
-Paint a transparent sparse debris layer for THE GILDED COURT: a few tiny coin
-glints, torn unreadable edict-paper scraps and faint gilded dust drifting near
-the outer edges. Keep density very low and the center 50% completely empty; no
-readable writing, treasure heaps, figures, large objects or particle wall. The
-distribution must continue seamlessly top-to-bottom. Generate over a perfectly
-flat solid #00ff00 chroma ground for removal, with no green in the subjects.
-Apply the Section 5 shared contract. Remove chroma and deliver transparent RGBA
-PNG at art/backdrops/s3-debris.png.
+Apply the Section 5 shared contract and match 28.1. The winding garden becomes a
+long elevated ivory-and-jade bridge across a violet cloud chasm, rhythmically
+framed by balustrades, guardian lions, violet banners, lantern pylons and a few
+side garden platforms. Top rises toward the first throne-terrace stairs.
+```
+
+#### 28.3 THE THRONE TERRACES — `art/environments/s3-03-throne-terraces.avif`
+
+```
+Apply the Section 5 shared contract and match 28.2. The causeway climbs through
+stacked imperial palace courtyards with turquoise basins, dark-jade eaves,
+violet silk canopies, gold-edged screens and large side stair masses. Top
+resolves into a circular celestial throne court beneath an enormous gilded
+canopy: the boss arena.
 ```
 
 ---
