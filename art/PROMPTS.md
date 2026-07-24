@@ -1090,12 +1090,13 @@ Substitutions:
 | 33.7-C | (alternate, gen only if picked) IMPERIAL EDICT — a square imperial SEAL-STAMP chop flying face-first: bronze-backed violet seal block, carved gold seal-script face, red ink edge | face DOWN toward travel, square silhouette | imperial violet #c99aff, gold #ffd766 seal face | ~34 pixels — the crisp square is the read |
 | 33.8 | THE LOOSED ARROW of Artemis — a great moon-silver hunting arrow, bright white head, two long trailing fletches | nose UP, vertical | moon-silver blending to white at the head | ~64 pixels tall |
 | 33.9 | RUYI JINGU BANG, Wukong's wish-fulfilling staff — one long, perfectly straight dark-iron staff with thick burnished gold bands at both ends and a hairline gold seam down its length | vertical, full length filling the frame | gold #ffd766 on the bands, warm-white edge light down the dark shaft | must read as a clean hard-edged rectangle at any height — it is slammed down as a pillar |
-| 33.10 | GREEN DRAGON CRESCENT of Guan Yu — a single cleaving crescent blade cut from the guandao's head: one deep jade crescent with a dragon-spine ridge along its back edge and a small gold collar at the tang; unmistakably ONE curved blade (never a double-axe — that silhouette is the labrys) | cleaving profile, crescent horns leading | jade #3be089 blending to white along the cutting edge, gold #ffd766 collar glint | ~44 pixels; also rendered colossal for CRESCENT MOON SWEEP and as the linked blade-segments of the GREEN DRAGON ASCENDS ultimate |
+| 33.10 | GREEN DRAGON CRESCENT SEGMENT of Guan Yu — a single cleaving crescent blade cut from the guandao's head: one deep jade crescent with a dragon-spine ridge along its back edge and a small gold collar at the tang; unmistakably ONE curved blade (never a double-axe — that silhouette is the labrys) | cleaving profile, crescent horns leading | jade #3be089 blending to white along the cutting edge, gold #ffd766 collar glint | linked blade-segment of the GREEN DRAGON ASCENDS ultimate only |
 | 33.11 | HUNT ARROW of Artemis — her everyday arrow-needle: slim straight shaft, small bright head, two short fletches; the humble sibling of the Loosed Arrow (33.8), clearly the same fletcher's work at a third the size | nose UP, vertical | silver-white body, moon-blue rim | ~24 pixels tall, very slim — flies 3-4 per volley |
 | 33.12 | ANKH BOLT of Anubis — a small thrown ankh, loop leading: the cross-arms are the fins, the loop is the head; a judgment cast at the living | loop UP, vertical | warm amber #e8c46a blending gold at the loop | ~28 pixels tall |
 | 33.13 | RUNE-BOLT of Odin — one heavy blunt bolt of dark iron carved with a single stave-rune glowing along its length; slow, weighty, inevitable | nose UP, vertical | steel-blue #8fb4d8 body, the carved rune line glowing pale gold | ~34 pixels tall, thick |
 | 33.14 | HEARTSEEKER of Aphrodite — a slow seeking heart: one plump stylized heart shape with two small trailing silk ribbons, votive and ornamental, never a cartoon valentine | point DOWN (it weaves), ribbons trailing up | hot magenta #ff77c8 blending white at the cleft | ~36 pixels |
-<!-- 33.15 THE TIDAL WALL of Poseidon — REMOVED 2026-07-21 (owner: POSEIDON too gamebreaking). Row deleted; never generated, no longer needed. -->
+| 33.15 | GREEN DRAGON GUANDAO of Guan Yu — a complete compact battlefield guandao reminiscent of the Green Dragon Crescent Blade: broad asymmetrical jade crescent, restrained gold dragon-head collar, short dark-jade shaft with two gold bands, ring pommel; few bold shapes and no surface texture | nose UP, complete weapon end-to-end | jade #3be089 cutting edge, gold #ffd766 collar and bands, warm-white rim light | ~88 pixels tall; everyday attack weapon, alternates through a short slash as it flies |
+| 33.16 | CRESCENT MOON SWEEP of Guan Yu — a distinct complete ceremonial guandao reminiscent of the Green Dragon Crescent Blade: much larger crescent head, clear gold dragon-head collar, long dark-jade shaft with three gold bands, heavy pommel; designed to rotate around the pommel as one readable lever | nose UP, complete weapon end-to-end with the pommel clearly visible | jade #3be089 cutting edge, gold #ffd766 dragon collar and fittings, warm-white rim light | colossal special weapon; performs one broad pivoted sweep through the upper field |
 
 ### 34. Owned-entity sprite template
 
@@ -1230,9 +1231,22 @@ backings, no text, no watermark, no background.
 ```
 
 Deliver sliced as `36-1-scales-a.png`, `36-2-scales-b.png`,
-`36-3-scales-c.png` (Anubis THE WEIGHING tip-states), `36-4-triskele.png`
+`36-3-scales-c.png` (legacy Anubis THE WEIGHING tip-states), `36-4-triskele.png`
 (Loki MISCHIEF), `36-5-bracket.png` (MARKED corner, engine places 4 rotated
 copies), `36-6-seal.png` (Jade seal brand).
+
+#### 36.1 The Weighing — continuous tip frames
+
+```
+Four matching 512px transparent PNGs for the existing Anubis balance-scales
+sprite. Preserve the exact dark-bronze pedestal, gold beam and pans, and blue
+lapis inset. The pedestal stays perfectly vertical. Across the files the beam
+and pans tip progressively toward screen-left: subtle, light, medium, then
+hard. No new symbols, text, backdrop, shadows, or extra decoration.
+```
+
+Deliver as `36-9-scales-lean-1.png`, `36-10-scales-lean-2.png`,
+`36-11-scales-lean-3.png`, and `36-12-scales-lean-4.png`.
 
 ### 36b. The Verdict stamp — Anubis' devour
 

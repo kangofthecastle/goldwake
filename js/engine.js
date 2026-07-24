@@ -218,7 +218,8 @@
     'KeyW': 1, 'KeyA': 1, 'KeyS': 1, 'KeyD': 1,
     'ShiftLeft': 1, 'ShiftRight': 1,
     'KeyZ': 1, 'KeyX': 1, 'KeyC': 1, 'Space': 1, 'KeyP': 1, 'KeyR': 1, 'KeyM': 1,
-    'KeyF': 1   // pause-menu auto-fire toggle (§9b)
+    'KeyF': 1,  // pause-menu auto-fire toggle (§9b)
+    'KeyH': 1   // pause-menu enemy-health-bar toggle
   };
 
   var firstGesture = null; // set by Game: called once on first keydown

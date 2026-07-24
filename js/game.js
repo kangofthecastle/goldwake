@@ -1521,9 +1521,16 @@
   // hazards (special-weapon area effects; small preallocated pool)
   // ---------------------------------------------------------------------
   var hazards = [];
-  (function () { for (var i = 0; i < 8; i++) hazards.push({ active: false, type: '', x: 0, y: 0, vy: 0, r: 0, timer: 0, dur: 1, tick: 0, dmg: 0, rot: 0, halfW: 0, esc: 0, trail: null, hue: 0 }); })();
-  function allocHazard() { for (var i = 0; i < hazards.length; i++) if (!hazards[i].active) { var z = hazards[i]; z.active = true; z.rot = 0; z.halfW = 0; z.esc = 0; z.trail = null; z.hue = 0; return z; } return null; }
+  (function () { for (var i = 0; i < 8; i++) hazards.push({ active: false, type: '', x: 0, y: 0, vy: 0, r: 0, timer: 0, dur: 1, tick: 0, dmg: 0, rot: 0, halfW: 0, esc: 0, trail: null, hue: 0, cx: 0, cy: 0, len: 0, ang0: 0, ang1: 0, ang: 0 }); })();
+  function allocHazard() { for (var i = 0; i < hazards.length; i++) if (!hazards[i].active) { var z = hazards[i]; z.active = true; z.rot = 0; z.halfW = 0; z.esc = 0; z.trail = null; z.hue = 0; z.cx = 0; z.cy = 0; z.len = 0; z.ang0 = 0; z.ang1 = 0; z.ang = 0; return z; } return null; }
   function hazardFree() { for (var i = 0; i < hazards.length; i++) if (!hazards[i].active) return true; return false; }   // #7: does a hazard slot exist right now?
+  function pointSegDist2(px, py, ax, ay, bx, by) {
+    var abx = bx - ax, aby = by - ay, den = abx * abx + aby * aby;
+    var t = den > 0 ? ((px - ax) * abx + (py - ay) * aby) / den : 0;
+    t = Math.max(0, Math.min(1, t));
+    var qx = ax + abx * t, qy = ay + aby * t, dx = px - qx, dy = py - qy;
+    return dx * dx + dy * dy;
+  }
 
   function updateHazards(dt) {
     var px = G.player.x, py = G.player.y;
@@ -1602,31 +1609,44 @@
         }
         if (hz.timer <= 0) hz.active = false;
       }
-      else if (hz.type === 'sweep') {       // GUAN YU Crescent Moon Sweep — one heavy hit per foe, hurls non-bosses
-        hz.y += hz.vy * dt;
+      else if (hz.type === 'sweep') {       // GUAN YU Crescent Moon Sweep — one pommel-pivoted guandao cleave
+        var su = Math.max(0, Math.min(1, 1 - hz.timer / hz.dur));
+        var se = su * su * (3 - 2 * su);     // smooth acceleration/deceleration through the arc
+        hz.ang = hz.ang0 + (hz.ang1 - hz.ang0) * se;
+        var sux = Math.cos(hz.ang), suy = Math.sin(hz.ang);
+        var sax = hz.cx + sux * hz.len * 0.08, say = hz.cy + suy * hz.len * 0.08;
+        var sbx = hz.cx + sux * hz.len, sby = hz.cy + suy * hz.len;
         if (!hz.trail) hz.trail = [];
         Engine.enemies.forEach(function (e) {
           if (e.dying || e.charmed) return;
-          var fe = (e.x - W / 2) / (W / 2), by = hz.y + fe * fe * 110;   // follow the drawn upward-curving blade
-          if (Math.abs(e.y - by) < hz.r + e.radius * 0.5) {
+          var hitR = hz.r + e.radius * 0.45;
+          if (pointSegDist2(e.x, e.y, sax, say, sbx, sby) < hitR * hitR) {
             if (hz.trail.indexOf(e) < 0) {
               hz.trail.push(e);
               killGoldMul = G.mods.guanSpoils ? 1.5 : 1;
               damageEnemy(e, hz.dmg, false);
               killGoldMul = 1;
-              if (!e.boss) { pushDisp(e, W / 2, hz.y + 160, 500); e.impactDmg = hz.dmg * 0.5; }
+              if (!e.boss) { pushDisp(e, hz.cx, hz.cy, 500); e.impactDmg = hz.dmg * 0.5; }
               spark(e.x, e.y, [0.3, 0.95, 0.55], 8, 400, 30);
             }
           }
         });
-        if (hz.y < -hz.r - 60 || hz.timer <= 0) hz.active = false;
+        if (hz.timer <= 0) hz.active = false;
       }
       else if (hz.type === 'sweepwake') {   // guanWake: the sweep leaves a burning arc
         hz.tick -= dt;
         if (hz.tick <= 0) {
           hz.tick = 0.15;
-          Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; var fe = (e.x - W / 2) / (W / 2), by = hz.y + fe * fe * 110; if (Math.abs(e.y - by) < 100 + e.radius * 0.5) { damageEnemy(e, hz.dmg, false); applyBurn(e, 14 * G.specialR, 1.0); } });
-          spark(100 + Math.random() * (W - 200), hz.y + (Math.random() - 0.5) * 80, [1, 0.55, 0.25], 2, 180, 20);
+          Engine.enemies.forEach(function (e) {
+            if (e.dying || e.charmed) return;
+            var wdx = e.x - hz.cx, wdy = e.y - hz.cy;
+            var wr = Math.sqrt(wdx * wdx + wdy * wdy), wa = Math.atan2(wdy, wdx);
+            if (wa >= hz.ang0 && wa <= hz.ang1 && Math.abs(wr - hz.len * 0.72) < 105 + e.radius * 0.5) {
+              damageEnemy(e, hz.dmg, false); applyBurn(e, 14 * G.specialR, 1.0);
+            }
+          });
+          var wsa = hz.ang0 + Math.random() * (hz.ang1 - hz.ang0), wsr = hz.len * (0.64 + Math.random() * 0.16);
+          spark(hz.cx + Math.cos(wsa) * wsr, hz.cy + Math.sin(wsa) * wsr, [1, 0.55, 0.25], 2, 180, 20);
         }
         if (hz.timer <= 0) hz.active = false;
       }
@@ -1724,38 +1744,30 @@
         // the edge sparks, and the crackle-bolts spawned on tick — never a stamped disc.
       }
       else if (hz.type === 'sweep') {
-        // colossal jade-green crescent: a full-width blade whose edges trail
-        // behind the center (drawn as an arc of cells), giant kin of the attack crescent
-        var swc = authCell('33-10-green-dragon-crescent');   // §9 colossal Crescent Moon Sweep
+        // A complete ceremonial guandao rotates around its pommel. The sprite is authored
+        // nose-up, so +π/2 maps its long axis to the live pivot-to-tip angle.
+        var swc = authCell('33-16-crescent-moon-sweep');
+        var swux = Math.cos(hz.ang), swuy = Math.sin(hz.ang);
+        var swmx = hz.cx + swux * hz.len * 0.5, swmy = hz.cy + swuy * hz.len * 0.5;
+        var swAng = hz.ang + Math.PI / 2;
         if (swc >= 0) {
-          // T4 (owner 2026-07-21: "the blade needs to be aligned with the arc of the special").
-          // The blade must cleave with its CONVEX leading edge along the sweep's travel —
-          // matching the convex-up damage arc `by = hz.y + fe²·110` (center leads, edges lag).
-          // The sweep ALWAYS travels straight up, so the tangent-to-travel base angle
-          // (atan2(up-dir)+π/2 — the same convention as the crescent shots / GREEN DRAGON ASCENDS)
-          // is a constant 0. The only real rotation left is the convex-up half-turn, so the honest
-          // orientation is just SWEEP_BLADE_FLIP — blade tangent, convex edge leading up. (The old
-          // atan2(hz.vy,0) was inert dressing: hz.vy is always negative and the x-arg was hardcoded 0.)
-          var swAng = SWEEP_BLADE_FLIP;
-          GL.draw(GL.SPR.GLOW, W / 2, hz.y, W * 1.05, hz.r * 3.0, 0, 0.3, 0.95, 0.55, 0.4);
-          GL.draw(swc, W / 2, hz.y, W * 1.15, W * 1.15, swAng, 1, 1, 1, 0.98);
+          GL.draw(GL.SPR.GLOW, swmx, swmy, hz.r * 3.2, hz.len * 1.02, swAng, 0.3, 0.95, 0.55, 0.34);
+          GL.draw(swc, swmx, swmy, hz.len * 1.08, hz.len * 1.08, swAng, 1, 1, 1, 0.98);
           continue;
         }
-        for (var sx2 = 40; sx2 < W; sx2 += 54) {
-          var fx2 = (sx2 - W / 2) / (W / 2);
-          var yo = hz.y + fx2 * fx2 * 110;             // edges lag = crescent pointing up
-          GL.draw(GL.SPR.GLOW, sx2, yo, 120, hz.r * 2.2, 0, 0.3, 0.95, 0.55, 0.4);
-          GL.draw(GL.SPR.STREAK, sx2, yo, 60, hz.r * 1.5, Math.PI / 2, 0.35, 1.0, 0.6, 0.9);
-          GL.draw(GL.SPR.CORE, sx2, yo, 34, 26, 0, 1, 1, 1, 0.7);
+        for (var sd = hz.len * 0.12; sd < hz.len; sd += 70) {
+          var sfx = hz.cx + swux * sd, sfy = hz.cy + swuy * sd;
+          GL.draw(GL.SPR.GLOW, sfx, sfy, hz.r * 1.8, 120, swAng, 0.3, 0.95, 0.55, 0.4);
+          GL.draw(GL.SPR.STREAK, sfx, sfy, 46, 110, swAng, 0.35, 1.0, 0.6, 0.9);
         }
       }
       else if (hz.type === 'sweepwake') {
         var wa = 0.4 + 0.6 * Math.min(1, hz.timer / hz.dur);
-        for (var wx2 = 60; wx2 < W; wx2 += 80) {
-          var wf = (wx2 - W / 2) / (W / 2);
-          var wyo = hz.y + wf * wf * 110;
-          GL.draw(GL.SPR.GLOW, wx2, wyo, 130, 140, 0, 1, 0.5, 0.2, 0.22 * wa);
-          GL.draw(GL.SPR.CORE, wx2, wyo, 60, 26, 0, 1, 0.65, 0.3, 0.4 * wa);
+        for (var wi = 0; wi <= 14; wi++) {
+          var wfa = hz.ang0 + (hz.ang1 - hz.ang0) * wi / 14;
+          var wx2 = hz.cx + Math.cos(wfa) * hz.len * 0.72, wyo = hz.cy + Math.sin(wfa) * hz.len * 0.72;
+          GL.draw(GL.SPR.GLOW, wx2, wyo, 145, 120, wfa + Math.PI / 2, 1, 0.5, 0.2, 0.22 * wa);
+          GL.draw(GL.SPR.STREAK, wx2, wyo, 44, 96, wfa + Math.PI / 2, 1, 0.65, 0.3, 0.38 * wa);
         }
       }
     }
@@ -2258,27 +2270,24 @@
     hz.type = 'serpent'; hz.timer = 2.5 * (G.mods.quetzBig ? 1.3 : 1); hz.dur = hz.timer; hz.r = 16; hz.trail = []; hz.hue = 0; hz.x = W / 2; hz.y = 150;
     hz.esc = mirror ? -1 : 1;                    // mirrored path for the apotheosis twin
   }
-  // T4: orientation offset for the colossal sweep blade, on top of its travel tangent.
-  // The authored 33-10 crescent is a DIAGONAL guandao blade (gold tang one end, dragon-
-  // head the other, convex cutting edge along one flank). At the raw travel-tangent (rot 0)
-  // it stands vertical like a projectile — the "goofy" read. A quarter-turn lays it flat
-  // ACROSS the field with its convex cutting edge leading UP, tangent to the convex-up
-  // sweep arc (empirically verified against the 8-rotation render: +π/2 = edge up,
-  // +3π/2 = edge down/inverted). Named so the alignment stays tunable in one place.
-  var SWEEP_BLADE_FLIP = Math.PI / 2;
-  // GUAN YU — Crescent Moon Sweep: one colossal crescent blade sweeps the full
-  // width upward from the player's line, hurling non-bosses aside.
+  // GUAN YU — Crescent Moon Sweep: a ceremonial Green Dragon guandao pivots
+  // around its pommel through the upper field, hurling non-bosses aside.
   function crescentSweep() {
     var hz = allocHazard(); if (!hz) return;
-    hz.type = 'sweep'; hz.x = W / 2; hz.y = G.player.y - 60; hz.r = 90;
-    hz.vy = -(G.player.y + 140) / 0.7;           // reaches the top in ~0.7s
-    hz.timer = 1.0; hz.dur = 1.0; hz.trail = [];
+    hz.type = 'sweep'; hz.cx = G.player.x; hz.cy = G.player.y - 34; hz.x = hz.cx; hz.y = hz.cy;
+    hz.len = Math.max(W * 0.92, H * 0.72); hz.r = 72;
+    hz.ang0 = -Math.PI * 0.88; hz.ang1 = -Math.PI * 0.12; hz.ang = hz.ang0;
+    hz.timer = 0.78; hz.dur = 0.78; hz.trail = [];
     hz.dmg = LANCE_DMG * 2.6 * G.stats.spDmg * G.specialR;   // ≈ old Red Hare total
-    if (G.mods.guanWake) {                       // burning arc lingers at the launch line
+    if (G.mods.guanWake) {                       // burning edge lingers along the swept arc
       var wk = allocHazard();
-      if (wk) { wk.type = 'sweepwake'; wk.x = W / 2; wk.y = G.player.y - 180; wk.timer = 1.5; wk.dur = 1.5; wk.tick = 0; wk.dmg = LANCE_DMG * 0.5 * G.stats.spDmg * G.specialR; }
+      if (wk) {
+        wk.type = 'sweepwake'; wk.cx = hz.cx; wk.cy = hz.cy; wk.x = hz.cx; wk.y = hz.cy;
+        wk.len = hz.len; wk.ang0 = hz.ang0; wk.ang1 = hz.ang1;
+        wk.timer = 1.5; wk.dur = 1.5; wk.tick = 0; wk.dmg = LANCE_DMG * 0.5 * G.stats.spDmg * G.specialR;
+      }
     }
-    ringShock(G.player.x, G.player.y - 80, [0.3, 0.95, 0.55], 70, 3000, 0.5);
+    ringShock(hz.cx, hz.cy, [0.3, 0.95, 0.55], 70, 3000, 0.5);
     addShake(6);
   }
   // JADE EMPEROR — IMPERIAL JUDGEMENT (Leigong's Thunder Court). Two dark storm-clouds
@@ -5570,6 +5579,8 @@
     shotCount: function () { return Engine.shots.count(); },
     setAutoFire: function (v) { Run.meta.autoFire = !!v; },
     autoFire: function () { return !!Run.meta.autoFire; },
+    setEnemyHealthBars: function (v) { Run.meta.enemyHealthBars = !!v; },
+    enemyHealthBars: function () { return Run.meta.enemyHealthBars !== false; },
     setPaused: function (v) { G.paused = !!v; },
     // run one REAL dispatch frame (respects mode/pause gating, unlike step) so
     // the harness can prove auto-fire stays silent on title/pause.
@@ -5694,9 +5705,8 @@
     // wins over pathing — a foe fleeing the gate should still be net-dragged toward it).
     setEnemyMover: function (i, vx, vy) { var e = Engine.enemies.items[i]; if (e && e.active) e.onUpdate = function (en, dt) { en.x += vx * dt; en.y += vy * dt; }; },
     enemyGateT: function (i) { var e = Engine.enemies.items[i]; return (e && e.active) ? (e.gateT || 0) : 0; },
-    // GUAN YU sweep verify surface (T4): orientation offset override + hazard read.
-    setSweepFlip: function (v) { SWEEP_BLADE_FLIP = v; },
-    sweepInfo: function () { for (var i = 0; i < hazards.length; i++) if (hazards[i].active && hazards[i].type === 'sweep') return { x: hazards[i].x, y: hazards[i].y, vy: hazards[i].vy, timer: hazards[i].timer, flip: SWEEP_BLADE_FLIP }; return null; },
+    // GUAN YU sweep verify surface: pivot, current angle, and arc endpoints.
+    sweepInfo: function () { for (var i = 0; i < hazards.length; i++) if (hazards[i].active && hazards[i].type === 'sweep') return { cx: hazards[i].cx, cy: hazards[i].cy, len: hazards[i].len, ang: hazards[i].ang, ang0: hazards[i].ang0, ang1: hazards[i].ang1, timer: hazards[i].timer }; return null; },
     // ANUBIS verify surface
     castGate: function () { gateOfDuat(); },
     duatActive: function () { return !!G.duat.active; },
@@ -5906,8 +5916,9 @@
     // X abandons to title. In draft/shop, Esc deliberately does nothing.
     if (m === 'playing' || m === 'clearing') {
       if (G.paused) {
-        // §9b auto-fire is toggled on the pause menu and persisted in goldwake_meta.
+        // Pause-menu settings are persisted in goldwake_meta.
         if (Engine.pressed('KeyF')) { Run.meta.autoFire = !Run.meta.autoFire; Run.saveMeta(); addPopup(W / 2, 120, Run.meta.autoFire ? 'AUTO-FIRE ON' : 'AUTO-FIRE OFF', UI_CYAN, 30); }
+        if (Engine.pressed('KeyH')) { Run.meta.enemyHealthBars = !Run.meta.enemyHealthBars; Run.saveMeta(); addPopup(W / 2, 120, Run.meta.enemyHealthBars ? 'HEALTH BARS ON' : 'HEALTH BARS OFF', UI_CYAN, 30); }
         if (Engine.pressed('KeyX')) { G.paused = false; if (window.MUSIC) MUSIC.duck(false); Run.toTitle(); return; }
         if (Engine.pressed('KeyZ') || Engine.pressed('Space') || Engine.pressed('KeyP') || Engine.pressed('Escape')) { G.paused = false; if (window.MUSIC) MUSIC.duck(false); }
       } else if (Engine.pressed('Escape') || Engine.pressed('KeyP')) {
@@ -6796,13 +6807,14 @@
         GL.draw(GL.SPR.CORE, e.x + qpf * qspan, qpy - Math.abs(qpf) * s * 0.1, s * 0.06, s * 0.06, 0, 0.4, 1, 0.6, 0.95);
       }
     }
-    // ANUBIS THE WEIGHING — gold scales glyph over the hull, TIPPING with accrued weight.
+    // ANUBIS THE WEIGHING — gold scales glyph over the hull, visibly tipping left as
+    // accrued weight loads. Five ordered poses make the approach to the Verdict legible.
     if (e.scaleW > 0 && G.attackGod === 'anubis' && !e.dying) {
       var frac = Math.min(1, e.scaleW / (e.maxhp * ANUBIS_K));
       var tilt = frac * 0.5, gy = e.y - s * 0.7;                 // beam tips as the scales load
-      // §36 authored scales glyph — three tip-states by progress vs threshold:
-      // LEVEL (36-2-scales-b) → TIPPING (36-1-scales-a) → TIPPED harder (36-3-scales-c).
-      var scName = frac < 0.34 ? '36-2-scales-b' : frac < 0.67 ? '36-1-scales-a' : '36-3-scales-c';
+      // §36.1 ordered authored frames: LEVEL → four steadily harder LEFT leans.
+      // Never switch tip direction as the meter rises; the read must be a continuous load.
+      var scName = frac < 0.10 ? '36-2-scales-b' : frac < 0.28 ? '36-9-scales-lean-1' : frac < 0.50 ? '36-10-scales-lean-2' : frac < 0.74 ? '36-11-scales-lean-3' : '36-12-scales-lean-4';
       var scC = authCell(scName);
       if (scC >= 0) {
         GL.draw(scC, e.x, gy, s * 0.5, s * 0.5, 0, 1, 1, 1, 0.95);
@@ -6840,18 +6852,15 @@
       stateRim(enemyDrawCell(e), e.x, e.y, s, e.rot, 1, 0.82, 0.4, 0.42 * sealP * sealF, 1.08);   // gold seal rim-light pulse
       if (sealC >= 0) GL.draw(sealC, e.x, e.y, s * 0.6, s * 0.6, 0, 1, 1, 1, 0.95 * sealF);          // §36 authored seal glyph
     }
-    // LOKI — MISCHIEF triskele: the §36 authored 3-blade mark over the crown, growing
-    // with the stack (1/2/3); procedural per-stack kunai on miss (stack = shape).
+    // LOKI — MISCHIEF: plain green tally slashes over the crown. They are a simple
+    // three-hit Pilfer counter, not a mystical effect or a separate status.
     if (e.mischief > 0 && !e.dying && G.attackGod === 'loki') {
-      var triC = authCell('36-4-triskele');
-      if (triC >= 0) {
-        var trs = s * (0.34 + 0.09 * e.mischief);
-        GL.draw(triC, e.x, e.y - s * 0.55, trs, trs, t * 1.6, 1, 1, 1, 0.95);
-      } else {
-        for (var mi = 0; mi < e.mischief; mi++) {
-          var ma = t * 2 + mi * (TAU / 3), mx = e.x + Math.cos(ma) * s * 0.3, my = e.y - s * 0.55 + Math.sin(ma) * s * 0.12;
-          GL.draw(GL.SPR.KUNAI, mx, my, s * 0.16, s * 0.28, ma, 0.55, 1.0, 0.35, 0.9);
-        }
+      var markY = e.y - s * 0.56, markN = e.mischief, markGap = s * 0.22;
+      var markPulse = 0.88 + 0.12 * Math.sin(t * 7 + e.seq);
+      for (var mi = 0; mi < markN; mi++) {
+        var mx = e.x + (mi - (markN - 1) * 0.5) * markGap;
+        GL.draw(GL.SPR.STREAK, mx, markY, s * 0.055, s * 0.27, -0.55, 0.22, 0.55, 0.16, 0.42 * markPulse);
+        GL.draw(GL.SPR.STREAK, mx, markY, s * 0.025, s * 0.22, -0.55, 0.55, 1.0, 0.35, 0.96 * markPulse);
       }
     }
   }
@@ -6996,7 +7005,7 @@
     // §9 signature cells resolved ONCE per frame (drawGold's coinC pattern), not per shot.
     var cHunt = authCell('33-11-hunt-arrow'), cRune = authCell('33-13-rune-bolt'),
         cAnkh = authCell('33-12-ankh-bolt'), cHeart = authCell('33-14-heartseeker'),
-        cLoosed = authCell('33-8-loosed-arrow'), cCres = authCell('33-10-green-dragon-crescent');
+        cLoosed = authCell('33-8-loosed-arrow'), cCres = authCell('33-15-green-dragon-guandao');
     Engine.shots.forEach(function (s) {
       var ang = Math.atan2(s.vy, s.vx) + Math.PI / 2;
       // ZEUS THE STORM (kind 3) — the shot is a crackling ribbon mini-bolt, not a streak.
@@ -7055,10 +7064,14 @@
         if (drawSigShot(s, cLoosed, 1.0, 3.0, ang, 0.7, 0.85, 1.0, 0.5, 2.4, ang)) return;   // §9 great moon-silver arrow
       }
       if (s.crescent) {
-        // broad crescent blade — wide across its travel; brightens as it cleaves
+        // A compact full guandao flicks through a short alternating slash as it flies;
+        // this is deliberately distinct from the long ceremonial special weapon.
         var cw = s.scale, perp = ang + Math.PI / 2;
         var pow = Math.min(1, (s.damage - 1) * 0.12);
-        if (drawSigShot(s, cCres, 1.6, 2.2, perp, s.r, s.g, s.b, 0.45 + 0.3 * pow, 2.6, ang)) return;   // §9 Green Dragon Crescent — cleaving profile
+        var slashDir = (s.fireId & 1) ? 1 : -1;
+        var slashT = Math.min(1, s.age / 0.22);
+        var weaponAng = ang + Math.sin(slashT * Math.PI) * 0.55 * slashDir;
+        if (drawSigShot(s, cCres, 1.6, 2.2, weaponAng, s.r, s.g, s.b, 0.45 + 0.3 * pow, 2.8, weaponAng)) return;   // §9 compact Green Dragon guandao
         GL.draw(GL.SPR.GLOW, s.x, s.y, cw * 1.1, cw * 2.4, perp, s.r, s.g, s.b, 0.5 + 0.35 * pow);
         GL.draw(GL.SPR.STREAK, s.x, s.y, cw * 0.7, cw * 2.0, perp, s.r, s.g, s.b, 0.95);
         GL.draw(GL.SPR.STREAK, s.x, s.y, cw * 0.4, cw * 1.3, perp, 1, 1, 1, 0.85);
@@ -7357,6 +7370,7 @@
   }
 
   function drawCombatHUD() {
+    drawEnemyHealthBars();
     hudCornerWash(0, 0, 420, 238, false);
     hudCornerWash(W - 420, 0, 420, 238, true);
 
@@ -7412,6 +7426,32 @@
     drawGodTags();
     drawPopups();
     drawAnnounce();
+  }
+  // Optional, persisted development read: every live enemy gets a compact bar
+  // anchored above its body. The boss keeps its full encounter bar as well, so
+  // this remains an honest "all enemies" view even during a setpiece.
+  function drawEnemyHealthBars() {
+    if (Run.meta.enemyHealthBars === false) return;
+    hud.save();
+    Engine.enemies.forEach(function (e) {
+      if (e.dying || e.hp <= 0 || !isFinite(e.maxhp) || e.maxhp <= 0) return;
+      var scale = e.scale || MIN_ENEMY_DRAW;
+      var w = Math.max(44, Math.min(e.boss ? 180 : 132, scale * (e.boss ? 0.88 : 1.05)));
+      var h = e.boss ? 10 : 7;
+      var x = e.x - w / 2, y = e.y - scale * 0.68 - h;
+      if (x + w < 0 || x > W || y + h < 0 || y > H) return;
+      var frac = Math.max(0, Math.min(1, e.hp / e.maxhp));
+      var fill = frac > 0.5 ? '#5fe6ff' : frac > 0.25 ? '#ffd766' : '#ff5a6e';
+      hud.fillStyle = 'rgba(2,8,12,0.84)';
+      roundRect(hud, x - 2, y - 2, w + 4, h + 4, 4); hud.fill();
+      hud.fillStyle = 'rgba(26,37,46,0.9)';
+      roundRect(hud, x, y, w, h, 3); hud.fill();
+      if (frac > 0) {
+        hud.fillStyle = fill;
+        roundRect(hud, x, y, w * frac, h, 3); hud.fill();
+      }
+    });
+    hud.restore();
   }
   function drawDestinationTitle() {
     var b = G.bg;
@@ -7666,6 +7706,8 @@
     hud.fillText('X   ABANDON TO TITLE', W / 2, y + 244);
     hud.fillStyle = Run.meta.autoFire ? UI_GOLD : UI_DIM(); hud.font = '600 26px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     hud.fillText('F   AUTO-FIRE  ' + (Run.meta.autoFire ? 'ON' : 'OFF'), W / 2, y + 292);
+    hud.fillStyle = Run.meta.enemyHealthBars === false ? UI_DIM() : UI_GOLD;
+    hud.fillText('H   ENEMY HEALTH BARS  ' + (Run.meta.enemyHealthBars === false ? 'OFF' : 'ON'), W / 2, y + 338);
   }
   function roundRect(ctx, x, y, w, h, r) {
     if (w < 2 * r) r = w / 2; if (h < 2 * r) r = h / 2;

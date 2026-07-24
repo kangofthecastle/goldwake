@@ -914,11 +914,12 @@
   // 2026-07-19 DELTA batch — cells 51+ (BOLT owns 50). Signature projectiles,
   // owned-entity segments, field objects, and the glyph/flame sheets. All authored
   // nose-UP (or orientation-free glyphs) so rot 0 — the draw site rotates to travel.
-  // The 8x16 atlas fits these as cells 51..88 (39 free cells remain, 89..127).
+  // The 8x16 atlas fits these as cells 51..90 (37 free cells remain, 91..127).
   var AUTH_NAMES2 = [
     // A — signature projectiles
     '33-10-green-dragon-crescent', '33-11-hunt-arrow', '33-12-ankh-bolt',
-    '33-13-rune-bolt', '33-14-heartseeker',
+    '33-13-rune-bolt', '33-14-heartseeker', '33-15-green-dragon-guandao',
+    '33-16-crescent-moon-sweep',
     // B — owned entities / ult segments
     '34-5b-sky-serpent-body', '34-5c-sky-serpent-tail', '34-6-solar-barque',
     '34-7-green-dragon-head',
@@ -930,7 +931,9 @@
     '35-6-rune', '35-7-rune', '35-8-rune', '35-9-rune',
     '36-1-scales-a', '36-2-scales-b', '36-3-scales-c', '36-4-triskele',
     '36-5-bracket', '36-6-seal', '36-7-verdict-jackal', '36-8-verdict-jackal-shut',
-    '37-1-flame', '37-2-flame', '37-3-flame', '37-4-flame', '37-5-flame', '37-6-flame'
+    '37-1-flame', '37-2-flame', '37-3-flame', '37-4-flame', '37-5-flame', '37-6-flame',
+    // 36.1 — four intermediate states turn THE WEIGHING into a visible tip, not a three-frame jump.
+    '36-9-scales-lean-1', '36-10-scales-lean-2', '36-11-scales-lean-3', '36-12-scales-lean-4'
   ];
   var AUTH_DELTA_BASE = GL.SPR.BOLT + 1;   // 51 — first free cell after BOLT (50)
   (function initAuthored() {

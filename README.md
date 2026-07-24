@@ -43,7 +43,7 @@ overridable — they stay procedural by doctrine.
 | **X** | **SPECIAL** weapon (spends a charge)  ·  also **leave shop / back** in menus |
 | **C** | **APOTHEOSIS** (when the gauge is full) |
 | **Left / Right** | Move the selection in drafts and shops (or click) |
-| **P / Esc** | Pause in combat (on the pause screen: Z/P/Esc resume, X abandons to title, **F** toggles **auto-fire**); Esc also backs out of end screens |
+| **P / Esc** | Pause in combat (on the pause screen: Z/P/Esc resume, X abandons to title, **F** toggles **auto-fire**, **H** toggles enemy health bars); Esc also backs out of end screens |
 | **R** | Restart the run (fresh seed) |
 | **M** | Mute / unmute (music **and** SFX) |
 

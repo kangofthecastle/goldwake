@@ -92,7 +92,7 @@
   // ---------------------------------------------------------------------
   // peakHubris = best HUBRIS multiplier ever reached (additive field; legacy blobs
   // without it fall back to 1.0). Key stays 'goldwake_meta' — never rename.
-  Run.meta = { hi: 0, bestSector: 0, careerGold: 0, killedWarden: false, completedRun: false, peakHubris: 1, autoFire: false, lightningStyle: 'C', hitboxStyle: 'A' };
+  Run.meta = { hi: 0, bestSector: 0, careerGold: 0, killedWarden: false, completedRun: false, peakHubris: 1, autoFire: false, enemyHealthBars: true, lightningStyle: 'C', hitboxStyle: 'A' };
   Run.loadMeta = function () {
     try {
       var raw = localStorage.getItem('goldwake_meta');
@@ -102,6 +102,9 @@
         Run.meta.killedWarden = !!m.killedWarden; Run.meta.completedRun = !!m.completedRun;
         Run.meta.peakHubris = +m.peakHubris || 1;   // additive: legacy blob -> 1.0
         Run.meta.autoFire = !!m.autoFire;            // §9b auto-fire toggle (default OFF)
+        // Enemy health bars default ON so they are available for development; an
+        // existing settings blob may explicitly turn them off.
+        Run.meta.enemyHealthBars = m.enemyHealthBars !== false;
         // respect any explicit persisted pick (A/B/C); a legacy blob missing the
         // field keeps the current default ('C') rather than being forced to 'A'.
         Run.meta.lightningStyle = (m.lightningStyle === 'A' || m.lightningStyle === 'B' || m.lightningStyle === 'C') ? m.lightningStyle : Run.meta.lightningStyle;
