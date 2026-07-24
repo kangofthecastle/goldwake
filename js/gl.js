@@ -1010,10 +1010,12 @@
 'in vec2 v_uv;\n' +
 'uniform sampler2D u_tex;\n' +
 'uniform vec4 u_tint;\n' +
+'uniform vec2 u_grade;\n' +          // gamma, lift
 'out vec4 frag;\n' +
 'void main(){\n' +
 '  vec4 t = texture(u_tex, fract(v_uv));\n' +
-'  frag = vec4(t.rgb * u_tint.rgb, t.a) * u_tint.a;\n' +   // premultiplied-over
+'  vec3 graded = pow(max(t.rgb, vec3(0.0)), vec3(u_grade.x)) + vec3(u_grade.y) * t.a;\n' +
+'  frag = vec4(graded * u_tint.rgb, t.a) * u_tint.a;\n' +   // premultiplied-over
 '}\n';
 
   var progBackdrop = null, uBackdrop = null, backdropVAO = null;
@@ -1022,7 +1024,7 @@
   function buildBackdropGL() {
     progBackdrop = link(VS_BACKDROP, FS_BACKDROP);
     if (!progBackdrop) return;
-    uBackdrop = uniforms(progBackdrop, ['u_rect', 'u_playfield', 'u_scroll', 'u_tex', 'u_tint']);
+    uBackdrop = uniforms(progBackdrop, ['u_rect', 'u_playfield', 'u_scroll', 'u_tex', 'u_tint', 'u_grade']);
     backdropVAO = gl.createVertexArray();
     gl.bindVertexArray(backdropVAO);
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVBO);   // reuse the unit quad
@@ -1070,9 +1072,8 @@
       }
     }
     // Authored journey destinations: three actual places per sector, reached
-    // during the wave arc rather than reserved for the boss. These are static
-    // full-frame plates; game.js crossfades them while the existing structure
-    // and debris layers retain a restrained amount of parallax above them.
+    // during the wave arc rather than reserved for the boss. game.js advances
+    // them through the playfield as contiguous stretches of physical ground.
     var destinations = {
       's1-scene1': 'art/environments/s1-01-shattered-fleet.avif',
       's1-scene2': 'art/environments/s1-02-flooded-colonnade.avif',
@@ -1089,6 +1090,18 @@
         loadSlot(destinationSlot, destinations[destinationSlot]);
       }
     }
+    // Mid-level foreground crossings. These alpha plates carry the visible
+    // silhouette for the matching collision geometry in game.js.
+    var landmarks = {
+      's1-landmark': 'art/landmarks/s1-bronze-crossing.webp',
+      's2-landmark': 'art/landmarks/s2-funerary-crossing.webp',
+      's3-landmark': 'art/landmarks/s3-jade-crossing.webp'
+    };
+    for (var landmarkSlot in landmarks) {
+      if (Object.prototype.hasOwnProperty.call(landmarks, landmarkSlot)) {
+        loadSlot(landmarkSlot, landmarks[landmarkSlot]);
+      }
+    }
   }
 
   GL.backdropReady = function (slot) { var b = backdrops[slot]; return !!(b && b.ready); };
@@ -1097,7 +1110,7 @@
   // scrollY in uv units). Self-contained blend: flushes the additive batch,
   // draws premultiplied-over, then restores additive so the caller's next
   // GL.draw picks up where it left off.
-  GL.drawBackdrop = function (slot, cx, cy, w, h, r, g, b, a, scrollY) {
+  GL.drawBackdrop = function (slot, cx, cy, w, h, r, g, b, a, scrollY, gamma, lift) {
     var bd = backdrops[slot];
     if (!bd || !bd.ready || !progBackdrop) return;
     flushSprites();
@@ -1110,6 +1123,7 @@
     gl.uniform4f(uBackdrop.u_rect, cx, cy, w, h);
     gl.uniform2f(uBackdrop.u_scroll, 0, scrollY || 0);
     gl.uniform4f(uBackdrop.u_tint, r, g, b, a);
+    gl.uniform2f(uBackdrop.u_grade, gamma == null ? 1 : gamma, lift || 0);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindVertexArray(null);
     gl.blendFunc(gl.ONE, gl.ONE);   // restore additive base pass

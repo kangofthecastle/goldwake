@@ -391,9 +391,9 @@
       scrollY: 0,
       role: 'opener', dimFactor: 1,
       // Three authored places per sector. The opening plate is already present
-      // on sector entry; later plates crossfade in as the run reaches the middle
-      // and final thirds of the sector.
+      // on sector entry; later places physically travel down into the field.
       sceneIndex: 0, sceneFrom: 0, sceneBlend: 1, sceneTitleT: 2.8,
+      landmark: null,
       obstacles: [],
       setpiece: { active: false, x: 0, y: 0, vy: 0, alpha: 0, parts: null },
       bossShadow: { active: false, y: 0, t: 0, alpha: 0 }
@@ -416,19 +416,25 @@
     var wi = Run && typeof Run.waveIdx === 'number' ? Run.waveIdx : 0;
     return Math.min(2, Math.floor((wi * 3) / Math.max(1, count)));
   }
-  function makeDestinationObstacles(sector) {
-    // One authored architectural narrows per sector, reserved for the mid-level
-    // destination. The centre remains generous enough for danmaku routing.
+  function makeDestinationLandmark(sector) {
+    // One authored architectural crossing per sector, reserved for the
+    // mid-level destination. Collision follows the image but leaves a generous
+    // central lane; decorative overhangs are intentionally non-solid.
     var specs = [
-      { lw: 252, rw: 226, h: 720, speed: 62, kind: 'bronze' },
-      { lw: 238, rw: 254, h: 760, speed: 56, kind: 'pylon' },
-      { lw: 270, rw: 286, h: 700, speed: 68, kind: 'jade' }
+      { slot: 's1-landmark', w: 1160, h: 653, dy: 174, ch: 330, lw: 340, rw: 340, speed: 108, kind: 'bronze' },
+      { slot: 's2-landmark', w: 1160, h: 773, dy: 138, ch: 455, lw: 352, rw: 352, speed: 98, kind: 'pylon' },
+      { slot: 's3-landmark', w: 1160, h: 653, dy: 52, ch: 530, lw: 350, rw: 350, speed: 114, kind: 'jade' }
     ];
-    var s = specs[sector] || specs[0], y = -360;
-    return [
-      { x: 0, y: y, w: s.lw, h: s.h, vy: s.speed, side: -1, kind: s.kind, telegraph: 1.15, solid: false, exit: false },
-      { x: W - s.rw, y: y - 80, w: s.rw, h: s.h + 80, vy: s.speed, side: 1, kind: s.kind, telegraph: 1.15, solid: false, exit: false }
+    var s = specs[sector] || specs[0];
+    var landmark = {
+      slot: s.slot, w: s.w, h: s.h, y: -s.h * 0.42, vy: s.speed,
+      kind: s.kind, telegraph: 2.15, solid: false, exit: false
+    };
+    landmark.obstacles = [
+      { x: 0, y: landmark.y + s.dy, dy: s.dy, w: s.lw, h: s.ch, side: -1, kind: s.kind, solid: false },
+      { x: W - s.rw, y: landmark.y + s.dy, dy: s.dy, w: s.rw, h: s.ch, side: 1, kind: s.kind, solid: false }
     ];
+    return landmark;
   }
   function enterDestination(idx) {
     var b = G.bg;
@@ -439,11 +445,12 @@
     b.sceneBlend = 0;
     b.sceneTitleT = 3.2;
     if (idx === 1) {
-      b.obstacles = makeDestinationObstacles(b.sector);
+      b.landmark = makeDestinationLandmark(b.sector);
+      b.obstacles = b.landmark.obstacles;
     } else {
       // Let architecture from the previous place clear the field quickly
-      // instead of vanishing on the crossfade.
-      for (var i = 0; i < b.obstacles.length; i++) b.obstacles[i].exit = true;
+      // instead of vanishing during the spatial scene change.
+      if (b.landmark) b.landmark.exit = true;
     }
   }
 
@@ -482,7 +489,7 @@
     b.structAlpha += (b.structTarget - b.structAlpha) * (b.role === 'opener' ? Math.min(1, dt * 0.7) : k);
     b.bright += (b.brightTarget - b.bright) * k;
     b.scrollMul += (b.scrollTarget - b.scrollMul) * k;
-    if (b.sceneBlend < 1) b.sceneBlend = Math.min(1, b.sceneBlend + dt * 0.42);
+    if (b.sceneBlend < 1) b.sceneBlend = Math.min(1, b.sceneBlend + dt * 0.32);
     if (b.sceneTitleT > 0) b.sceneTitleT -= dt;
     // readability dim from live bullet count
     var target = bgDimFor(Engine.bullets.count());
@@ -523,14 +530,21 @@
       bs.alpha = G.boss && G.boss.arrived ? Math.max(0, bs.alpha - dt * 0.8) : Math.min(1, bs.alpha + dt * 1.3);
       if (G.boss && G.boss.arrived && bs.alpha <= 0.01) bs.active = false;
     }
-    for (i = b.obstacles.length - 1; i >= 0; i--) {
-      var ob = b.obstacles[i];
-      if (ob.telegraph > 0) {
-        ob.telegraph -= dt;
-        if (ob.telegraph <= 0) { ob.telegraph = 0; ob.solid = true; }
+    var lm = b.landmark;
+    if (lm) {
+      lm.y += (lm.exit ? 360 : lm.vy * sm) * dt;
+      if (lm.telegraph > 0) {
+        lm.telegraph -= dt;
+        if (lm.telegraph <= 0) { lm.telegraph = 0; lm.solid = true; }
       }
-      ob.y += (ob.exit ? 360 : ob.vy * sm) * dt;
-      if (ob.y > H + 100) b.obstacles.splice(i, 1);
+      for (i = 0; i < lm.obstacles.length; i++) {
+        lm.obstacles[i].y = lm.y + lm.obstacles[i].dy;
+        lm.obstacles[i].solid = lm.solid;
+      }
+      if (lm.y > H + 100) {
+        b.landmark = null;
+        b.obstacles = [];
+      }
     }
   }
 
@@ -549,6 +563,7 @@
       destinationIndex: b.sceneIndex,
       destination: DESTINATION_NAMES[b.sector][b.sceneIndex],
       destinationBlend: b.sceneBlend,
+      landmark: b.landmark ? { slot: b.landmark.slot, y: b.landmark.y, solid: b.landmark.solid, exit: b.landmark.exit } : null,
       obstacles: b.obstacles.map(function (o) { return { x: o.x, y: o.y, w: o.w, h: o.h, kind: o.kind, solid: o.solid }; }),
       structCol: b.env.structCol.slice(), starCol: b.env.star.slice(),
       units: b.units.length, setpiece: b.setpiece.active, bossShadow: b.bossShadow.active, bossShadowY: b.bossShadow.y,
@@ -6331,9 +6346,10 @@
     if (!G) return;
     GL.setShake(G.shakeX, G.shakeY);
     GL.beginScene();
-    drawBackground();
     var m = G.mode;
+    drawBackground();
     if (m !== 'title') {
+      drawEnvironmentLandmark();
       // PASS A — additive base: everything the opaque bullet bodies draw over
       // (explosions included, so a bullet frozen over a white blast still reads).
       drawHazards();
@@ -6374,18 +6390,23 @@
   function drawBackground() {
     var b = G.bg, i, dim = b.dimFactor, bright = b.bright;
     var deepA = dim * Math.min(1.15, bright);         // deep field follows brightness + dim law
-    var structBase = dim * bright * b.structAlpha * 0.42; // destinations already carry major architecture
+    var structBase = dim * bright * b.structAlpha * 0.28; // destinations already carry major architecture
     var sc = b.env.structCol, st = b.env.star;
     var sceneSlot = b.env.slot + '-scene' + (b.sceneIndex + 1);
     var fromSlot = b.env.slot + '-scene' + (b.sceneFrom + 1);
-    // DESTINATION PLATE — actual place changes through the sector. The previous
-    // place stays beneath the incoming plate for a slow, readable crossfade.
+    // DESTINATION GROUND — the outgoing place travels below the player as the
+    // next place enters from the top. This reads as forward flight through one
+    // world instead of a slideshow dissolve.
     if (GL.backdropReady(sceneSlot)) {
-      var sceneA = deepA * 0.82;
+      var sceneA = deepA * 0.96;
+      var sceneScroll = (-b.scrollY * 0.018) % 1;
       if (b.sceneBlend < 1 && GL.backdropReady(fromSlot)) {
-        GL.drawBackdrop(fromSlot, W / 2, H / 2, W, H, 1, 1, 1, sceneA * (1 - b.sceneBlend), 0);
+        var ease = b.sceneBlend * b.sceneBlend * (3 - 2 * b.sceneBlend);
+        GL.drawBackdrop(fromSlot, W / 2, H / 2 + H * ease, W, H, 1.08, 1.08, 1.08, sceneA, sceneScroll, 0.74, 0.012);
+        GL.drawBackdrop(sceneSlot, W / 2, -H / 2 + H * ease, W, H, 1.08, 1.08, 1.08, sceneA, sceneScroll, 0.74, 0.012);
+      } else {
+        GL.drawBackdrop(sceneSlot, W / 2, H / 2, W, H, 1.08, 1.08, 1.08, sceneA, sceneScroll, 0.74, 0.012);
       }
-      GL.drawBackdrop(sceneSlot, W / 2, H / 2, W, H, 1, 1, 1, sceneA * b.sceneBlend, 0);
     } else if (GL.backdropReady(b.env.slot + '-deep')) {
       GL.drawBackdrop(b.env.slot + '-deep', W / 2, H / 2, W, H, 1, 1, 1, deepA, (b.scrollY * 0.006) % 1);
     } else {
@@ -6412,13 +6433,25 @@
     // dims further while a crest is live (dimFactor already low then).
     var sp = b.setpiece;
     if (sp.active && sp.parts) drawStructUnitAt(sp.x, sp.y, sp.parts, sc, structBase * 1.1 * sp.alpha);
-    // NEAR-DEBRIS WEATHER — fast sparse motes/embers (painted override or procedural).
+    // NEAR-DEBRIS WEATHER — fast sparse motes/embers. Procedural flecks remain
+    // over painted debris at low alpha so forward motion is always legible.
     var dc = b.env.debrisCol, debA = deepA * 0.9;
-    if (GL.backdropReady(b.env.slot + '-debris')) {
+    var paintedDebris = GL.backdropReady(b.env.slot + '-debris');
+    if (paintedDebris) {
       GL.drawBackdrop(b.env.slot + '-debris', W / 2, H / 2, W, H, 1, 1, 1, debA, (b.scrollY * 0.03) % 1);
-    } else {
-      for (i = 0; i < b.debris.length; i++) { var d = b.debris[i]; var dt2 = 0.6 + 0.4 * Math.sin(d.tw); GL.draw(GL.SPR.SPARK, d.x, d.y, d.sz, d.sz, d.tw, dc[0], dc[1], dc[2], d.a * dt2 * debA); }
     }
+    for (i = 0; i < b.debris.length; i++) {
+      var d = b.debris[i], dt2 = 0.6 + 0.4 * Math.sin(d.tw);
+      GL.draw(GL.SPR.SPARK, d.x, d.y, d.sz, d.sz, d.tw, dc[0], dc[1], dc[2], d.a * dt2 * debA * (paintedDebris ? 0.35 : 1));
+    }
+  }
+  function drawEnvironmentLandmark() {
+    var b = G.bg, lm = b.landmark;
+    if (!lm || !GL.backdropReady(lm.slot)) return;
+    // Important terrain retains enough presence under bullet-density dimming to
+    // remain navigable; it still sits below every hazard, projectile and actor.
+    var alpha = (0.48 + b.dimFactor * 0.52) * Math.min(1, b.bright);
+    GL.drawBackdrop(lm.slot, W / 2, lm.y + lm.h / 2, lm.w, lm.h, 1, 1, 1, alpha, 0, 1, 0);
   }
   function drawStructUnitAt(ox, oy, parts, col, alpha) {
     for (var i = 0; i < parts.length; i++) {
@@ -6432,52 +6465,32 @@
     if (!obs.length) return;
     for (var i = 0; i < obs.length; i++) {
       var ob = obs[i], pulse = 0.5 + 0.5 * Math.sin(G.time * 11 + i * 2.1);
-      hud.save();
-      hud.beginPath(); hud.rect(ob.x, ob.y, ob.w, ob.h); hud.clip();
-      var g = hud.createLinearGradient(ob.x, 0, ob.x + ob.w, 0);
-      if (ob.kind === 'bronze') {
-        g.addColorStop(0, '#100c08'); g.addColorStop(0.72, '#30200f'); g.addColorStop(1, '#7d5019');
-      } else if (ob.kind === 'pylon') {
-        g.addColorStop(0, '#070a12'); g.addColorStop(0.7, '#111d33'); g.addColorStop(1, '#80682c');
-      } else {
-        g.addColorStop(0, '#07100e'); g.addColorStop(0.72, '#103126'); g.addColorStop(1, '#9b7b2d');
-      }
-      if (ob.side > 0) {
-        g = hud.createLinearGradient(ob.x + ob.w, 0, ob.x, 0);
-        if (ob.kind === 'bronze') {
-          g.addColorStop(0, '#100c08'); g.addColorStop(0.72, '#30200f'); g.addColorStop(1, '#7d5019');
-        } else if (ob.kind === 'pylon') {
-          g.addColorStop(0, '#070a12'); g.addColorStop(0.7, '#111d33'); g.addColorStop(1, '#80682c');
-        } else {
-          g.addColorStop(0, '#07100e'); g.addColorStop(0.72, '#103126'); g.addColorStop(1, '#9b7b2d');
-        }
-      }
-      hud.globalAlpha = ob.solid ? 0.92 : 0.3 + pulse * 0.18;
-      hud.fillStyle = g; hud.fillRect(ob.x, ob.y, ob.w, ob.h);
-      hud.globalAlpha = ob.solid ? 0.7 : 0.22;
-      hud.strokeStyle = ob.kind === 'jade' ? '#79e5c2' : (ob.kind === 'pylon' ? '#66bde8' : '#e0a548');
-      hud.lineWidth = 5;
-      for (var yy = ob.y + 70; yy < ob.y + ob.h; yy += 118) {
-        hud.beginPath(); hud.moveTo(ob.x, yy); hud.lineTo(ob.x + ob.w, yy + (ob.kind === 'jade' ? 70 : 0)); hud.stroke();
-      }
-      if (ob.kind === 'jade') {
-        for (var xx = ob.x - ob.h; xx < ob.x + ob.w + ob.h; xx += 104) {
-          hud.beginPath(); hud.moveTo(xx, ob.y); hud.lineTo(xx + ob.h, ob.y + ob.h); hud.stroke();
-        }
-      } else if (ob.kind === 'pylon') {
-        hud.lineWidth = 3;
-        for (var py = ob.y + 54; py < ob.y + ob.h; py += 150) {
-          hud.strokeRect(ob.x + ob.w * 0.26, py, ob.w * 0.48, 56);
-        }
-      }
-      hud.restore();
       var edgeX = ob.side < 0 ? ob.x + ob.w : ob.x;
       hud.save();
-      hud.strokeStyle = ob.solid ? (ob.kind === 'jade' ? '#86ffd3' : '#ffd766') : 'rgba(95,230,255,' + (0.5 + pulse * 0.5) + ')';
-      hud.lineWidth = ob.solid ? 7 : 4;
-      hud.shadowColor = hud.strokeStyle; hud.shadowBlur = ob.solid ? 18 : 30;
-      if (!ob.solid) hud.setLineDash([24, 18]);
+      if (!ob.solid) {
+        hud.fillStyle = 'rgba(95,230,255,' + (0.025 + pulse * 0.035) + ')';
+        hud.fillRect(ob.x, ob.y, ob.w, ob.h);
+      }
+      hud.strokeStyle = ob.solid
+        ? (ob.kind === 'jade' ? 'rgba(134,255,211,0.36)' : 'rgba(255,215,102,0.34)')
+        : 'rgba(95,230,255,' + (0.58 + pulse * 0.34) + ')';
+      hud.lineWidth = ob.solid ? 3 : 4;
+      hud.shadowColor = hud.strokeStyle;
+      hud.shadowBlur = ob.solid ? 9 : 28;
+      if (!ob.solid) hud.setLineDash([22, 17]);
       hud.beginPath(); hud.moveTo(edgeX, ob.y); hud.lineTo(edgeX, ob.y + ob.h); hud.stroke();
+      // Sparse inward chevrons mark the safe channel without repainting the
+      // authored landmark with opaque rectangles.
+      if (!ob.solid) {
+        hud.setLineDash([]);
+        for (var yy = ob.y + 48; yy < ob.y + ob.h; yy += 86) {
+          hud.beginPath();
+          hud.moveTo(edgeX, yy);
+          hud.lineTo(edgeX + ob.side * 20, yy + 16);
+          hud.lineTo(edgeX, yy + 32);
+          hud.stroke();
+        }
+      }
       hud.restore();
     }
   }
