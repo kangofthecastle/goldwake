@@ -215,7 +215,8 @@ armory, Odin NINE NIGHTS, Heimdall THE BIFRÖST.
   live enemy bullets nearest the foe within 240px, **biased to bullets already >80px from any emitter** (never whiffs /
   never a panic-clear). Each: `friendly=true`, `srcId=foe`, tint `0.55,1.0,0.35`, reverse 180°, gentle homing (`~2.2 rad/s`)
   to nearest OTHER live enemy. Damage rides existing `flipDmg=2.0*attackR` (no rider). Reset stacks, 1.2s per-foe cooldown.
-  *On-foe green TRISKELE of 1/2/3 kunai (stack = shape). On Pilfer: green RING implodes 0.15s, 8 bullets freeze 1 frame +
+  *On-foe green pickpocket knife on the first hit, then a pair on the second (the third triggers immediately; no mystical glyph).
+  On Pilfer: green RING implodes 0.15s, 8 bullets freeze 1 frame +
   white pop, re-tint green, snap 180° with knotwork streaks + home; thin green thread foe→bullets.* Voice reverse-pickpocket
   LIFT (reversed-envelope bandpass pink-noise → bright click on flip; detuned triangle twin-shimmer 880→1320Hz; per-dagger
   metallic clink). ELECTRIC+warble is the base shot; LIFT is the Pilfer event.

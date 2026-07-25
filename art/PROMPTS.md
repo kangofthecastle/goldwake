@@ -1232,7 +1232,7 @@ backings, no text, no watermark, no background.
 
 Deliver sliced as `36-1-scales-a.png`, `36-2-scales-b.png`,
 `36-3-scales-c.png` (legacy Anubis THE WEIGHING tip-states), `36-4-triskele.png`
-(Loki MISCHIEF), `36-5-bracket.png` (MARKED corner, engine places 4 rotated
+(legacy, unused), `36-5-bracket.png` (MARKED corner, engine places 4 rotated
 copies), `36-6-seal.png` (Jade seal brand).
 
 #### 36.1 The Weighing — continuous tip frames
@@ -1247,6 +1247,18 @@ hard. No new symbols, text, backdrop, shadows, or extra decoration.
 
 Deliver as `36-9-scales-lean-1.png`, `36-10-scales-lean-2.png`,
 `36-11-scales-lean-3.png`, and `36-12-scales-lean-4.png`.
+
+#### 36.2 Pilfer — pickpocket knife
+
+```
+One matching 512px transparent PNG of a compact thief's stiletto, stored with
+the blade pointing up. Dark steel blade with a venom-green edge, dark jade
+grip, a narrow worn-gold crossguard, and one small gold pommel stud. It must
+read as a knife at 14px. No ring pommel, square kunai body, Japanese styling,
+rope, shuriken, text, glow, or background.
+```
+
+Deliver as `36-13-pilfer-knife.png`.
 
 ### 36b. The Verdict stamp — Anubis' devour
 

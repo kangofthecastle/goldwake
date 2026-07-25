@@ -6852,15 +6852,17 @@
       stateRim(enemyDrawCell(e), e.x, e.y, s, e.rot, 1, 0.82, 0.4, 0.42 * sealP * sealF, 1.08);   // gold seal rim-light pulse
       if (sealC >= 0) GL.draw(sealC, e.x, e.y, s * 0.6, s * 0.6, 0, 1, 1, 1, 0.95 * sealF);          // §36 authored seal glyph
     }
-    // LOKI — MISCHIEF: plain green tally slashes over the crown. They are a simple
-    // three-hit Pilfer counter, not a mystical effect or a separate status.
+    // LOKI — MISCHIEF: one then two real pickpocket knives over the crown. The
+    // third hit fires Pilfer immediately, so it never needs a lingering third icon.
     if (e.mischief > 0 && !e.dying && G.attackGod === 'loki') {
-      var markY = e.y - s * 0.56, markN = e.mischief, markGap = s * 0.22;
+      var knifeC = authCell('36-13-pilfer-knife');
+      var markY = e.y - s * 0.56, markN = e.mischief, markGap = markN === 1 ? 0 : s * 0.28;
       var markPulse = 0.88 + 0.12 * Math.sin(t * 7 + e.seq);
       for (var mi = 0; mi < markN; mi++) {
         var mx = e.x + (mi - (markN - 1) * 0.5) * markGap;
-        GL.draw(GL.SPR.STREAK, mx, markY, s * 0.055, s * 0.27, -0.55, 0.22, 0.55, 0.16, 0.42 * markPulse);
-        GL.draw(GL.SPR.STREAK, mx, markY, s * 0.025, s * 0.22, -0.55, 0.55, 1.0, 0.35, 0.96 * markPulse);
+        var knifeRot = markN === 1 ? -0.12 : (mi ? 0.34 : -0.34);
+        if (knifeC >= 0) GL.draw(knifeC, mx, markY, s * 0.30, s * 0.50, knifeRot, 1, 1, 1, 0.98 * markPulse);
+        else GL.draw(GL.SPR.SHARD, mx, markY, s * 0.12, s * 0.30, knifeRot, 0.55, 1.0, 0.35, 0.96 * markPulse);
       }
     }
   }

@@ -933,7 +933,9 @@
     '36-5-bracket', '36-6-seal', '36-7-verdict-jackal', '36-8-verdict-jackal-shut',
     '37-1-flame', '37-2-flame', '37-3-flame', '37-4-flame', '37-5-flame', '37-6-flame',
     // 36.1 — four intermediate states turn THE WEIGHING into a visible tip, not a three-frame jump.
-    '36-9-scales-lean-1', '36-10-scales-lean-2', '36-11-scales-lean-3', '36-12-scales-lean-4'
+    '36-9-scales-lean-1', '36-10-scales-lean-2', '36-11-scales-lean-3', '36-12-scales-lean-4',
+    // 36.2 — Loki's real pickpocket blade; replaces the semantically-empty triskele.
+    '36-13-pilfer-knife'
   ];
   var AUTH_DELTA_BASE = GL.SPR.BOLT + 1;   // 51 — first free cell after BOLT (50)
   (function initAuthored() {
