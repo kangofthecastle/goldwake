@@ -7299,20 +7299,15 @@
       }
       if (ignite) { var ip = 0.6 + 0.4 * Math.sin(t * 12); GL.draw(GL.SPR.GLOW, e.x, gy, span * 1.3, s * 0.4, 0, 1, 0.85, 0.4, 0.4 * ip); }
     }
-    // QUETZ — the coil is a JADE RIM-LIGHT on the constricted foe (intensity + thickness
-    // step with e.coilQ 1-6, jade → hot-white at max), + a jade pip count in the over-hull
-    // band (one pip per coil). No circular arcs (owner ring law).
+    // QUETZ — a literal jade winding around the hull. More bites pull the
+    // coil tighter and add a half-turn per stack; no floating counters or pulse.
     if (e.coilQ > 0 && G.attackGod === 'quetz') {
-      var cf = e.coilQ / 6, qcell = enemyDrawCell(e);
-      var jr = 0.35 + 0.55 * cf, jg = 1.0, jb = 0.5 + 0.45 * cf;              // jade → hot-white as the coil tightens
-      var qsc = 1.05 + 0.07 * cf, qa = 0.32 + 0.30 * cf;                       // thicker + brighter rim per stack
-      var qpulse = e.coilQ >= 6 ? (0.7 + 0.3 * Math.sin(t * 9)) : 1;           // max coil: a CONSTRICT pulse in the rim itself
-      stateRim(qcell, e.x, e.y, s, e.rot, jr, jg, jb, qa * qpulse, qsc);
-      var qspan = s * 0.7, qpy = e.y - s * 0.62;                              // pips ride the over-hull band
-      for (var qp = 0; qp < e.coilQ; qp++) {
-        var qpf = e.coilQ > 1 ? (qp / (e.coilQ - 1) - 0.5) : 0;
-        GL.draw(GL.SPR.CORE, e.x + qpf * qspan, qpy - Math.abs(qpf) * s * 0.1, s * 0.06, s * 0.06, 0, 0.4, 1, 0.6, 0.95);
-      }
+      var cf = Math.min(6, e.coilQ) / 6;
+      var coilW = s * (.82 - .12 * cf);
+      var coilH = s * .64;
+      GL.blendPremult();
+      GL.draw(GL.SPR.STATUS_COIL + Math.min(6, e.coilQ) - 1, e.x, e.y, coilW, coilH, 0, 1, 1, 1, .96);
+      GL.blendAdditive();
     }
     // ANUBIS THE WEIGHING — gold scales glyph over the hull, visibly tipping left as
     // accrued weight loads. Five ordered poses make the approach to the Verdict legible.
@@ -7368,7 +7363,7 @@
       for (var mi = 0; mi < markN; mi++) {
         var mx = e.x + (mi - (markN - 1) * 0.5) * markGap;
         var knifeRot = markN === 1 ? -0.12 : (mi ? 0.34 : -0.34);
-        if (knifeC >= 0) GL.draw(knifeC, mx, markY, s * 0.30, s * 0.50, knifeRot, 1, 1, 1, 0.98 * markPulse);
+        if (knifeC >= 0) GL.draw(knifeC, mx, markY, s * 0.30, s * 0.50, knifeRot + Math.PI, 1, 1, 1, 0.98 * markPulse);
         else GL.draw(GL.SPR.SHARD, mx, markY, s * 0.12, s * 0.30, knifeRot, 0.55, 1.0, 0.35, 0.96 * markPulse);
       }
     }

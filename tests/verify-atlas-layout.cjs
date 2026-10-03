@@ -118,12 +118,12 @@ test('Talos draw selection follows combat poses and falls back without changing 
   }
 });
 
-test('status atlas contains twelve isolated transparent drawings and six distinct flame silhouettes', () => {
+test('status atlas contains eighteen isolated transparent drawings and six distinct flame silhouettes', () => {
   const { GL, uploads } = atlasHarness();
   const atlas = uploads[0], hashes = [];
   const { createHash } = require('node:crypto');
-  const statusIds = [...Array.from({ length: 6 }, (_, i) => GL.SPR.STATUS_FIRE0 + i), GL.SPR.STATUS_HEART, GL.SPR.STATUS_FEAR, GL.SPR.STATUS_WEAK, GL.SPR.STATUS_STUN, GL.SPR.STATUS_BRACKET, GL.SPR.STATUS_TARGET];
-  assert.equal(statusIds.length, 12);
+  const statusIds = [...Array.from({ length: 6 }, (_, i) => GL.SPR.STATUS_FIRE0 + i), GL.SPR.STATUS_HEART, GL.SPR.STATUS_FEAR, GL.SPR.STATUS_WEAK, GL.SPR.STATUS_STUN, GL.SPR.STATUS_BRACKET, GL.SPR.STATUS_TARGET, ...Array.from({length: 6}, (_, i) => GL.SPR.STATUS_COIL + i)];
+  assert.equal(statusIds.length, 18);
   assert.equal(GL.audit.regions[139], undefined, 'retired atlas slot remains unused');
   for (const id of statusIds) {
     const r = GL.audit.cellRect(id), hash = createHash('sha256');

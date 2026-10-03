@@ -412,7 +412,7 @@ if(process.argv.includes('--menus')) {
 }
 if(process.argv.includes('--marks')) {
   const rows=[['Hunted','artemis',[0,4,8]],['Runes','odin',[1,5,9]],['Coiled','quetz',[1,3,6]],
-    ['Weighing','anubis',[.05,.40,.85]],['Seal','jade',[0,.15,.30]],['Pilfer','loki',[0,1,2]],['Precision','zeus',[0,1,2]]];
+    ['Weighing','anubis',[.05,.40,.85]],['Seal','jade',[0,.15,.30]],['Mischief','loki',[0,1,2]],['Precision','zeus',[0,1,2]]];
   const cv=createCanvas(1080,2320),ctx=cv.getContext('2d');ctx.fillStyle='#10151d';ctx.fillRect(0,0,1080,2320);
   ctx.fillStyle='#e2ddd4';ctx.font='18px sans-serif';ctx.fillText('Combat marks / actual Game.drawEnemies + drawKitOverlays',14,26);
   ctx.font='13px sans-serif';ctx.fillText('Real spawned gunship at 1x / native Canvas / no WebGL or GPU bloom',14,49);
@@ -425,7 +425,7 @@ if(process.argv.includes('--marks')) {
     if(name==='Coiled'){e.coilQ=value;e.coilT=.9;}
     if(name==='Weighing')e.scaleW=e.maxhp*h.Game.offlineDraw.ANUBIS_K*value;
     if(name==='Seal')e.sealT=value;
-    if(name==='Pilfer'){e.mischief=value;e.mischiefT=2.5;}
+    if(name==='Mischief'){e.mischief=value;e.mischiefT=2.5;}
     if(name==='Precision'){e.nodeState=value;e.nodeX=0;e.nodeY=0;e.nodeHit=0;}
     ctx.save();ctx.translate(col*360,70+row*320);ctx.fillStyle='#26313a';ctx.fillRect(8,8,344,278);
     ctx.save();ctx.beginPath();ctx.rect(8,8,344,278);ctx.clip();ctx.translate(180,174);

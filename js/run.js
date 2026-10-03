@@ -198,8 +198,8 @@
                  attack: 'THE WEIGHING: your hits load the scales on every foe; when they tip, the Verdict devours the weak for gold (bosses take a judgment burst + Weaken).',
                  special: 'GATE OF DUAT: a gate of sand opens below; the wounded are dragged toward judgment, bleeding missing health.' },
     loki:      { name: 'LOKI', epithet: 'the Trickster', pantheon: 'ASGARD', css: '#8cff5a', color: [0.55, 1.0, 0.35],
-                 // PASS2: PILFER text is pre-set so a restore of the Loki ATTACK draft is already correct.
-                 attack: 'PILFER — your hits pickpocket a foe (3 marks); on the third, snatch the 8 nearest enemy bullets.',
+                 // PASS2: SNATCH text is pre-set so a restore of the Loki ATTACK draft is already correct.
+                 attack: 'SNATCH — your hits pickpocket a foe (3 marks); on the third, snatch the 8 nearest enemy bullets.',
                  special: 'Shadow-Twin: a decoy that draws all aimed fire and soaks bullets.' },
     odin:      { name: 'ODIN', epithet: 'the Allfather', pantheon: 'ASGARD', css: '#cfd6e0', color: [0.8, 0.85, 0.92],
                  attack: 'NINE NIGHTS: one heavy rune-bolt; every 4th hit carves a rune into the foe, each +15% against it — forever.',
@@ -251,7 +251,7 @@
                  sDesc: 'Solar Flare flashes the screen white.', sHow: 'Ignites every foe with Burn.' },
     anubis:    { aDesc: 'Hits build Judgment on each foe.', aHow: 'Full Judgment executes weak foes; damages bosses.',
                  sDesc: 'Open a vortex below your ship.', sHow: 'Pulls foes in; damage scales with missing health.' },
-    loki:      { aDesc: 'Hits add Pilfer marks.', aHow: 'On the third, snatch 8 nearby bullets.',
+    loki:      { aDesc: 'Hits add Mischief marks.', aHow: 'On the third, snatch 8 nearby bullets.',
                  sDesc: 'Shadow-Twin decoy stands in for you.', sHow: 'Draws all aimed fire; soaks bullets.' },
     odin:      { aDesc: 'Fire a heavy rune bolt.', aHow: 'Every fourth hit adds +15% damage to that foe.',
                  sDesc: 'Gungnir never misses, piercing foe after foe.', sHow: 'Marks each foe it runs through.' },
@@ -277,7 +277,7 @@
     heimdall:  { attack: { qtyLabel: 'lance damage', secondary: 'marks' }, special: { qtyLabel: 'horn damage', secondary: '+shove' } },
     ra:        { attack: { qtyLabel: 'beam damage', secondary: 'heat stages' }, special: { qtyLabel: 'flare damage', secondary: 'Burn' } },
     anubis:    { attack: { qtyLabel: 'weigh damage', secondary: 'the scales' }, special: { qtyLabel: 'gate drain', secondary: 'bleed' } },
-    loki:      { attack: { qtyLabel: 'pilfer damage', secondary: 'bullet snatch' }, special: { qtyLabel: 'decoy soak', secondary: 'draw' } },
+    loki:      { attack: { qtyLabel: 'stolen dagger damage', secondary: 'bullet snatch' }, special: { qtyLabel: 'decoy soak', secondary: 'draw' } },
     odin:      { attack: { qtyLabel: 'bolt damage', secondary: 'rune carve' }, special: { qtyLabel: 'Gungnir damage', secondary: 'pierce' } },
     wukong:    { attack: { qtyLabel: 'clone fire', secondary: 'spawn odds' }, special: { qtyLabel: 'staff damage', secondary: 'stun' } },
     guanyu:    { attack: { qtyLabel: 'crescent damage', secondary: 'per-pierce' }, special: { qtyLabel: 'sweep damage', secondary: 'shove' } },
@@ -353,8 +353,8 @@
     heimdall: [['heimVigil', '+20% damage to Marked foes', 'any'], ['heimHorn', 'Gjallarhorn hits harder; shove 350px', 'special'], ['heimEcho', 'the horn echoes once at 50% after 1s', 'special']],
     ra: [['raRamp', 'beam ramps faster & higher', 'attack'], ['raSpread', 'burning foes spread Burn on death', 'any'], ['raSplit', 'beam splits vs swarms', 'attack'], ['raBurn', 'beam ignites its target', 'attack']],
     anubis: [['anubisHeavy', 'HEAVY HEART: foes below half tip 2× faster', 'attack'], ['anubisFeast', 'FEAST OF THE FAITHFUL: Verdict/Gate kill gold +50%', 'any'], ['anubisRefund', 'a Verdict refunds special charge', 'attack'], ['anubisShard', 'a Verdict drops a DIVINE INTERVENTION shard', 'attack']],
-    // PASS2: lokiVaunt + lokiChance restored under PILFER (their Confuse-era readers are replaced).
-    loki: [['lokiLong', 'decoy lasts 6 → 9s', 'special'], ['lokiBoom', 'decoy explodes: bullets → gold', 'special'], ['lokiVaunt', 'pilfered daggers charge DIVINE INTERVENTION', 'attack'], ['lokiChance', 'PICKPOCKET: Pilfer on the 2nd mark; steal 12', 'attack']],
+    // PASS2: lokiVaunt + lokiChance restored under SNATCH (their Confuse-era readers are replaced).
+    loki: [['lokiLong', 'decoy lasts 6 → 9s', 'special'], ['lokiBoom', 'decoy explodes: bullets → gold', 'special'], ['lokiVaunt', 'stolen daggers charge DIVINE INTERVENTION', 'attack'], ['lokiChance', 'PICKPOCKET: Snatch on the 2nd mark; steal 12', 'attack']],
     odin: [['odinRaven', 'odinFury: runes carve every 3rd hit (from 4th)', 'attack'], ['odinMark', 'Gungnir marks last; bonus x1.4', 'special'], ['odinRavenMark', 'odinSunder: doom-bolts splash 50% to a nearby foe', 'attack'], ['odinGungnir', 'Gungnir +50% damage & longer', 'special']],
     wukong: [['wukongClones', 'clones last 7s, cap 3', 'attack'], ['wukongStaff', 'staff wider; survivors Stunned', 'special'], ['wukongSpecial', 'clones echo your special at 25%', 'special'], ['wukongChance', 'clone spawn 20% → 35%', 'attack']],
     quetz: [['quetzBig', 'serpent larger & slower', 'special'], ['quetzGold', 'eaten bullets also pay gold', 'special'], ['quetzCircle', 'serpent circles you at the end', 'special'], ['quetzPierce', '+1 more pierce', 'attack']],
@@ -490,7 +490,7 @@
     if (!slots.length) return null;
     var slot = slots[Math.floor(Run.rng() * slots.length)];
     var owned = slot === 'attack' ? st.attackGod : st.specialGod;
-    var others = GOD_KEYS.filter(function (g) { return g !== owned; });   // PASS2: Loki ATTACK restored (PILFER)
+    var others = GOD_KEYS.filter(function (g) { return g !== owned; });   // PASS2: Loki ATTACK restored (SNATCH)
     var g = others[Math.floor(Run.rng() * others.length)];
     return slot === 'attack' ? tAttack(g, true) : tSpecial(g, true);
   }
@@ -547,7 +547,7 @@
     // attack / special transforms — only while the slot is empty.
     // Swaps are NOT part of the weighted pool: they'd flood it (11 gods × weight
     // per filled slot). A single swap card is rarely injected in pickDistinct.
-    if (!st.attackGod) GOD_KEYS.forEach(function (g) { push(tAttack(g, false), 14); });   // PASS2: Loki ATTACK restored (PILFER)
+    if (!st.attackGod) GOD_KEYS.forEach(function (g) { push(tAttack(g, false), 14); });   // PASS2: Loki ATTACK restored (SNATCH)
     if (!st.specialGod) GOD_KEYS.forEach(function (g) { push(tSpecial(g, false), 12); });
     // transform LEVEL-UP (pom) cards — your own equipped god, up the ladder
     if (st.attackGod && st.attackR < 3.5) push(tLevel('attack', st.attackGod), 10);
@@ -874,7 +874,7 @@
     var st = Game.st();
     if (idx === 0) {
       // Hades opening: three ATTACK transforms from three different gods
-      var gs = GOD_KEYS.slice();   // PASS2: Loki ATTACK restored (PILFER) — all gods eligible for the opening pick
+      var gs = GOD_KEYS.slice();   // PASS2: Loki ATTACK restored (SNATCH) — all gods eligible for the opening pick
       for (var s = gs.length - 1; s > 0; s--) { var j = ri(s + 1); var t = gs[s]; gs[s] = gs[j]; gs[j] = t; }
       Run.draftOffers = [finalizeBoon(tAttack(gs[0], false), false), finalizeBoon(tAttack(gs[1], false), false), finalizeBoon(tAttack(gs[2], false), false)];
     } else {

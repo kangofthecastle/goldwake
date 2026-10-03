@@ -83,7 +83,7 @@
     FLAT_RECT: 125, FLAT_TRIANGLE: 126, FLAT_DISC: 127,
     STATUS_FIRE0: 128, // six fixed-root flame drawings, not scaled stickers
     STATUS_HEART: 134, STATUS_FEAR: 135, STATUS_WEAK: 136,
-    STATUS_STUN: 137, STATUS_BRACKET: 138, STATUS_TARGET: 140
+    STATUS_STUN: 137, STATUS_BRACKET: 138, STATUS_TARGET: 140, STATUS_COIL: 151
   };
 
   var gl = null;
@@ -313,6 +313,7 @@
     // Keep ordinary cells and their alpha-derived collision sizing untouched.
     // Boss animation gets native-sized storage instead of enlarging 128px art.
     if (i >= 112 && i <= 115) return { x: 1024 + ((i - 112) % 2) * 512, y: Math.floor((i - 112) / 2) * 512, size: 512 };
+    if (i >= 151 && i <= 156) return { x: 1024 + (i - 151) * CELL, y: 1792, size: CELL };
     if (i >= 144 && i <= 150) return { x: 1024 + ((i - 144) % 4) * 256, y: 1280 + Math.floor((i - 144) / 4) * 256, size: 256 };
     if (i >= 128 && i < 192) return { x: 1024 + ((i - 128) % 8) * CELL, y: 1024 + Math.floor((i - 128) / 8) * CELL, size: CELL };
     var cx = (i % COLS) * CELL;
@@ -876,6 +877,31 @@
     draw(GL.SPR.STATUS_BRACKET,function(ctx,r){
       statusStroke(ctx,r);ctx.beginPath();ctx.moveTo(r*.65,-r*.65);ctx.lineTo(-r*.65,-r*.65);ctx.lineTo(-r*.65,r*.65);ctx.stroke();
     });
+    for (var coilStack=1;coilStack<=6;coilStack++) (function(stack) {
+    draw(GL.SPR.STATUS_COIL + stack - 1,function(ctx,r){
+      // One continuous helical winding: shaded return strokes, broad jade
+      // front strokes. Sparse and unornamented so the enemy stays readable.
+      ctx.lineCap='round';ctx.lineJoin='round';
+      function coilPath(front) {
+        ctx.beginPath();
+        for(var turn=0;turn<Math.ceil(stack/2);turn++) {
+          var y=(-stack*.10-.10+turn*.40)*r;
+          if(front) {
+            ctx.moveTo(-r*.82,y);
+            ctx.bezierCurveTo(-r*.82,y+r*.32,r*.82,y+r*.32,r*.82,y);
+          } else if(turn*2+2<=stack) {
+            ctx.moveTo(r*.82,y);
+            ctx.bezierCurveTo(r*.88,y-r*.19,-r*.88,y+r*.21,-r*.82,y+r*.40);
+          }
+        }
+      }
+      coilPath(false);ctx.strokeStyle='#122e29';ctx.lineWidth=r*.15;ctx.stroke();
+      ctx.strokeStyle='#31816a';ctx.lineWidth=r*.085;ctx.stroke();
+      coilPath(true);ctx.strokeStyle='#102a25';ctx.lineWidth=r*.17;ctx.stroke();
+      ctx.strokeStyle='#6ed3a2';ctx.lineWidth=r*.105;ctx.stroke();
+      ctx.strokeStyle='#bce8bd';ctx.lineWidth=r*.025;ctx.stroke();
+    });
+    })(coilStack);
     draw(GL.SPR.STATUS_TARGET,function(ctx,r){
       ctx.strokeStyle='#fff';ctx.lineWidth=r*.095;
       // Open center leaves room for a simultaneous Weak badge.

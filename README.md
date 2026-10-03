@@ -184,7 +184,7 @@ special transform, and two mod cards:
 - **DUAT** — **ANUBIS** (**Weigher of Hearts** — +25% damage below half health,
   **executes** non-bosses below 25% for bonus gold / **Judgment of Duat** — an
   instant strike on every foe for a share of its missing health).
-- **ASGARD** — **LOKI** (**PILFER** — your hits pickpocket a foe (3 marks); on the third,
+- **ASGARD** — **LOKI** (**SNATCH** — your hits pickpocket a foe (3 marks); on the third,
   snatch the 8 nearest enemy bullets — they flip green, spin 180° and hunt their own kind /
   Shadow-Twin decoy that draws all aimed fire and soaks streams — the twin never attacks:
   the one sanctioned no-damage special), **ODIN** (**NINE NIGHTS** — one heavy rune-bolt;

@@ -207,28 +207,28 @@ armory, Odin NINE NIGHTS, Heimdall THE BIFRÖST.
 
 ### ASGARD
 
-**LOKI** — PILFER · Shadow-Twin (attack REWORKED, loki rec; **CONFUSE IS DEAD** — ruling 1)
+**LOKI** — SNATCH · Shadow-Twin (attack REWORKED, loki rec; **CONFUSE IS DEAD** — ruling 1)
 - **CONFUSE REMOVED game-wide.** Delete the on-hit confuse roll, the AIMX/AIMY aim-reflection (→ plain target), the
   +15% vs-confused rider. Rename freed `confuseT/confuseBudget` → `trickStacks/trickBudget`. Loki's boss self-harm now
-  lives **inside Pilfer's boss budget**, not a confuse mechanic.
-- **ATK PILFER**: every landed shot +1 **MISCHIEF** to that foe (cap 3, decay 2.5s). At 3 → **PILFERED**: grab the 8
+  lives **inside Snatch's boss budget**, not a confuse mechanic.
+- **ATK SNATCH**: every landed shot +1 **MISCHIEF** to that foe (cap 3, decay 2.5s). At 3 → **SNATCHED**: grab the 8
   live enemy bullets nearest the foe within 240px, **biased to bullets already >80px from any emitter** (never whiffs /
   never a panic-clear). Each: `friendly=true`, `srcId=foe`, tint `0.55,1.0,0.35`, reverse 180°, gentle homing (`~2.2 rad/s`)
   to nearest OTHER live enemy. Damage rides existing `flipDmg=2.0*attackR` (no rider). Reset stacks, 1.2s per-foe cooldown.
   *On-foe green pickpocket knife on the first hit, then a pair on the second (the third triggers immediately; no mystical glyph).
-  On Pilfer: green RING implodes 0.15s, 8 bullets freeze 1 frame +
+  On Snatch: green RING implodes 0.15s, 8 bullets freeze 1 frame +
   white pop, re-tint green, snap 180° with knotwork streaks + home; thin green thread foe→bullets.* Voice reverse-pickpocket
   LIFT (reversed-envelope bandpass pink-noise → bright click on flip; detuned triangle twin-shimmer 880→1320Hz; per-dagger
-  metallic clink). ELECTRIC+warble is the base shot; LIFT is the Pilfer event.
+  metallic clink). ELECTRIC+warble is the base shot; LIFT is the Snatch event.
 - **SP SHADOW-TWIN** (unchanged): decoy draws all aimed fire, soaks streams; **never attacks** (the one sanctioned
   no-damage special). Owned-entity law (§5): green body, cyan heart, nose-up.
-- **★** atk→pilfered-dagger dmg (via flipDmg) · sp→twin soak HP/duration.
-- **CARD ATK**: "PILFER — your hits pickpocket a foe (3 marks); on the third, snatch the 8 nearest enemy bullets." /
+- **★** atk→stolen-dagger dmg (via flipDmg) · sp→twin soak HP/duration.
+- **CARD ATK**: "SNATCH — your hits pickpocket a foe (3 marks); on the third, snatch the 8 nearest enemy bullets." /
   ▸ "They flip green, spin 180°, and hunt their own kind." / "★★★ ×2.25 dagger damage"
 - **BOSS** stacks build on the lone boss from your hits; stolen bullets home back onto it, capped **0.5% maxhp/cast** via
   `trickBudget/consumeBossFlip` — bleeds its own wall, can't be looted to death.
-- **RE-ANCHORS** lokiVaunt→"pilfered daggers also charge APOTHEOSIS" (already true, addGauge(0.6)); lokiChance→**PICKPOCKET**
-  (Pilfer on 2nd stack, steal 12). DOPPELGANGER deferred (OPEN CALLS).
+- **RE-ANCHORS** lokiVaunt→"stolen daggers also charge APOTHEOSIS" (already true, addGauge(0.6)); lokiChance→**PICKPOCKET**
+  (Snatch on 2nd stack, steal 12). DOPPELGANGER deferred (OPEN CALLS).
 
 **ODIN** — NINE NIGHTS · Gungnir (attack REWORKED, owner design 2026-07-18 replacing ÓÐR; ravens → charm)
 - **ATK NINE NIGHTS**: the single-target specialist archetype — weak into popcorn, inevitable into anything that
@@ -344,8 +344,8 @@ I don't want the fan out"; owner picked SPECTRUM LANCE)
   `coilQ=min(6,+1); coilT=0.9`; applied dmg ×`(1+0.10*coilQ)` (max ×1.60); full uncoil 0.9s after last bite; ~6 bites
   (~1–1.5s) to max; resets on target-swap. (3) **clarity**: lock braid `s.phase=i*(TAU/3)` (delete `Math.random()*6.28`) →
   clean repeatable triple-helix. *Three lime streams `0.4/1.0/0.7` at 120° offsets, plaiting with knot sparks (VFX-only, 0
-  dmg). COIL renders on the target: `coilQ` thin lime rings tightening (`radius*1.6`@1 → `*1.0`@6), jade→hot-white; CONSTRICT
-  pulse-ring snaps in at max.* Voice SERPENT breathy "fwip" (triangle ~180Hz + 2–3k breath); COIL quantized rising whistle
+  dmg). COIL renders as a compact jade winding around the target, adding a half-turn per stack. It tightens with
+  `coilQ` (1–6), with dark return strokes and pale front strokes; no floating dots or pulsing silhouette.* Voice SERPENT breathy "fwip" (triangle ~180Hz + 2–3k breath); COIL quantized rising whistle
   0.9k→2.4k/6 stacks; max = hiss + 90Hz crush; uncoil downward slide.
 - **SP SKY SERPENT** (unchanged): eats bullets into your **apotheosis gauge**; extends `hazards`.
 - **★** atk→weave & coil-multiplied dmg · sp→serpent eat-rate / gauge feed.
@@ -435,7 +435,7 @@ manager. **Confuse removed** (ruling 1); roster = 7.
 - **Loki's MISCHIEF** is a stack-mark, not a status: green TRISKELE (§2 Loki), 1/2/3 kunai.
 - Each glyph gets a faint dark backing GLOW (opaque-survives-bloom, ART.md). Per-status apply-sting from the synth (§6);
   the two BODY-verb states (stun/terror) carry the loudest audio contrast.
-- **Freed by confuse's death**: `confuseT/confuseBudget` → `trickStacks/trickBudget` (Loki Pilfer boss budget); the green
+- **Freed by confuse's death**: `confuseT/confuseBudget` → `trickStacks/trickBudget` (Loki Snatch boss budget); the green
   confuse ring and the purple mirror-chevron brand are both deleted.
 
 ### 4a. THE RING BAN — state visual law (owner ruling 2026-07-21, binding)
@@ -617,7 +617,7 @@ spawn-tether. Reads as an ENTITY (dark body, health shimmer), never a bullet; lo
 Cross-cutting; unblocks everything.
 
 **Pass 2 — Kit reworks.** The 8 reworked kits: Artemis HUNT (Hunted brand, chain/sticky/splinter) + §3 PRECISION, Ares War-Heat, Odin NINE NIGHTS + Huginn&Muninn charm,
-Loki PILFER, the three differentiated specials, Quetz CONSTRICTOR + COIL. Then bring the 7 unchanged kits up to code
+Loki SNATCH, the three differentiated specials, Quetz CONSTRICTOR + COIL. Then bring the 7 unchanged kits up to code
 (Poseidon/Guan Yu feedback, Anubis execute tell…). Heimdall THE BIFRÖST joins the reworked-kit list (owner 2026-07-18).
 
 **Pass 3 — Sound.** §6 material-voice table + 9 builders + pantheon table + mix law; per-god bespoke event cues; Communion
@@ -673,7 +673,7 @@ ratification, default proceeds; `[SCOPE]` = content-work confirm.
 - **Faction** — [CONFIRM] Apostate decoy 0.6s curdle (default keep; else instant-red). · [VARIANT] Wukong clone hue gold vs
   amber. · [VARIANT] Ares wraith treatment (cyan-heart-only vs +cyan trail).
 
-**Closed by orchestrator rulings (were flagged, now settled):** confuse/Loki (ruling 1 — confuse dead, Pilfer replaces,
+**Closed by orchestrator rulings (were flagged, now settled):** confuse/Loki (ruling 1 — confuse dead, Snatch replaces,
 purple mirror-chevron tell dropped) · Quetz role (ruling 2 — CONSTRICTOR/attack, serpent voice on shot correct).
 
 **Conflicts resolved beyond the rulings:** (1) Artemis **special** — attack rec's KILLING ARROW vs specials rec's THE LOOSED
@@ -692,7 +692,7 @@ whose *kit identity* changed against what the prompts actually depict:
 |---|---|---|
 | **#9 ARTEMIS** | silver bow + glowing marking-arrow nocked | **UNCHANGED** — bow + arrow are still the props of THE HUNT / THE LOOSED ARROW; mechanic changed, depiction didn't |
 | **#11 ARES** | flanked by Phobos & Deimos wraiths + notched spear | **UNCHANGED** — wraiths = the still-current special; the spear covers the new War-Heat javelin→xiphos→doru ladder |
-| **#15 LOKI** | shadow-twin decoy peeling off; venom-green accent | **UNCHANGED** — decoy = the still-current special; PILFER depicts no god-prop; green accent still matches |
+| **#15 LOKI** | shadow-twin decoy peeling off; venom-green accent | **UNCHANGED** — decoy = the still-current special; SNATCH depicts no god-prop; green accent still matches |
 | **#16 ODIN** | leveling Gungnir + Huginn & Muninn circling | **UNCHANGED** — Gungnir = the still-current special; ravens migrate attack→charm but stay an Odin motif; the heavy rune-bolt is spear-adjacent |
 
 **Digest (updated 2026-07-18, owner call):** the original 32 prompts are still SAFE TO GEN unchanged — no portrait needs an
