@@ -69,7 +69,8 @@
     e = artCache[slug] = { img: img, ok: false };
     img.onload = function () { e.ok = true; };
     img.onerror = function () { /* absent: draw sites fall back to text/panel */ };
-    img.src = 'art/gen/' + slug + '.png';
+    var routeArt = { 'title-route': 's1-01-shattered-fleet', 'sector-route-0': 's1-01-shattered-fleet', 'sector-route-1': 's2-01-dead-reed-delta', 'sector-route-2': 's3-01-cloud-garden' };
+    img.src = routeArt[slug] ? 'art/environment-variants/sparse-detail/browser/' + routeArt[slug] + '.avif' : 'art/gen/' + slug + '.png';
     return null;
   }
   Run.getArt = getArt;
@@ -185,7 +186,7 @@
                  attack: 'Attacks stack Charm; +15% damage to the charm-touched and Weakened.',
                  special: 'HEARTSEEKER: a slow heart weaves to a foe — charms a minion, or Weakens a boss and melts its bullets to gold.' },
     ares:      { name: 'ARES', epithet: 'God of War', pantheon: 'OLYMPUS', css: '#ff5a6e', color: [0.95, 0.28, 0.4],
-                 attack: 'WAR-HEAT: fight at the muzzle to stoke it — javelins escalate to xiphos blades, then a doru bundle + labrys.',
+                 attack: 'Close range builds War Heat and upgrades your weapons. Firing at medium range also builds heat.',
                  special: 'Phobos & Deimos dive-bomb foes, sowing Terror with every strike.' },
     heimdall:  { name: 'HEIMDALL', epithet: 'the Watchman', pantheon: 'ASGARD', css: '#ffe3c2', color: [1.0, 0.89, 0.76],
                  attack: 'THE BIFRÖST: a rainbow bridge lays down your lane on a beat; fire from it to loose spectrum lances. Foes on the bridge are Marked.',
@@ -238,30 +239,30 @@
   var GOD_CARD = {
     zeus:      { aDesc: 'Attacks arc chain lightning between nearby foes.', aHow: 'Each hit forks to the next foe.',
                  sDesc: 'SKYFALL cracks a bolt straight down your lane.', sHow: 'Forks to nearby foes; struck are Stunned.' },
-    artemis:   { aDesc: 'Silver arrows brand your HUNTED and home to it.', aHow: 'Hits ramp; a kill chains the hunt on.',
-                 sDesc: 'THE LOOSED ARROW — a piercing, precise needle.', sHow: 'Marks all it strikes; first becomes Hunted.' },
-    aphrodite: { aDesc: 'Attacks stack Charm across the swarm.', aHow: '+15% to the charm-touched & Weakened.',
-                 sDesc: 'HEARTSEEKER weaves a slow heart to a foe.', sHow: 'Charms a minion, or Weakens a boss.' },
-    ares:      { aDesc: 'WAR-HEAT — fight at the muzzle to stoke it.', aHow: 'Javelins → xiphos → doru bundle + labrys.',
-                 sDesc: 'Phobos & Deimos dive-bomb the field.', sHow: 'Every strike sows Terror.' },
-    heimdall:  { aDesc: 'THE BIFRÖST lays a bridge down your lane.', aHow: 'Fire from it to loose spectrum lances.',
+    artemis:   { aDesc: 'Arrows home toward your Hunted target.', aHow: 'Repeated hits grow stronger; kills transfer the hunt.',
+                 sDesc: 'Fire a piercing arrow.', sHow: 'Marks all it strikes; first becomes Hunted.' },
+    aphrodite: { aDesc: 'Attacks stack Charm across the swarm.', aHow: '+15% damage to Charmed or Weakened foes.',
+                 sDesc: 'Launch a homing heart.', sHow: 'Charms a minion, or Weakens a boss.' },
+    ares:      { aDesc: 'Close range builds War Heat.', aHow: 'Firing at medium range also builds heat.',
+                 sDesc: 'Phobos & Deimos dive-bomb the field.', sHow: 'Strikes inflict Terror.' },
+    heimdall:  { aDesc: 'A Bifröst bridge forms in your lane.', aHow: 'Fire from the bridge to launch lances.',
                  sDesc: 'Gjallarhorn wounds and Marks every foe.', sHow: 'Hurls their bullets away.' },
-    ra:        { aDesc: 'SOLAR LENS focuses a beam on ONE held foe.', aHow: 'Holds through 4 heat stages, up to ×2.5.',
+    ra:        { aDesc: 'Focus a beam on one target.', aHow: 'Stay on target for up to ×2.5 damage.',
                  sDesc: 'Solar Flare flashes the screen white.', sHow: 'Ignites every foe with Burn.' },
-    anubis:    { aDesc: 'THE WEIGHING loads the scales on each foe.', aHow: 'At the tip the Verdict devours the weak.',
-                 sDesc: 'GATE OF DUAT opens a sand-vortex below.', sHow: 'Drags the wounded; bleeds missing health.' },
-    loki:      { aDesc: 'PILFER pickpockets a foe over three marks.', aHow: 'On the third, snatch 8 nearby bullets.',
+    anubis:    { aDesc: 'Hits build Judgment on each foe.', aHow: 'Full Judgment executes weak foes; damages bosses.',
+                 sDesc: 'Open a vortex below your ship.', sHow: 'Pulls foes in; damage scales with missing health.' },
+    loki:      { aDesc: 'Hits add Pilfer marks.', aHow: 'On the third, snatch 8 nearby bullets.',
                  sDesc: 'Shadow-Twin decoy stands in for you.', sHow: 'Draws all aimed fire; soaks bullets.' },
-    odin:      { aDesc: 'NINE NIGHTS — one heavy rune-bolt.', aHow: 'Every 4th hit carves a rune, +15% forever.',
+    odin:      { aDesc: 'Fire a heavy rune bolt.', aHow: 'Every fourth hit adds +15% damage to that foe.',
                  sDesc: 'Gungnir never misses, piercing foe after foe.', sHow: 'Marks each foe it runs through.' },
     wukong:    { aDesc: 'Kills may spawn a hair-clone that fights on.', aHow: 'The clone mirrors your fire.',
                  sDesc: 'Ruyi Jingu Bang slams the column above you.', sHow: '' },
     guanyu:    { aDesc: 'Shots become crescent blades that cleave.', aHow: 'Each pierce feeds the next with power.',
                  sDesc: 'Crescent Moon Sweep clears the whole field.', sHow: 'Hurls struck foes aside.' },
-    jade:      { aDesc: 'IMPERIAL EDICTS — five homing edicts fan out.', aHow: 'They seek foes and Stun them.',
-                 sDesc: 'IMPERIAL JUDGEMENT smites foes with chain lightning.', sHow: 'Recast to refresh the twin storm-clouds.' },
-    quetz:     { aDesc: 'Three streams braid into a plumed helix.', aHow: 'Hold ONE body to COIL +10%/bite (max +60%).',
-                 sDesc: 'Sky Serpent sweeps the field of bullets.', sHow: 'Eats them into your DIVINE INTERVENTION gauge.' },
+    jade:      { aDesc: 'Fire five homing edicts.', aHow: 'They seek foes and Stun them.',
+                 sDesc: 'Summon clouds that chain lightning.', sHow: 'Recast to refresh the twin storm-clouds.' },
+    quetz:     { aDesc: 'Three streams braid into a plumed helix.', aHow: 'Stay on one target: +10% per bite, up to +60%.',
+                 sDesc: 'Sky Serpent sweeps the field of bullets.', sHow: 'Absorbed bullets charge Divine Intervention.' },
     thor:      { aDesc: 'Mjölnir returns, smashing twice per throw.', aHow: '',
                  sDesc: "Giant's Bane crushes the toughest foe.", sHow: '' }
   };
@@ -305,19 +306,19 @@
   // §2.5 ULTIMATES — god-tied C-key burst transforms. [name, DESC ▸HOW] per the §7
   // three-line contract (no ★-line: ultimates have no star levels first wave).
   var ULTS = {
-    zeus:      ['OLYMPIAN STORM',        'Lightning smites every living foe at once. ▸ Instant screen-wide nuke; non-bosses are Stunned.'],
+    zeus:      ['OLYMPIAN STORM',        'Lightning smites every living foe at once. ▸ Hits all foes; Stuns non-bosses.'],
     artemis:   ['THE GREAT HUNT',        'Time nearly stops; you keep flying. ▸ Foes your lane crosses take a precise arrow on resume.'],
     aphrodite: ['ADORATION',             'A heart-aura clings to you 5s. ▸ Foes that dwell inside are charmed; bosses Weaken.'],
-    ares:      ['ARISTEIA',              'Pinned FRENZY and doubled volleys. ▸ Each kill extends it (cap 8s); no clear, no safety.'],
+    ares:      ['ARISTEIA',              'Pinned FRENZY and doubled volleys. ▸ Kills extend Frenzy, up to 8s. Bullets remain.'],
     ra:        ['NOON OF THE DUAT',      'The solar barque rides the top, tracking you. ▸ A CORONA beam pours down your lane 3s.'],
-    anubis:    ['THE FINAL WEIGHING',    'Judge the whole field at once. ▸ Wounded foes are devoured, bosses bitten; the whole spared.'],
+    anubis:    ['THE FINAL WEIGHING',    'Judge the whole field at once. ▸ Executes wounded foes; damages bosses.'],
     loki:      ['DOPPELGÄNGER',          'A perfect copy fights beside you 6s. ▸ Fires your attack; casts your special once.'],
-    odin:      ['ALLFATHER\'S EYE',      'Every bolt carves a rune, on any foe, 6s. ▸ Pure study; the damage comes after.'],
+    odin:      ['ALLFATHER\'S EYE',      'Every bolt carves a rune, on any foe, 6s. ▸ Runes increase later damage to that target.'],
     thor:      ['GIANT\'S END',          'Mjölnir grows colossal and orbits you 4s. ▸ Hurls foes to the wall; smashes bullets from its arc.'],
     heimdall:  ['DAWNBREAK',             'The whole field becomes the bridge 4s. ▸ Every shot a spectrum lance; all foes Marked.'],
     wukong:    ['THE WORLD-PILLAR',      'Plant the staff as standing cover. ▸ A Stun ring, then the only wall bullets cannot cross.'],
-    guanyu:    ['GREEN DRAGON ASCENDS',  'A blade-dragon trails your every move 3s. ▸ Drag it through the crowd for carving ticks.'],
-    jade:      ['MANDATE OF HEAVEN',     'Freeze, gild, and fire the gold back. ▸ The default burst\'s strict upgrade: bolts + 25% gold.'],
+    guanyu:    ['GREEN DRAGON ASCENDS',  'A blade-dragon trails your every move 3s. ▸ Guide it through foes to deal repeated damage.'],
+    jade:      ['MANDATE OF HEAVEN',     'Freeze, gild, and fire the gold back. ▸ Fires bolts and yields 25% more gold.'],
     quetz:     ['THE FIFTH SUN RISES',   'The serpent coils around you 4s. ▸ Eats every bullet it touches into your gauge.']
   };
   Run.ULTS = ULTS;
@@ -407,14 +408,14 @@
   // §7 copy: [id, name, DESC, ▸HOW]. ATTACK POWER + APEX carry the exact §7 wording.
   var SCALING = [
     ['atkdmg', 'ATTACK POWER', '+15% attack damage.', 'Stacks — buffs your base stream, not signatures.'],
-    ['atkrate', 'RAPID FIRE', '+10% attack rate.', 'Stacks — the whole torrent fires faster.'],
+    ['atkrate', 'RAPID FIRE', '+10% attack rate.', 'Stacks with other attack rate upgrades.'],
     ['spdmg', 'SIEGE ROUNDS', '+20% special damage.', 'Stacks.'],
     ['spcharge', 'RESERVE CELL', '+1 max special charge.', ''],
     ['sprecharge', 'MOMENTUM', '+20% special recharge.', 'Stacks.']
   ];
   var GENERIC = [
     ['life', 'REDUNDANCY', '+1 life.', ''],
-    ['hitbox', 'PINPOINT', '-25% hitbox.', 'Once — a permanently smaller kill-dot.'],
+    ['hitbox', 'PINPOINT', '-25% hitbox.', 'Smaller hitbox for the rest of this run.'],
     ['magnet', 'LODESTONE', '+60% magnet radius.', ''],
     ['goldworth', 'APPRAISAL', '+25% gold value.', ''],
     ['vdur', 'LONG INTERVENTION', '+1.5s DIVINE INTERVENTION duration.', ''],
@@ -712,7 +713,7 @@
     for (var s = keys.length - 1; s > 0; s--) { var j = ri(s + 1); var t = keys[s]; keys[s] = keys[j]; keys[j] = t; }
     Run.sectors = [];
     for (var si = 0; si < 3; si++) {
-      var nWaves = 4 + ri(si === 2 ? 2 : 3);
+      var nWaves = 7 + ri(3);
       var slots = slotTemplate(nWaves);            // authored difficulty arc
       var waves = [], names = [], lastName = null;
       for (var w = 0; w < slots.length; w++) {
@@ -723,13 +724,15 @@
     }
   }
   // the sector is the composition: opener → build* → feature → breather →
-  // crescendo (→ boss). Length matches the current run length (4-6 waves).
+  // crescendo (→ boss). Two feature encounters give the longer 7–9 wave
+  // sectors distinct peaks without stretching spawn delays.
   function slotTemplate(n) {
     var mids = Math.max(1, n - 3);                 // slots between opener and breather+crescendo
     var t = ['opener'];
     var builds = [];
     for (var i = 0; i < mids; i++) builds.push('build');
-    builds[Math.floor(mids / 2)] = 'feature';      // one centerpiece
+    builds[1] = 'feature';
+    builds[mids - 1] = 'feature';
     t = t.concat(builds);
     t.push('breather');
     t.push('crescendo');
@@ -803,6 +806,11 @@
   };
   Run.onCleared = function (kind) {
     if (kind === 'wave') {
+      // Five drafts per sector: establish both attack slots early, then reward
+      // milestones. Extra encounters lengthen play without inflating boon power.
+      var count = Run.sectors[Run.sectorIdx].wavesCount, cleared = Run.waveIdx + 1;
+      var reward = cleared <= 2 || cleared === Math.ceil(count / 2) || cleared === count - 2 || cleared === count;
+      if (!reward) { afterDraft(); return; }
       Run.draftIndex++;
       rollDraft(Run.draftIndex);
       if (Run.draftOffers.length === 0) { afterDraft(); return; }
@@ -887,10 +895,11 @@
   // ---------------------------------------------------------------------
   // shop
   // ---------------------------------------------------------------------
-  function rollShop() {
+  function rollShop(reroll) {
     var picks = pickDistinct(candidatePool(true), 3, null, true);
     Run.shopItems = picks.map(function (b) { return { kind: 'up', boon: b, price: b.price, sold: false }; });
-    Run.rerollCost = 60; Run.shopSel = 0;
+    if (!reroll) Run.rerollCost = 60;
+    Run.shopSel = 0;
   }
   function shopEntries() {
     var list = Run.shopItems.slice();
@@ -912,7 +921,7 @@
     var entries = shopEntries(), e = entries[Run.shopSel];
     if (!e) return;
     if (e.kind === 'leave') { afterShop(); return; }
-    if (e.kind === 'reroll') { if (Game.spendGold(rerollPrice())) { rollShop(); Run.rerollCost += 40; SFX.graze(); } return; }
+    if (e.kind === 'reroll') { if (Game.spendGold(rerollPrice())) { rollShop(true); Run.rerollCost += 50; SFX.graze(); } return; }
     if (e.kind === 'life') { if (Game.st().lives < 6 && Game.spendGold(700)) { Game.st().lives++; e.sold = true; SFX.powerup(); } return; }
     if (e.kind === 'up' && !e.sold) { if (Game.spendGold(e.price)) { Game.applyBoon(e.boon); e.sold = true; pickupSfx(e.boon); } }
   }
@@ -931,8 +940,9 @@
   Run.updateComplete = function (dt) { if (pressConfirm()) Run.nextLoop(); else if (pressCancel()) Run.toTitle(); };
   Run.updateOver = function (dt) { if (pressCancel()) Run.toTitle(); if (pressConfirm()) Run.startRun(Run.newSeed()); };
 
-  function pressLeft() { return Engine.pressed('ArrowLeft') || Engine.pressed('KeyA'); }
-  function pressRight() { return Engine.pressed('ArrowRight') || Engine.pressed('KeyD'); }
+  function pressLeft() { return Engine.pressed('ArrowLeft') || Engine.pressed('KeyA') || Engine.pressed('ArrowUp') || Engine.pressed('KeyW'); }
+  function pressRight() { return Engine.pressed('ArrowRight') || Engine.pressed('KeyD') || Engine.pressed('ArrowDown') || Engine.pressed('KeyS'); }
+  function controllerActive() { return !!(Engine.controllerActive && Engine.controllerActive()); }
   function pressConfirm() { return Engine.pressed('KeyZ') || Engine.pressed('Space'); }
   function pressCancel() { return Engine.pressed('Escape') || Engine.pressed('KeyX'); }
 
@@ -1014,13 +1024,13 @@
     for (i = 0; i < RAIL.length; i++) { var isNext = Math.abs(RAIL[i] - next) < 0.01; parts.push(isNext ? '[' + magStr(RAIL[i]) + ']' : magStr(RAIL[i])); }
     ctx.font = '600 16px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';   // 16px: the 5-node rail fits a 306px card
     ctx.fillStyle = sold ? '#6a5a2e' : COL_GOLD;
-    ctx.fillText(parts.join(' · '), cx, y);
+    ctx.fillText(parts.join(' ·'), cx, y);
   }
   function commas(n) { return Math.floor(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
   function kindLabel(b) {
-    var s = b.kind === 'transformA' ? 'ATTACK BOON' : b.kind === 'transformS' ? 'SPECIAL BOON'
-      : b.kind === 'levelA' ? 'LEVEL UP · ATK' : b.kind === 'levelS' ? 'LEVEL UP · SPC'
-      : b.kind === 'duo' ? '✦ DUO ✦' : b.kind === 'ultimate' ? '◆ ULTIMATE ◆'
+    var s = b.kind === 'transformA' ? 'ATTACK' : b.kind === 'transformS' ? 'SPECIAL'
+      : b.kind === 'levelA' ? 'ATTACK +' : b.kind === 'levelS' ? 'SPECIAL +'
+      : b.kind === 'duo' ? 'DUO' : b.kind === 'ultimate' ? 'ULTIMATE'
       : b.kind === 'mod' ? 'GOD BOON' : b.kind === 'charm' ? 'CHARM' : 'UPGRADE';
     return b.swap ? 'SWAP · ' + s : s;
   }
@@ -1040,10 +1050,11 @@
     else if (mode === 'over') drawEnd(ctx, false);
   };
   function dim(ctx, a) { ctx.fillStyle = 'rgba(0,0,0,' + a + ')'; ctx.fillRect(0, 0, W, H); }
-  // Full-field STORYBOOK dressing (title backdrop / shop backdrop) painted under
-  // the menu text. Both were authored 1080×1920 with an empty dark center column
-  // for exactly this. When the art is absent, fall back to the plain dim wash so
-  // the screen never breaks. scrim = extra near-black over the art for contrast.
+  // Menu surfaces remain quiet; portraits and emblems carry god identity.
+  function drawMenuBackdrop(ctx) {
+    ctx.save(); ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+    ctx.fillStyle = '#08141d'; ctx.fillRect(0, 0, W, H); ctx.restore();
+  }
   function drawScreenArt(ctx, slug, scrim, dimWhenAbsent) {
     var img = getArt(slug);
     if (!img) { dim(ctx, dimWhenAbsent); return false; }
@@ -1057,19 +1068,13 @@
   // Shared menu chrome. The painted key art stays the hero; these translucent
   // surfaces simply organize text into readable, repeatable groups.
   function glassPanel(ctx, x, y, w, h, accent, selected, radius) {
-    radius = radius || 18;
-    ctx.save();
-    var g = ctx.createLinearGradient(x, y, x, y + h);
-    g.addColorStop(0, 'rgba(12,27,35,0.94)');
-    g.addColorStop(1, 'rgba(3,9,14,0.9)');
-    ctx.fillStyle = g;
-    if (selected) { ctx.shadowColor = accent || COL_CYAN; ctx.shadowBlur = 28; }
-    roundRect(ctx, x, y, w, h, radius); ctx.fill(); ctx.shadowBlur = 0;
-    ctx.strokeStyle = selected ? (accent || COL_CYAN) : COL_LINE;
-    ctx.lineWidth = selected ? 3 : 2;
-    roundRect(ctx, x + 1, y + 1, w - 2, h - 2, radius); ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,255,255,0.045)'; ctx.lineWidth = 1;
-    roundRect(ctx, x + 8, y + 8, w - 16, h - 16, Math.max(8, radius - 7)); ctx.stroke();
+    ctx.save(); ctx.shadowBlur = 0;
+    ctx.fillStyle = selected ? '#11232c' : '#091720';
+    ctx.fillRect(x, y, w, h);
+    if (selected) {
+      ctx.strokeStyle = accent || COL_CYAN; ctx.lineWidth = 2;
+      ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+    }
     ctx.restore();
   }
   function rule(ctx, cx, y, w, col) {
@@ -1108,116 +1113,81 @@
   }
 
   function drawTitle(ctx) {
-    drawScreenArt(ctx, '1-hubris-title-backdrop', 0.08, 0.35);
-    var vg = ctx.createRadialGradient(W / 2, H * 0.38, 120, W / 2, H * 0.38, 720);
-    vg.addColorStop(0, 'rgba(2,7,11,0.02)'); vg.addColorStop(0.62, 'rgba(2,7,11,0.22)');
-    vg.addColorStop(1, 'rgba(1,4,7,0.68)');
-    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
-    var topFade = ctx.createLinearGradient(0, 0, 0, H);
-    topFade.addColorStop(0, 'rgba(1,4,7,0.58)');
-    topFade.addColorStop(0.22, 'rgba(1,4,7,0.05)');
-    topFade.addColorStop(0.72, 'rgba(1,4,7,0.12)');
-    topFade.addColorStop(1, 'rgba(1,4,7,0.78)');
-    ctx.fillStyle = topFade; ctx.fillRect(0, 0, W, H);
-
-    // The authored landscape title lockup is real game art, not deployment
-    // metadata. Fit the full composition across the portrait canvas so the
-    // crown, faceted wordmark, and subtitle remain exactly as designed.
-    var titleArt = getArt('1a-hubris-title-banner');
-    ctx.textAlign = 'center';
-    if (titleArt) {
-      var titleH = W * titleArt.height / titleArt.width;
-      ctx.drawImage(titleArt, 0, 0, W, titleH);
-      var titleFade = ctx.createLinearGradient(0, titleH - 110, 0, titleH + 70);
-      titleFade.addColorStop(0, 'rgba(2,7,11,0)');
-      titleFade.addColorStop(1, 'rgba(2,7,11,0.9)');
-      ctx.fillStyle = titleFade; ctx.fillRect(0, titleH - 110, W, 180);
-    } else {
-      ctx.shadowColor = 'rgba(255,188,66,0.5)'; ctx.shadowBlur = 34;
-      ctx.fillStyle = '#ffdc83';
-      ctx.font = '700 176px "Palatino Linotype", "Book Antiqua", Georgia, serif';
-      spaced(ctx, 'HUBRIS', W / 2, 152, 18);
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = '#9be9f5';
-      ctx.font = '700 24px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
-      spaced(ctx, 'A DIVINE-INTERVENTION BULLET HELL', W / 2, 342, 5);
-    }
-
-    var pulse = 0.5 + 0.5 * Math.sin(perfNow() * 0.005);
-    var bx = 190, by = 600, bw = W - 380, bh = 126;
+    // Reuse the first playable environment as the title composition; keep
+    // live typography, clear controls and the established naval palette.
     ctx.save();
-    ctx.shadowColor = 'rgba(255,198,74,' + (0.24 + pulse * 0.24) + ')';
-    ctx.shadowBlur = 30 + pulse * 12;
-    var bg = ctx.createLinearGradient(bx, by, bx + bw, by + bh);
-    bg.addColorStop(0, 'rgba(58,42,14,0.94)');
-    bg.addColorStop(0.5, 'rgba(18,25,27,0.97)');
-    bg.addColorStop(1, 'rgba(58,42,14,0.94)');
-    ctx.fillStyle = bg; roundRect(ctx, bx, by, bw, bh, 18); ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = 'rgba(255,215,102,' + (0.62 + pulse * 0.22) + ')';
-    ctx.lineWidth = 3; roundRect(ctx, bx + 1, by + 1, bw - 2, bh - 2, 18); ctx.stroke();
-    ctx.fillStyle = COL_GOLD;
-    ctx.font = '700 21px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-    spaced(ctx, 'PRESS Z', W / 2, by + 24, 3);
-    ctx.fillStyle = '#fff7df';
-    ctx.font = '700 37px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
-    spaced(ctx, 'BEGIN DESCENT', W / 2, by + 66, 2);
-    ctx.restore();
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+    ctx.fillStyle = '#08141d'; ctx.fillRect(0, 0, W, H);
+    ctx.textBaseline = 'top';
 
-    var sy = 820;
-    rule(ctx, W / 2, sy, 760, 'rgba(95,230,255,0.34)');
-    ctx.fillStyle = 'rgba(155,233,245,0.72)';
-    ctx.font = '700 20px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
-    spaced(ctx, 'PILOT RECORD', W / 2, sy + 30, 4);
-    var statX = [W * 0.27, W * 0.50, W * 0.73];
-    var statLabel = ['HIGH SCORE', 'BEST SECTOR', 'PEAK HUBRIS'];
-    var statValue = [commas(Run.meta.hi), Run.meta.bestSector + ' / 3', 'x' + Run.meta.peakHubris.toFixed(1)];
-    for (var si = 0; si < 3; si++) {
-      ctx.fillStyle = COL_DIM;
-      ctx.font = '700 19px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-      ctx.fillText(statLabel[si], statX[si], sy + 78);
-      ctx.fillStyle = COL_GOLD;
-      ctx.font = '700 36px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
-      ctx.fillText(statValue[si], statX[si], sy + 112);
+    // The opening composition borrows the actual first route's quiet wrecks
+    // and open water. Keep the scene visible above the compact lower controls.
+    var titleScene = getArt('title-route');
+    if (titleScene) {
+      ctx.drawImage(titleScene, 0, 0, W, H);
+      var shade = ctx.createLinearGradient(0, 0, 0, H);
+      shade.addColorStop(0, 'rgba(8,20,29,0.3)');
+      shade.addColorStop(0.42, 'rgba(8,20,29,0.10)');
+      shade.addColorStop(0.64, 'rgba(8,20,29,0.91)');
+      shade.addColorStop(1, '#08141d');
+      ctx.fillStyle = shade; ctx.fillRect(0, 0, W, H);
     }
-    rule(ctx, W / 2, sy + 170, 760, 'rgba(95,230,255,0.20)');
 
-    var cx = 138, cy = 1080, cw = W - 276, ch = 300;
-    ctx.fillStyle = 'rgba(2,9,13,0.66)'; roundRect(ctx, cx, cy, cw, ch, 20); ctx.fill();
-    ctx.strokeStyle = 'rgba(95,230,255,0.16)'; ctx.lineWidth = 1.5;
-    roundRect(ctx, cx, cy, cw, ch, 20); ctx.stroke();
-    ctx.fillStyle = COL_DIM;
-    ctx.font = '700 20px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
-    spaced(ctx, 'FLIGHT CONTROLS', W / 2, cy + 28, 4);
-    var lx = cx + 52, rx = cx + cw / 2 + 18, ry = cy + 82;
-    controlRow(ctx, lx, ry, 'WASD', 'MOVE', COL_CYAN);
-    controlRow(ctx, lx, ry + 70, 'SHIFT', 'FOCUS', COL_CYAN);
-    controlRow(ctx, lx, ry + 140, 'Z', 'ATTACK', COL_GOLD);
-    controlRow(ctx, rx, ry, 'X', 'SPECIAL', '#d89bff');
-    controlRow(ctx, rx, ry + 70, 'C', 'INTERVENE', COL_GOLD);
-    controlRow(ctx, rx, ry + 140, 'P', 'PAUSE', COL_CYAN);
+    ctx.fillStyle = '#e9e5d5';
+    ctx.font = '700 144px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
+    spaced(ctx, 'HUBRIS', W / 2, 260, 12);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#839b9f';
+    ctx.font = '500 23px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+
+    ctx.fillStyle = COL_GOLD;
+    ctx.font = '600 37px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
+    ctx.fillText('START RUN', W / 2, 850);
+    ctx.fillStyle = '#839b9f';
+    ctx.font = '500 21px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    ctx.fillText(controllerActive() ? 'A / ×  OR CLICK' : 'Z / SPACE  OR CLICK', W / 2, 910);
+
+    // Records are one compact line of columns rather than another panel.
+    var statX = [W * 0.26, W * 0.5, W * 0.74];
+    var labels = ['BEST SCORE', 'FARTHEST REACH', 'PEAK HUBRIS'];
+    var values = [commas(Run.meta.hi), Run.meta.bestSector ? Run.sectorName(Run.meta.bestSector - 1) : 'UNEXPLORED', '×' + Run.meta.peakHubris.toFixed(1)];
+    for (var i = 0; i < labels.length; i++) {
+      ctx.fillStyle = '#70888d';
+      ctx.font = '500 17px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+      ctx.fillText(labels[i], statX[i], 1130);
+      ctx.fillStyle = '#c3cfc9';
+      ctx.font = (i === 1 ? '500 20px' : '500 28px') + ' "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+      ctx.fillText(values[i], statX[i], 1167);
+    }
+
+    // Plain aligned controls retain every binding, including controller hints.
+    var pad = controllerActive();
+    var keys = pad ? ['STICK', 'LB/RB', 'A / ×', 'X / □', 'Y / △', 'START'] : ['WASD', 'SHIFT', 'Z', 'X', 'C', 'P'];
+    var actions = ['Move', 'Focus / tap to dodge', 'Attack', 'Special', 'Intervene', 'Pause'];
+    for (var c = 0; c < keys.length; c++) {
+      var column = c < 3 ? 0 : 1, row = c % 3;
+      var x = column ? 590 : 176, y = 1370 + row * 52;
+      ctx.textAlign = 'left';
+      ctx.font = '600 20px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+      ctx.fillStyle = '#c3cfc9'; ctx.fillText(keys[c], x, y);
+      ctx.font = '400 20px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
+      ctx.fillStyle = '#839b9f'; ctx.fillText(actions[c], x + 100, y + 1);
+    }
 
     var un = Run.unlocks();
-    var legacyCount = (un.startLife ? 1 : 0) + (un.startGauge ? 1 : 0) + (un.baseDamage ? 1 : 0);
+    var unlocked = (un.startLife ? 1 : 0) + (un.startGauge ? 1 : 0) + (un.baseDamage ? 1 : 0);
     ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(155,233,245,0.7)';
-    ctx.font = '700 20px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
-    spaced(ctx, 'YOUR LEGACY', W / 2, 1488, 4);
-    ctx.fillStyle = COL_GOLD;
-    ctx.font = '700 30px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-    ctx.fillText(commas(Run.meta.careerGold) + ' GOLD   ·   ' + legacyCount + ' / 3 BOONS AWAKENED', W / 2, 1534);
-    rule(ctx, W / 2, 1590, 560, 'rgba(255,215,102,0.34)');
-
-    ctx.fillStyle = 'rgba(224,241,244,0.58)';
-    ctx.font = '600 22px "Avenir Next", "Segoe UI", Helvetica, sans-serif';
-    spaced(ctx, 'THE PANTHEONS AWAIT', W / 2, 1710, 5);
-    ctx.fillStyle = 'rgba(121,168,181,0.62)';
-    ctx.font = '600 18px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-    ctx.fillText('ARROWS  CHOOSE   ·   R  RESTART   ·   M  MUTE', W / 2, 1760);
+    ctx.font = '400 18px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    ctx.fillStyle = '#70888d';
+    ctx.fillText(commas(Run.meta.careerGold) + ' CAREER GOLD  ·  ' + unlocked + ' / 3 UNLOCKS', W / 2, 1650);
+    ctx.fillText(pad ? 'D-PAD  SELECT   ·   X / □  BACK' : 'ARROWS  SELECT   ·   R  RESTART   ·   M  MUTE', W / 2, 1770);
+    ctx.restore();
   }
 
   // sector → tradition for the intro emblem stamp (S1 Bronze Coast/TALOS = Greek,
   // S2 River of Night/AMMIT = Kemet, S3 Gilded Court/MIDAS = Celestial Court).
+  var SECTOR_NAMES = ['BRONZE COAST', 'RIVER OF NIGHT', 'GILDED COURT'];
+  Run.sectorName = function (idx) { return SECTOR_NAMES[Math.max(0, Math.min(2, idx | 0))]; };
   var SECTOR_PANTHEON = ['OLYMPUS', 'KEMET', 'CELESTIAL COURT'];
   function drawSectorCard(ctx) {
     var sec = Run.sectors[Run.sectorIdx];
@@ -1231,7 +1201,7 @@
     glassPanel(ctx, 110, H * 0.33, W - 220, 760, COL_GOLD, false, 24);
     ctx.textAlign = 'center';
     ctx.fillStyle = COL_CYAN; ctx.font = '600 40px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-    ctx.fillText('SECTOR ' + (Run.sectorIdx + 1) + ' / 3', W / 2, H * 0.36);
+    ctx.fillText(Run.sectorName(Run.sectorIdx), W / 2, H * 0.36);
     rule(ctx, W / 2, H * 0.36 + 54, 520);
     ctx.fillStyle = COL_GOLD; ctx.font = '800 92px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     spaced(ctx, sec.affix.name, W / 2, H * 0.42, 12);
@@ -1247,10 +1217,10 @@
       spaced(ctx, '◆ LABOR OFFERED ◆', W / 2, ly, 4);
       ctx.fillStyle = COL_COMMON; ctx.font = '500 30px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
       ctx.fillText('+1 extra affix  &  +40% enemy HP', W / 2, ly + 48);
-      ctx.fillText('reward: 3 EPIC boons + 300 gold on boss kill', W / 2, ly + 86);
+      ctx.fillText('reward: choose 1 EPIC boon + 300 gold', W / 2, ly + 86);
       var pulse = 0.5 + 0.5 * Math.sin(perfNow() * 0.006);
-      actionButton(ctx, 174, ly + 134, 340, 72, '[ Z ]', 'ACCEPT', COL_GOLD, pulse);
-      actionButton(ctx, 566, ly + 134, 340, 72, '[ X ]', 'DECLINE', COL_CYAN, pulse);
+      actionButton(ctx, 174, ly + 134, 340, 72, controllerActive() ? 'A / ×' : '[ Z ]', 'ACCEPT', COL_GOLD, pulse);
+      actionButton(ctx, 566, ly + 134, 340, 72, controllerActive() ? 'X / □' : '[ X ]', 'DECLINE', COL_CYAN, pulse);
       clickRects.push({ x: 174, y: ly + 134, w: 340, h: 72, action: function () { decideLabor(true); } });
       clickRects.push({ x: 566, y: ly + 134, w: 340, h: 72, action: function () { decideLabor(false); } });
     } else if (Run.labor.accepted) {
@@ -1274,7 +1244,7 @@
     ctx.drawImage(img, rx + rw / 2 - dw / 2, ry + rh / 2 - dh / 2, dw, dh);
     ctx.globalAlpha = 1;
   }
-  // shared near-black scrims (overall dim + top/bottom text gradients) painted over card art.
+  // Portraits occupy a dedicated full-width header; no text overlays the art.
   function cardArtScrims(ctx, x, y, w, h) {
     ctx.fillStyle = 'rgba(5,8,11,0.34)'; ctx.fillRect(x, y, w, h);            // overall dim
     var gt = ctx.createLinearGradient(0, y, 0, y + h * 0.46);                  // top: kind tag + name + epithet
@@ -1330,9 +1300,6 @@
       coverPortrait(ctx, img, x, y, w, h, 0.85);
     }
     cardArtScrims(ctx, x, y, w, h);
-    // 5b: pantheon emblem corner stamp (art/gen emblems 2-6) on god boon cards.
-    var emb = (b.god && GODS[b.god]) ? getArt(PANTHEON_EMBLEM[GODS[b.god].pantheon]) : null;
-    if (emb) { var es = Math.min(w, h) * 0.22; ctx.globalAlpha = 0.9; ctx.drawImage(emb, x + w - es - 12, y + 12, es, es); ctx.globalAlpha = 1; }
     ctx.restore();
     return true;
   }
@@ -1373,12 +1340,16 @@
     if (hasArt) { ctx.shadowColor = 'rgba(0,0,0,0.92)'; ctx.shadowBlur = 5; ctx.shadowOffsetY = 1; }   // keep text legible over the painting
     // kind + rarity tag
     ctx.fillStyle = border; ctx.font = '600 22px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-    ctx.fillText(kindLabel(b) + '  ·  ' + b.rarity.toUpperCase(), x + w / 2, y + 22);
+    var tag = kindLabel(b) + ' · ' + b.rarity.toUpperCase(), tagSize = 22;
+    while (ctx.measureText(tag).width > w - 38 && tagSize > 16) { tagSize--; ctx.font = '600 ' + tagSize + 'px \"SFMono-Regular\", Consolas, monospace'; }
+    ctx.fillText(tag, x + w / 2, y + 22);
     // god / card name (shrink for long names like QUETZALCOATL)
     ctx.fillStyle = sold ? '#4a6570' : b.css;
     var nf = b.name.length > 9 ? 28 : 40;
     ctx.font = '700 ' + nf + 'px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-    var nameY = y + h * 0.30;
+    var nameGap = b.name.length > 9 ? 1 : 3;
+    while (nf > 16 && ctx.measureText(b.name).width + nameGap * (b.name.length - 1) > w - 40) { nf--; ctx.font = '700 ' + nf + 'px \"SFMono-Regular\", Consolas, monospace'; }
+    var nameY = y + h * 0.22;
     spaced(ctx, b.name, x + w / 2, nameY, b.name.length > 9 ? 1 : 3);
     // §7: NAME + ★-track — a small current-tier star row under the name (transforms/levels).
     var isXform = (b.kind === 'transformA' || b.kind === 'transformS');
@@ -1386,7 +1357,7 @@
     var hasTrack = isXform || isLevel, panY, epiY;
     if (hasTrack) {
       ctx.fillStyle = sold ? '#6a5a2e' : COL_GOLD; ctx.font = '600 18px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-      ctx.fillText(magStars(isXform ? cardTierMag(b) : b.curMag), x + w / 2, nameY + 24);
+      // The upgrade multiplier below carries the tier; avoid a duplicate row over the god name.
       panY = nameY + 48; epiY = nameY + (b.god && GODS[b.god] ? 72 : 58);
     } else { panY = nameY + 34; epiY = nameY + ((b.god && GODS[b.god]) ? 60 : 44); }
     // pantheon tag line
@@ -1397,25 +1368,29 @@
     ctx.fillText(b.epithet, x + w / 2, epiY);
     // ---- §7 three-line contract body: DESC / ▸HOW / ★-LINE (or the LEVEL rail) ----
     var L = cardLines(b), by = epiY + 34;
-    ctx.fillStyle = sold ? '#4a6570' : COL_COMMON; ctx.font = '500 21px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-    var dl = wrapArr(ctx, L.desc, w - 50);
-    for (var _d = 0; _d < dl.length; _d++) { ctx.fillText(dl[_d], x + w / 2, by); by += 26; }
-    if (L.how) {
-      by += 2; ctx.fillStyle = sold ? '#3d545c' : COL_CYAN; ctx.font = '500 19px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-      var hl = wrapArr(ctx, '▸ ' + L.how, w - 44);
-      for (var _h = 0; _h < hl.length; _h++) { ctx.fillText(hl[_h], x + w / 2, by); by += 22; }
+    if (L.star) L.star = L.star.replace(/^★+\s*/, '');
+    if (isLevel) L.desc = (b.slot === 'attack' ? 'Attack' : 'Special') + ' upgrade.';
+    var floorY = y + h - (price != null ? 82 : 24);
+    var bodySize = 21, rows, lineH;
+    do {
+      ctx.font = '500 ' + bodySize + 'px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+      rows = wrapArr(ctx, L.desc, w - 44).map(function (t) { return { text: t, color: COL_COMMON }; });
+      if (L.how) rows = rows.concat(wrapArr(ctx, L.how, w - 44).map(function (t, i) { return { text: t, color: COL_CYAN, gap: i === 0 ? 6 : 0 }; }));
+      if (L.star) rows = rows.concat(wrapArr(ctx, L.star, w - 44).map(function (t, i) { return { text: t, color: COL_GOLD, gap: i === 0 ? 6 : 0 }; }));
+      lineH = bodySize + 4;
+      var gaps = rows.reduce(function (n, row) { return n + (row.gap || 0); }, 0);
+      if (by + rows.length * lineH + gaps + (isLevel ? 24 : 0) <= floorY || bodySize <= 17) break;
+      bodySize--;
+    } while (true);
+    // Only the lower copy region gets an opaque backing; the large original
+    // portrait remains visible above it, with the god's original title layout.
+    ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+    ctx.fillStyle = '#08141d'; ctx.fillRect(x + 18, by - 9, w - 36, y + h - by - 7);
+    for (var row = 0; row < rows.length; row++) {
+      by += rows[row].gap || 0; ctx.fillStyle = sold ? '#4a6570' : rows[row].color;
+      ctx.fillText(rows[row].text, x + w / 2, by); by += lineH;
     }
-    var floorY = y + h - (price != null ? 84 : 22);       // the ★-block may not cross into the price zone / card edge
-    if (isLevel) {                                        // ★-LINE now→next + the 5-node rail
-      by += 6;
-      ctx.fillStyle = sold ? '#7a6a3a' : COL_GOLD; ctx.font = '600 19px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-      ctx.fillText(L.star, x + w / 2, by); by += 24;
-      drawRail(ctx, x + w / 2, by, b.curMag, b.mag, sold);
-    } else if (L.star) {                                  // ★-LINE at current tier (transforms only)
-      by += 6; ctx.fillStyle = sold ? '#7a6a3a' : COL_GOLD; ctx.font = '600 19px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-      var sl = wrapArr(ctx, L.star, w - 40);
-      for (var _s = 0; _s < sl.length && by <= floorY; _s++) { ctx.fillText(sl[_s], x + w / 2, by); by += 22; }
-    }
+    if (isLevel) drawRail(ctx, x + w / 2, by + 4, b.curMag, b.mag, sold);
     if (price != null) {
       ctx.fillStyle = sold ? COL_RED : COL_GOLD; ctx.font = '700 36px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
       ctx.fillText(sold ? 'SOLD' : (commas(price) + ' g'), x + w / 2, y + h - 44);
@@ -1432,7 +1407,7 @@
     ctx.fillStyle = COL_DIM; ctx.font = '500 30px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     ctx.fillText('CHOOSE ONE OFFERING', W / 2, H * 0.14 + 82);
 
-    var n = Run.draftOffers.length, cw = 306, ch = 470, gap = 30;
+    var n = Run.draftOffers.length, cw = 306, ch = 540, gap = 30;
     var totalW = n * cw + (n - 1) * gap, x0 = (W - totalW) / 2, y0 = H * 0.30;
     for (var i = 0; i < n; i++) {
       var x = x0 + i * (cw + gap);
@@ -1441,7 +1416,7 @@
     }
     glassPanel(ctx, W / 2 - 250, y0 + ch + 44, 500, 62, COL_CYAN, false, 14);
     ctx.fillStyle = COL_COMMON; ctx.font = '600 22px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-    ctx.fillText('←  →  SELECT     ·     Z  ACCEPT', W / 2, y0 + ch + 63);
+    ctx.fillText(controllerActive() ? '←  →  SELECT     ·     A / ×  ACCEPT' : '←  →  SELECT     ·     Z  ACCEPT', W / 2, y0 + ch + 63);
     drawStacked(ctx);
   }
 
@@ -1457,7 +1432,7 @@
     ctx.fillStyle = COL_GOLD; ctx.font = '800 28px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     ctx.fillText(commas(Game.st().wallet) + ' g', W / 2, H * 0.10 + 124);
 
-    var cw = 300, ch = 440, gap = 30, totalW = 3 * cw + 2 * gap, x0 = (W - totalW) / 2, y0 = H * 0.25;
+    var cw = 300, ch = 520, gap = 30, totalW = 3 * cw + 2 * gap, x0 = (W - totalW) / 2, y0 = H * 0.25;
     for (var i = 0; i < Run.shopItems.length; i++) {
       var it = Run.shopItems[i], x = x0 + i * (cw + gap);
       drawCard(ctx, x, y0, cw, ch, it.boon, Run.shopSel === i, it.price, it.sold);
@@ -1467,7 +1442,7 @@
     var btns = [
       { label: 'REROLL', sub: commas(rerollPrice()) + ' g', sel: Run.shopSel === Run.shopItems.length, act: Run.shopItems.length },
       { label: 'EXTRA LIFE', sub: '700 g', sel: Run.shopSel === Run.shopItems.length + 1, act: Run.shopItems.length + 1 },
-      { label: 'LEAVE  →', sub: 'next sector', sel: Run.shopSel === Run.shopItems.length + 2, act: Run.shopItems.length + 2 }
+      { label: 'LEAVE  →', sub: Run.sectorName(Run.sectorIdx + 1), sel: Run.shopSel === Run.shopItems.length + 2, act: Run.shopItems.length + 2 }
     ];
     for (var b = 0; b < btns.length; b++) {
       var bx = bx0 + b * (bw + bgap);
@@ -1475,7 +1450,7 @@
       clickRects.push({ x: bx, y: by, w: bw, h: bh, action: (function (sel) { return function () { Run.shopSel = sel; buyCurrent(); }; })(btns[b].act) });
     }
     ctx.fillStyle = COL_DIM; ctx.font = '500 28px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-    ctx.fillText('Left / Right   •   Z buy / activate   •   X leave', W / 2, by + bh + 50);
+    ctx.fillText(controllerActive() ? '← / →   •   A / × buy   •   X / □ leave' : 'Left / Right   •   Z buy / activate   •   X leave', W / 2, by + bh + 50);
     drawStacked(ctx);
   }
   function drawButton(ctx, x, y, w, h, label, sub, sel) {
@@ -1508,9 +1483,7 @@
   }
 
   function drawEnd(ctx, win) {
-    // 1b/1c end keyart — VICTORY / GAME OVER backdrops with a heavy scrim so the
-    // tally text stays readable (same treatment as the title backdrop). Dim on absent.
-    drawScreenArt(ctx, win ? '1c-victory' : '1b-game-over', 0.55, 0.72);
+    drawMenuBackdrop(ctx);
     ctx.textAlign = 'center';
     ctx.fillStyle = win ? COL_GOLD : COL_RED; ctx.font = '800 92px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     spaced(ctx, win ? 'RUN COMPLETE' : 'GAME OVER', W / 2, H * 0.24, 12);
@@ -1522,7 +1495,7 @@
     ctx.fillStyle = COL_CYAN; ctx.font = '600 36px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     ctx.fillText('BEST  ' + commas(Run.meta.hi), W / 2, H * 0.36 + 56);
     ctx.fillStyle = COL_COMMON; ctx.font = '500 32px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-    ctx.fillText('reached sector ' + Math.min(3, Run.sectorIdx + 1) + '/3', W / 2, H * 0.36 + 108);
+    ctx.fillText('Reached ' + Run.sectorName(Run.sectorIdx), W / 2, H * 0.36 + 108);
     ctx.fillText('banked this run  ' + commas(st.wallet) + ' g', W / 2, H * 0.36 + 150);
 
     // ---- arcade run tally: line-by-line reveal, classic stagger, then the
@@ -1557,7 +1530,7 @@
     ctx.fillText('SEED  ' + Run.seed.toString(16).toUpperCase(), W / 2, H * 0.56);
     var pulse = 0.5 + 0.5 * Math.sin(perfNow() * 0.005);
     ctx.globalAlpha = 0.5 + 0.5 * pulse; ctx.fillStyle = '#ffffff'; ctx.font = '600 38px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-    ctx.fillText(win ? 'Z — DESCEND DEEPER (endless)     Esc — title' : 'Z — retry     Esc — title', W / 2, H * 0.64);
+    ctx.fillText(controllerActive() ? (win ? 'A / × — NEXT LOOP    X / □ — TITLE' : 'A / × — RETRY    X / □ — TITLE') : (win ? 'Z — NEXT LOOP    Esc — TITLE' : 'Z — RETRY    Esc — TITLE'), W / 2, H * 0.64);
     ctx.globalAlpha = 1;
   }
   function perfNow() { return (typeof performance !== 'undefined') ? performance.now() : Date.now(); }

@@ -1,5 +1,13 @@
 # Art standard: Gilded Myth — Two Layers
 
+> Current direction (October 2): the user has superseded the older blanket
+> prohibition on ink contours for characters below. Physical characters use
+> restrained flat colour and a thin dark contour; projectiles and attack energy
+> retain luminous rendering. Use the actual small character sprites from
+> [33 Immortals' official press kit](https://thunderlotusgames.com/press-kits/33-immortals-press-kit/)
+> as a reference for economy of shape, not generic fantasy illustrations.
+> Recognizable bodies and weapons take priority over ornament. No Dead Cells.
+
 HUBRIS is a portrait (1080×1920) neon-additive bullet-hell roguelite. Its art
 lives in two layers that never blur into each other. This document governs both
 and, on every rule, says which layer it binds.
@@ -35,6 +43,72 @@ depicts a *god, place, or relic* is painted (STORYBOOK). Anything that depicts
 which of those two a pixel is, and obey the matching layer.
 
 ---
+
+## Current refinement direction (2026-10-02)
+
+October 3 roster completion: fourteen active enemy/boss sprites now use direct
+reference-guided replacements. Aegis and acolyte add complete four-pose action
+sheets. Talos now also uses distinct preparation, release and recovery drawings
+in 512px atlas cells. Decorative whole-body pulsing has been removed; wing hinges
+and barrel recoil remain. Boss bodies no longer draw a second miniature copy over themselves.
+The living-urn mimic retains its identity after revealing. Dormant courtier and
+unweighed-heart assets remain unused and unchanged. `ROSTER-PROMPTS.md` in the
+clarity directory records the exact built-in generation prompts.
+
+Choice and sector screens follow the user's preference for the original
+presentation with targeted readability cleanup. Preserve the portrait-card and
+sector-panel layouts. The title keeps its fleet scenery and has no genre subtitle.
+
+
+Physical scenery uses a tight shadow from its own silhouette; water/cloud
+currents bend through the active crossing's open lane. No extra decorative
+architecture is superimposed on authored places. All nine collision passages
+and ground-only infantry eligibility are preserved.
+
+The user reference is **Hades + 33 Immortals** for clear silhouettes, broad
+controlled shading, and readable attack anticipation/recovery; **Jamestown**
+for a continuous route with changing geography. Dead Cells is not a reference.
+Preserve the existing faction palette and restrained detail. Better versions
+of existing enemies should retain their recognizable identity while removing
+ambiguous small ornament. Motion should describe an action, not add constant
+visual noise. Environment swirls stay dim and behind combat; physical terrain
+needs a visible boundary and a usable passage.
+
+References reviewed for this pass: [Jamestown+](https://store.playstation.com/en-us/product/UP2141-CUSA01008_00-JAMESTOWNPLUS000),
+[Hades](https://www.supergiantgames.com/games/hades/), and
+[33 Immortals](https://thunderlotusgames.com/games/33-immortals/).
+The implementation takes a continuous inhabited route, distinct actor poses,
+and clear weapon direction from that brief while retaining HUBRIS's own assets.
+
+Enemy identity comes before ornament: a bird needs a beak, wings and tail;
+a creature needs a complete readable body; a soldier needs a readable
+stance and a separate weapon. A chipped edge or asymmetry adds character only
+after that subject reads. Preserve minimal shapes and the existing warm palette.
+
+The common airborne enemy is a red hawk. The gunship retains the simpler version
+3 hull; the bull concept was rejected and is not active.
+Coastal and river landmark banks host stationary archers and patrolling spear
+soldiers; the sky sector has none, even on bridge/pavilion landmarks. They use
+reference-guided four-pose authored sheets: idle, prepare, release and stride.
+The earlier procedural figures remain only as a missing-asset fallback.
+Weapon draw-back and release describe the attack; feet stay attached to the
+scrolling masonry. Original PNGs and prior variants remain available. Versioned
+assets and exact generation prompts live in `art/refinements/clarity/`;
+`art/sprite-overrides.tsv` selects the active embedded variants.
+The v2 infantry sheets use flat rust cloth, muted bronze helmets and dark limbs;
+the archer carries a large bow and the spear soldier a small plain shield.
+Exact prompts and inspected reference sources are in
+`art/refinements/clarity/REFERENCE-PROMPTS.md`. Frame foot anchors preserve contact
+with the scrolling bank; sheet framing does not change collisions.
+
+Ground infantry is composited as solid matter with contact shadows, before the
+enemy bullet pass. Flying enemy bodies also use opaque compositing; only attack
+energy, status tells and shield openings retain luminous treatment.
+Flight articulation crops the existing atlas into attached wings or weapon
+sections; it cannot move the collision body. Player weapons use short directional
+wakes rather than a large glow centered over their silhouettes.
+The tether-weaver uses a complete native spider silhouette with eight jointed
+legs, abdomen and head; its existing web attack and collision sizing are retained.
 
 ## 1. Core visual promise
 
@@ -410,3 +484,9 @@ NEGATIVE:     (template negatives) + no Greek/Egyptian motifs, no color gradient
   smaller for popcorn).
 - Every delivered asset states its **layer** and **pantheon** in the filename or
   sidecar note, so nothing mixed-tradition slips into a card row.
+
+Status refinement: burn is small, uneven patches of flat forked flame attached
+to the body, animated through six fixed-root drawings. Do not restore giant
+underfoot flame stickers, glowing status clouds or rapid brightness flicker.
+Weak uses a solid pale broken shield with dark edges at the center. Terror uses
+paired pale stress strokes with dark keylines, without faces or flashing. The existing rune band is preserved.

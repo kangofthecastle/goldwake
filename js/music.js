@@ -79,7 +79,7 @@
 
   // Per-sector identity (mode / tempo / timbre matched to pantheon). `melody` is
   // the AUTHORED 2-bar (32 x 16th) lead hook in scale-degree space — a composed
-  // sequence, NOT random. Seeded variation only picks octave lifts and bar fills.
+  // sequence, NOT random. Seeded variation shapes phrase accents and bar fills.
   // `intensity` is the theme's BASELINE stem level (re-applied every setTheme so a
   // section can't inherit the prior one's stack). In-combat waves override it
   // per-slot via MUSIC.setIntensity.
@@ -131,7 +131,7 @@
   // ---- deterministic PRNG (per composition; NOT Math.random) ----------------
   // Uses the shared Engine.mulberry32 (single source; see engine.js) — only ever
   // called at runtime from buildArp, by which point engine.js has parsed. Drives
-  // seeded VARIATION (octave lifts / fill choice) around the authored hook, never
+  // seeded VARIATION (phrase accents / fill choice) around the authored hook, never
   // the hook itself, so the same run always sounds the same.
   var arp = null;
 
@@ -204,7 +204,7 @@
     // filter to timbre brightness (a param ramp on a FILTER, not an oscillator —
     // this is not a drone glide; it just sets the score's mid-low ceiling)
     lp.frequency.cancelScheduledValues(now);
-    lp.frequency.setTargetAtTime(apoOn ? 8500 : th.cut, now, immediate ? 0.05 : 0.6);
+    lp.frequency.setTargetAtTime(apoOn ? 5200 : th.cut, now, immediate ? 0.05 : 0.6);
   }
 
   MUSIC.setSeed = function (seed) {
@@ -273,8 +273,8 @@
     var now = ctx.currentTime;
     var base = curTheme ? curTheme.cut : 2600;
     lp.frequency.cancelScheduledValues(now);
-    lp.frequency.setTargetAtTime(on ? 8500 : base, now, on ? 0.25 : 1.2);
-    shimmerGain.gain.setTargetAtTime(on ? 0.06 : 0.0001, now, on ? 0.3 : 0.6);
+    lp.frequency.setTargetAtTime(on ? 5200 : base, now, on ? 0.25 : 1.2);
+    shimmerGain.gain.setTargetAtTime(on ? 0.045 : 0.0001, now, on ? 0.3 : 0.6);
   };
 
   MUSIC.setMuted = function (m) {
@@ -336,11 +336,12 @@
 
   // ---- voices (all one-shot, enveloped; nothing sustains or glides) ---------
   // A single enveloped tone. Optional detune (cents) spawns a second osc for
-  // chip "width". Frequency is set once (no glide) — the whirr-test invariant.
+  // chip "width", sharing the peak budget so a doubled lead stays balanced.
+  // Frequency is set once (no glide) — the whirr-test invariant.
   function note(type, freq, t, dur, peak, dest, detune) {
     var g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + 0.006);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * (detune ? 0.55 : 1)), t + 0.009);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     g.connect(dest);
     var o = ctx.createOscillator();
@@ -481,25 +482,29 @@
       if (s16 === 0 || s16 === 8 || (lvl >= 2 && (s16 === 4 || s16 === 12))) {
         if (!(chill && (s16 === 4 || s16 === 12))) kick(t, crestGain);
       }
-      if (lvl >= 2 && s16 === 6) kick(t, crestGain);   // extra syncopated drive
+      if (lvl >= 2 && s16 === 6 && bar % 2 === 1 && !chill) kick(t, crestGain);   // extra syncopated drive
       // backbeat snare
-      if ((s16 === 4 || s16 === 12) && !chill) snare(t, crestGain, 0.5);
+      if ((s16 === 4 || s16 === 12) && !chill) snare(t, crestGain, 0.38);
       if (chill && s16 === 12) snare(t, crestGain, 0.3);   // shop: rim on the 3
       // hats: offbeat 8ths, 16ths at full
       if (s16 % 4 === 2) hat(t + swing, 0.03, chill ? 0.14 : 0.22, crestGain);
       if (lvl >= 3 && s16 % 2 === 1) hat(t + swing, 0.02, 0.12, crestGain);
       // fill: last bar of an 8-bar phrase — snare roll in the back half
-      if ((bar % 8) === 7 && s16 >= 12) snare(t, crestGain, 0.28 + (s16 - 12) * 0.05);
+      if (!chill && lvl >= 2 && (bar % 8) === 7 && s16 >= 13) snare(t, crestGain, 0.20 + (s16 - 12) * 0.035);
     }
 
     // -- LEAD HOOK (crest stem) — the authored motif, level >= 2. --
     if (lvl >= 2) {
       var mo = th.melody[absStep % 32];
-      if (mo >= 0) {
-        // seeded octave lift: on repeats, some notes ring an octave higher
-        var lift = (arp[s16] > 0.72 && (chordIdx % 2) === 1) ? 1 : 0;
-        var lm = degToMidi(th, mo, th.leadOct + lift);
-        note(th.lead, mtof(lm), t + swing, stepDur * 1.3, 0.42, crestGain, th.lead === 'square' ? 6 : 0);
+      // An eight-bar call/response arc gives the hook room to breathe. The
+      // response keeps its strong beats; the final half-bar leaves a cadence
+      // space for the rhythm section, instead of looping every note forever.
+      var response = bar % 8 >= 4;
+      var phraseRest = (response && s16 % 4 !== 0) || (bar % 8 === 7 && s16 >= 8);
+      if (mo >= 0 && !phraseRest) {
+        var lm = degToMidi(th, mo, th.leadOct);
+        var accent = (s16 % 8 === 0 ? 1 : 0.82) * (0.94 + arp[s16] * 0.06);
+        note(th.lead, mtof(lm), t + swing, stepDur * (response ? 1.8 : 1.3), 0.36 * accent, crestGain, th.lead === 'square' ? 4 : 0);
         noteLog.push(lm);
         // boss counter-line: escalates a layer per phase bracket
         if (th.boss && lvl >= 3) {
@@ -514,7 +519,7 @@
     if (apoOn && s16 % 2 === 0) {
       var mo2 = th.melody[(absStep + 4) % 32]; if (mo2 < 0) mo2 = chordDeg;
       var sf = degToMidi(th, mo2, th.leadOct + 2);
-      note('square', mtof(sf), t + swing, stepDur * 1.1, 0.5, shimmerGain);
+      note('triangle', mtof(sf), t + swing, stepDur * 1.1, 0.4, shimmerGain);
     }
   }
 

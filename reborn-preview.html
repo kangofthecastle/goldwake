@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#0a1115" />
+    <title>HUBRIS — Reborn</title>
+    <link rel="stylesheet" href="reborn/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <a class="wordmark" href="index.html" aria-label="Hubris home"
+          >H<span>U</span>BRIS<span class="edition">REBORN</span></a
+        >
+        <div class="header-right">
+          <span id="controller">KEYBOARD / MOUSE</span
+          ><button id="sound-toggle" class="icon-btn" aria-label="Mute audio">
+            SOUND ON</button
+          ><button id="pause-button" class="icon-btn" hidden>
+            PAUSE <kbd>ESC</kbd>
+          </button>
+        </div>
+      </header>
+      <main id="layout">
+        <aside class="side left">
+          <div class="eyebrow">THE ASCENT</div>
+          <h2 id="region-title">Beyond<br />the mortal world.</h2>
+          <p id="region-sub">Fourteen gods.<br />One borrowed eternity.</p>
+          <div class="route" id="route">
+            <div class="current"><span>01</span> The Bronze Gate</div>
+            <div><span>02</span> The Sunken Court</div>
+            <div><span>03</span> The Gilded Throne</div>
+          </div>
+          <div class="left-bottom">
+            <div class="eyebrow" id="score-label">PERSONAL BEST</div>
+            <div class="score" id="score">000000</div>
+            <div class="gold-line">
+              <span>GOLD</span><strong id="wallet">—</strong>
+            </div>
+            <p class="small">Keep your gold. Spend it<br />between regions.</p>
+          </div>
+        </aside>
+        <section id="arena" aria-label="Game playfield">
+          <canvas id="game" aria-label="Vertical bullet hell game"></canvas>
+          <div class="arena-corners"></div>
+          <div id="combat-top" hidden>
+            <div class="vitals">
+              <span id="lives"></span><span id="wave-label"></span>
+            </div>
+            <div id="boss-hud" hidden>
+              <div>
+                <span id="boss-name"></span><span id="boss-phase"></span>
+              </div>
+              <div class="track"><i id="boss-fill"></i></div>
+            </div>
+          </div>
+          <div id="combat-bottom" hidden>
+            <div class="meter-label">
+              <span>APOTHEOSIS</span><span id="charge-label">30% · C / Y</span>
+            </div>
+            <div class="track charge"><i id="charge-fill"></i></div>
+            <div class="combat-footer">
+              <span id="special-label"></span
+              ><span id="dash-label">DASH READY</span>
+            </div>
+          </div>
+        </section>
+        <aside class="side right">
+          <div class="eyebrow">YOUR PANTHEON</div>
+          <div id="loadout">
+            <div class="empty-sigil">✧</div>
+            <h3>Power has a source.</h3>
+            <p>
+              Choose a god to shape your weapon. Choose another to answer your
+              call.
+            </p>
+          </div>
+          <div class="controls">
+            <div class="eyebrow">FLIGHT MANUAL</div>
+            <dl>
+              <dt>Move</dt>
+              <dd>WASD / ↑↓←→</dd>
+              <dt>Focus</dt>
+              <dd>Hold Shift</dd>
+              <dt>Dash</dt>
+              <dd>Space</dd>
+              <dt>Special</dt>
+              <dd>X</dd>
+              <dt>Apotheosis</dt>
+              <dd>C</dd>
+            </dl>
+            <p class="small" id="control-note">
+              Auto-fire is on. Your hitbox is the small white center of your
+              ship.
+            </p>
+          </div>
+        </aside>
+      </main>
+      <footer>
+        <span>A BULLET-HELL ROGUELITE</span
+        ><span id="footer-hint">Dodge close. Gather gold. Ascend.</span
+        ><span>01 — 03</span>
+      </footer>
+    </div>
+    <div id="overlay" class="overlay">
+      <section id="panel" class="panel"></section>
+    </div>
+    <div id="toast" role="status"></div>
+    <script src="reborn/core.js"></script>
+    <script src="reborn/audio.js"></script>
+    <script src="reborn/render.js"></script>
+    <script src="reborn/app.js"></script>
+  </body>
+</html>

@@ -1,5 +1,7 @@
 # HUBRIS
 
+> `index.html` runs the original HUBRIS with focused gameplay refinements. The earlier unfinished rebuild is preserved separately at `reborn-preview.html`.
+
 **HUBRIS** (working title; repo: `goldwake`) is a vertical-monitor
 **bullet-hell roguelite** — the neon-additive, bloom-drenched
 look of *Danmaku Unlimited 3* crossed with the gold-and-**Apotheosis** economy of
@@ -43,16 +45,25 @@ overridable — they stay procedural by doctrine.
 | **X** | **SPECIAL** weapon (spends a charge)  ·  also **leave shop / back** in menus |
 | **C** | **APOTHEOSIS** (when the gauge is full) |
 | **Left / Right** | Move the selection in drafts and shops (or click) |
-| **P / Esc** | Pause in combat (on the pause screen: Z/P/Esc resume, X abandons to title, **F** toggles **auto-fire**, **H** toggles enemy health bars); Esc also backs out of end screens |
+| **P / Esc** | Pause in combat (on the pause screen: Z/P/Esc resume, X abandons to title, **F** toggles **auto-fire**, **H** toggles enemy health bars, **M** toggles mute); Esc also backs out of end screens |
 | **R** | Restart the run (fresh seed) |
 | **M** | Mute / unmute (music **and** SFX) |
+
+Standard Xbox and PlayStation controllers are supported. Move with the left stick
+or D-pad; **A / ×** attacks and confirms, **X / □** uses Special or goes back,
+**Y / △** activates Apotheosis, and **LB/RB / L1/R1** holds focus (tap with a
+direction to dodge). **Start / Options** pauses. While paused, **Y / △** toggles
+auto-fire and **RB / R1** toggles enemy health bars. **B / ○** also goes back or
+uses Special. Menu hints follow your active input. If audio stays silent after
+starting with a controller, click the game or press a keyboard key once to unlock
+browser audio.
 
 Three offensive tools, distinct roles: **Attack** (Z) is your constant fire — deliberately modest on its own. **Special** (X) is a burst/panic tool on a 3-charge meter (the purple pips beside the apotheosis bar) that refills over time and faster on kills; its base form is the **Lance Volley** (fat piercing energy lances). **Apotheosis** (C) is the defensive/scoring bullet-cancel — and with an attack god equipped, its activation fires that god's **rider** (below). On defense there's also the **Ghost dodge** — tap **Shift** while holding a direction to dash a short hop with brief invulnerability (grazing still counts mid-dash), on a ~0.9s cooldown. The power spike comes from **god boons**, below.
 
 ## The run
 
 A **run** is 3 sectors generated from one seed (shown on the end screen). Each
-sector is 4–6 semi-random waves drawn from the wave pool, ending in a fixed
+sector is 7–9 semi-random waves drawn from the wave pool, ending in a fixed
 anchor boss:
 
 - **Sector 1 → TALOS** (the bronze sentinel — 5 phases; the finale is **THE NAIL**,
@@ -71,7 +82,7 @@ Each sector rolls **one affix**, announced on its title card:
 frailer) · **DENSE VEIL** (bullets +25%, 15% slower) · **VOLATILE** (enemies burst
 into sprays on death) · **NIGHT MARKET** (shop prices −30%). Each sector card also
 offers an optional **LABOR** — accept for +1 extra affix and +40% enemy HP, and
-clearing that boss pays **3 guaranteed-epic boons + 300 gold**.
+clearing that boss offers **1 choice from 3 guaranteed-epic boons + 300 gold**.
 
 **How enemies fight.** Enemies are danmaku actors, not a shooting gallery. Every
 non-boss runs an **authored path** from a small path book (swoop-and-hold, S-curves,
@@ -135,7 +146,10 @@ bullet also feeds your special charge).
 Your hitbox is the tiny bright dot at your ship's center (radius 4). Kill enemies
 → they drop **gold**, which homes to you (always during Apotheosis, and everything
 on screen rushes in when a wave clears). Gold feeds the **Apotheosis gauge** *and*
-banks into your **run wallet**. **Graze** bullets for sparks + gauge. Fill the
+banks into your **run wallet**. Wallet income uses a separate rate of 0.5 coins per
+full-value shard, with +5% per Hubris step (up to +25%); score keeps its full
+multipliers. Fractional coins carry forward. Recovering spilled money restores
+its exact value without multiplying it or counting it again as career earnings. **Graze** bullets for sparks + gauge. Fill the
 gauge and press **C**: a shockwave **cancels every enemy bullet into gold**,
 shields you ~1.2s, and jumps your multiplier to ×3 (climbing per kill, cap ×5,
 higher with upgrades) — and your **attack god answers with a rider**, a one-shot
@@ -160,7 +174,7 @@ special transform, and two mod cards:
   LOOSED ARROW** — a piercing, always-**precise** needle that Marks all it strikes, the
   first becoming your Hunted at full ramp), **APHRODITE** (**Charm** foes / **HEARTSEEKER**
   — a slow weaving heart that charms a minion or **Weakens** a boss and melts its bullets
-  to gold), **ARES** (**WAR-HEAT** — fighting at the muzzle stokes a proximity meter that
+  to gold), **ARES** (**WAR-HEAT** — close range reaches full heat in 1.6 seconds; firing at medium range also builds heat. The meter
   escalates your metal: javelins → xiphos leaf-blades → a doru bundle + whirling **labrys** /
   **Phobos & Deimos** dread-wraiths that **dive-bomb** foes, sowing **Terror**). Crit is
   retired game-wide → **PRECISION**: telegraphed **weak-point nodes** on boss/elite beats
@@ -206,15 +220,15 @@ TWO THRONES, GODS OF WAR, PEACH BANQUET, THE ALLSEEING, HERALD OF RAGNARÖK,
 FALSE DAWN).
 
 Statuses: **Marked/Weak** (bonus damage taken), **Charm** (fights for you),
-**Terror/Shaken** (Ares — flee + take more), **Burn** (DoT), **Stun** (frozen).
+**Terror** (Ares — flee + take more), **Burn** (DoT), **Stun** (frozen).
 Each reads by **where** its glyph sits (a distinct body zone) and **what** shape it
 is, not by hue alone. Thor, Guan Yu
 and Terror shove enemies with real spring-damped **displacement** — visible
 lurch, wall-slams, and enemy pile-ups.
 
-**VS BOSSES.** Bosses are immune to full Charm, Terror, Stun and execute — but
+**VS BOSSES.** Bosses resist full Charm, Terror fleeing, Stun and execute — but
 every such source pays a defined substitute, never nothing: Charm sources
-**Weaken** them, Terror sources apply **Shaken** (+damage taken, no flee), Stun
+**Weaken** them, Terror sources apply **Terror** (+20% damage taken, no flee), Stun
 sources deal bonus damage instead, and Anubis' execute line becomes a flat
 below-half damage bonus. Unspent multitarget always collapses onto the boss —
 chain-lightning jumps with no second target strike the origin again at 50% each,
@@ -228,14 +242,14 @@ generic ones (life, hitbox, magnet, gold value, apotheosis duration/cap). Rarity
 
 ### Draft & shop composition
 
-- **After every wave clears**: gameplay freezes and you pick **1 of 3 boon cards**.
+- **Five drafts per sector**: gameplay freezes after the first two waves, the midpoint, the pre-breather milestone, and the final wave; pick **1 of 3 boon cards**. Other clears continue into the next encounter.
 - The **wave-1 draft is always three attack transforms** from three different gods
   (the opening-boon moment); an early draft **guarantees a special-transform offer**.
 - Once a slot has a god, that god's transform leaves the pool but **other gods
   appear as SWAP cards** (they replace the current one and come one rarity tier
   higher). A god's **mod cards** only appear once you own that god's transform.
 - **After each sector boss**: a **shop** — 3 priced boons (rarer skew) plus
-  **reroll** (rising cost) and an **extra life**. Spend banked gold; **X** leaves.
+  **reroll** (60, 110, 160… before discounts, resetting at the next shop) and an **extra life**. Spend banked gold; **X** leaves.
 
 ### Meta layer (permanent, capped)
 
@@ -257,13 +271,13 @@ tags — each hangs one namespace on `window`.
 | `js/sfx.js` | `window.SFX` | WebAudio-synthesized SFX (no files). Master → lowpass → compressor; lazy context resumed on first gesture. |
 | `js/music.js` | `window.MUSIC` | Procedural WebAudio **score**: layered stems (pad / pulse / crest) on a real-time lookahead scheduler, per-sector + title + per-boss themes seeded off the run seed, driven by the wave-slot arc (`setIntensity`), boss phases (`setBossPhase`), APOTHEOSIS filter-lift, pause duck, and shop pad variant. Shares SFX's AudioContext; sits mid-low and under the SFX. |
 | `js/gl.js` | `window.GL` | WebGL2 renderer. Procedural sprite atlas, instanced additive quad batcher, threshold + separable-gaussian **bloom** at ½/¼ res, chromatic-offset composite (the Apotheosis pulse). |
-| `js/engine.js` | `window.Engine` | Fixed-timestep loop (60 Hz, dt clamped), keyboard input, preallocated **object pools** (4096 bullets / 256 shots / 128 enemies / 2048 particles / 512 gold), circle collision. |
+| `js/engine.js` | `window.Engine` | Fixed-timestep loop (60 Hz, dt clamped), keyboard/controller input, preallocated **object pools** (4096 bullets / 256 shots / 128 enemies / 2048 particles / 512 gold), circle collision. |
 | `js/patterns.js` | `window.Patterns` | Danmaku emitter toolkit — legacy (aimed / fan / ring / spiral / whip / flower / spray) plus the **authored-geometry verbs** (`ringGap`, `pulse`, `arcWall`, `snake`, `crossfire`, `wheel`, `rain`, `burstAimed`), six bullet **families** (orb / ring / kunai / shard / pellet / star) with **size + speed tiers** (`o.fam` / `o.tier`), and global affix scalars (`setGlobal` for DENSE VEIL etc.). |
 | `js/run.js` | `window.Run` | **Roguelite structure**: seeded PRNG (mulberry32) + run generation, sector affixes, the **god-boon** draft + shop card UI and composition rules, the god metadata (`Run.GODS`), title / end screens, the localStorage meta layer, and the run-flow state machine. Drives Game; no combat sim. |
 | `js/game.js` | `window.Game` | **Combat / stage layer**: player, the **SPECIAL** weapon + charge meter, enemies, bosses, bullets, the **god-boon effects + enemy status system** (chain/knockback/precision/charm/burn/stun + kit meters: Hunt/War-Heat/runes/coil/Bifröst), Apotheosis, scoring, FX, the wave pool, hazards, and all in-combat HUD. Exposes the `Game.*` API that `run.js` calls (incl. `applyBoon`). |
 
 **Status-effect architecture.** Enemies carry status fields
-(`charmMeter/charmed/charmT`, `marked/weak`, `burnT`, `stunT`, `terrorT/shakenT`).
+(`charmMeter/charmed/charmT`, `marked/weak`, `burnT`, `stunT`, `terrorT`).
 Attack hits route through `hitEnemy → damageEnemy(e, dmg, precise)` (which applies
 Marked/Weak/**precise** ×2.5 multipliers — precise is earned only via a **weak-point
 node** overlap or `forceCrit`, no RNG) then `applyAttackGod` (which stacks the status
@@ -338,3 +352,89 @@ frozen field stays visible behind the neon card UI. **Pause** (P or Esc) freezes
   survives the brightest bloom crest — freeze a frame over a white explosion and the
   shapes still read. Bullet visuals scale ~1.6× while hitboxes stay tiny; the widened
   gap is the graze feel.
+
+
+## Refinement checks
+
+Run `node --test tests/controller.test.cjs tests/original-game.test.cjs`.
+For the five-seed economy fixture, prefix the command with `ECONOMY_SWEEP=1`.
+These tests execute the original combat and run logic with graphics/audio stubs,
+and mocked standard controllers. They cover boon purchases, rerolls, cash recovery,
+all fourteen god kits, Ares heat, and progression through the first boss to the shop.
+The economy fixture kills enemies after three seconds and forces boss phase damage;
+its timing is not a prediction of human play. Rendering, subjective audio quality,
+and physical controller behavior still need a manual playtest.
+
+
+### Environment and combat clarity
+
+The common airborne enemies now read as red hawks. The gunship retains its
+simpler version 3 hull; the bull concept is not active. Originals are preserved
+in `art/sprites/`. The active selection is
+`art/sprite-overrides.tsv`; `bash art/embed-sprites.sh` embeds those selections
+for direct-file play. Enemy bodies brace before scripted fire and recover after
+emission. All three sectors now travel through three physical crossings: coastal
+banks and a gate, funerary quays and a judgement gate, then cloud bridges and
+pavilions. Harbor eddies, river bends and cloud ribbons move continuously behind
+combat. The existing environment artwork is retained. Hades and 33 Immortals
+are the art references; Jamestown is the environment reference.
+
+Ground-based coastal and river landmarks carry stationary archers and patrolling
+spear soldiers. Sky sections have no infantry, including on their bridge/pavilion
+landmarks; changing into the sky retires existing ground troops without rewards.
+Soldiers use four-pose authored sheets with clear helmets, tunics and weapons;
+archers draw their bows and spearmen pull back before releasing a committed
+aimed shot. Infantry rides the scrolling terrain even when stunned or charmed.
+These optional defenders award modest loot and never hold up wave completion;
+they retire with their crossing and before bosses.
+
+Hawks and moths fold their wings, gunship barrels recoil, shieldbearers brace,
+and acolytes lift their casting arms through complete authored action poses.
+Tether weavers have complete spider bodies. Enemy bodies no longer inflate or
+breathe automatically; movement comes from authored poses, wing hinges, barrel
+recoil and small attack-driven turns. Talos has four distinct attack poses in
+dedicated 512px atlas cells, with a restrained ankle target. Fourteen active enemy/boss sprites
+have reference-guided replacements, with flat colour, dark contours and quieter
+interiors. Physical bodies render opaquely; attack energy retains light.
+The mimic stays a living offering urn after revealing. These movements preserve
+combat hitboxes; replacement atlas sizing is checked against the originals.
+Player weapons have short directional wakes; arrows, spears, axes, ankhs and
+edicts retain distinct shapes. Ares's axe, sword, javelin and spear volley use
+new simplified authored silhouettes with visible blades, shafts and grips.
+
+Run `node --test tests/*.test.cjs` to include motion and terrain regression checks.
+`tests/verify-art-framing.cjs` checks all fourteen replacements against the original
+atlas occupancy (requires the same native Canvas/Sharp dependencies as the preview).
+Offline pose sheets in `art/refinements/clarity/verification/` render the real
+atlas and game drawing functions. Regenerate with `tests/render-preview.cjs`
+using a Node environment providing `@napi-rs/canvas`. They do not simulate WebGL
+bloom or replace a live browser playtest. Add `--scenes --animation` to generate
+three staged full-field compositions and the enemy motion preview. `--talos`
+adds actual-size boss compositions, and `--title` renders keyboard/controller
+title previews. `--menus` adds draft, shop, sector and pause previews.
+Choice and sector screens retain the original layout and artwork, with targeted
+text backing, spacing and fit corrections. The title uses the fleet scenery, without a genre subtitle. Choice cards preserve the original portrait presentation. Destination names replace sector
+fractions: Bronze Coast, River of Night, and Gilded Court. Exact image
+generation prompts are saved beside the source PNGs in `ROSTER-PROMPTS.md` and
+`ARMORY-PROMPTS.md`; Talos poses are documented in `TALOS-POSE-PROMPT.md`.
+
+Status effects use restrained procedural artwork: a six-frame, fixed-root fire
+sequence in uneven patches on the body, small broken-shield/heart/star/crack
+indicators, and no rapid full-body status flashes. Rune stacks are unchanged.
+`--status` adds actual-size individual/stacked status comparisons, a motion GIF,
+and a boss burn comparison to the offline renderer. Status damage and timing
+are unchanged.
+
+The active sprite audit found six roles still using unchanged shared art. Turret,
+wheel, reactor, midship, flanker and rainmaker now have distinct bell, winged
+shield, scarab, war barge, crossbow and ewer silhouettes; Talos rivets also have
+a literal rivet sprite. These draw-only replacements retain historical collision
+sizing and painted footprint. `--coverage` renders all seven real spawns.
+Source PNGs and exact built-in image-generation prompts are in
+`art/refinements/clarity/COVERAGE-PROMPTS.md`.
+
+Marked has a centered reticle; Weak uses a larger pale broken shield in its
+center. Terror uses paired pale stress strokes with dark outlines rather than a face badge.
+Shaken has been removed; former sources now apply Terror, with shorter boss
+duration and resistance to fleeing. Fire interpolates between
+adjacent drawings while keeping root coverage stable instead of flickering.

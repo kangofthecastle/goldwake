@@ -33,5 +33,18 @@ out=js/sprites-data.js
     b64=$(base64 -i "$f" | tr -d '\n')
     echo "window.SPRITES['$name'] = 'data:image/png;base64,$b64';"
   done
+  # Versioned refinements override selected slots without replacing originals.
+  if [[ -f art/sprite-overrides.tsv ]]; then
+    while IFS=$'\t' read -r name source frameScale; do
+      [[ -z "$name" || "$name" == \#* ]] && continue
+      [[ "$name" =~ ^[a-zA-Z0-9-]+$ && -f "$source" ]] || { echo "Invalid sprite override: $name" >&2; exit 1; }
+      frameScale=${frameScale:-1}
+      [[ "$frameScale" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "Invalid sprite frame scale: $name" >&2; exit 1; }
+      echo "window.SPRITE_FRAME_SCALE = window.SPRITE_FRAME_SCALE || {};"
+      echo "window.SPRITE_FRAME_SCALE['$name'] = $frameScale;"
+      b64=$(base64 -i "$source" | tr -d '\n')
+      echo "window.SPRITES['$name'] = 'data:image/png;base64,$b64';"
+    done < art/sprite-overrides.tsv
+  fi
 } > "$out"
 echo "wrote $out ($(grep -c "^window.SPRITES\['" "$out" 2>/dev/null || echo 0) sprite(s) embedded)"

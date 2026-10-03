@@ -1,4 +1,4 @@
-// engine.js — fixed-timestep loop, keyboard input, object pools, collision.
+// engine.js — fixed-timestep loop, keyboard / controller input, object pools, collision.
 // Exposes window.Engine. No modules.
 (function () {
   'use strict';
@@ -137,7 +137,7 @@
       boss: false, phase: 0, name: '',
       invuln: false, dying: false, elite: false,
       // status effects (Phase 3 god boons)
-      terrorT: 0, shakenT: 0,
+      terrorT: 0,
       charmMeter: 0, charmed: false, charmT: 0,
       marked: false, markT: 0,
       weak: false, weakT: 0, ghost: false,
@@ -212,6 +212,89 @@
   var keys = {};          // code -> bool (held)
   var pressedSet = {};    // code -> bool (edge, consumed on read)
   Engine.keys = keys;
+  var padHeld = {}, padEdges = {}, padPrevious = {};
+  var padIndex = null, padMove = { x: 0, y: 0 };
+  var inputFocused = true, padNeedsNeutral = false, lastInputWasPad = false;
+  Engine.inputInterrupted = 0;
+  Engine.controllerActive = function () { return padIndex !== null && lastInputWasPad; };
+
+  function clearPad() {
+    padHeld = {}; padEdges = {}; padPrevious = {};
+    padMove.x = padMove.y = 0;
+  }
+  function gesture() {
+    if (firstGesture) { var fn = firstGesture; firstGesture = null; fn(); }
+  }
+  function button(pad, index) {
+    var b = pad.buttons[index];
+    return !!b && (b.pressed || b.value > 0.5);
+  }
+  function axis(value) {
+    value = Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
+    return Math.abs(value) <= 0.22 ? 0 : Math.sign(value) * (Math.abs(value) - 0.22) / 0.78;
+  }
+
+  // Poll once per animation frame. Physical edges are tracked separately from
+  // key aliases, so holding fire through a draft never selects a boon and a
+  // held button cannot become a fresh press when its pause-menu role changes.
+  Engine.pollGamepads = function () {
+    if (!inputFocused) return;
+    var pads;
+    try { pads = navigator.getGamepads ? navigator.getGamepads() : []; }
+    catch (_) { pads = []; } // unavailable in some embedded/browser contexts
+    var pad = null, i;
+    for (i = 0; i < pads.length; i++) {
+      if (pads[i] && pads[i].connected !== false && pads[i].mapping === 'standard') {
+        if (!pad || pads[i].index === padIndex) pad = pads[i];
+      }
+    }
+    if (!pad) {
+      if (padIndex !== null) { Engine.inputInterrupted++; clearPad(); padNeedsNeutral = true; }
+      padIndex = null;
+      return;
+    }
+    if (padIndex !== null && pad.index !== padIndex) {
+      Engine.inputInterrupted++; clearPad(); padNeedsNeutral = true;
+    }
+    padIndex = pad.index;
+    var x = axis(pad.axes[0]), y = axis(pad.axes[1]);
+    var physical = {};
+    for (i = 0; i < 16; i++) physical[i] = button(pad, i);
+    physical.left = physical[14] || x < -0.4;
+    physical.right = physical[15] || x > 0.4;
+    physical.up = physical[12] || y < -0.4;
+    physical.down = physical[13] || y > 0.4;
+    var active = x !== 0 || y !== 0;
+    for (var k in physical) active = active || physical[k];
+    if (padNeedsNeutral) {
+      if (!active) padNeedsNeutral = false;
+      return;
+    }
+    if (active) { lastInputWasPad = true; gesture(); }
+    var st = window.Game && window.Game.st ? window.Game.st() : null;
+    var paused = st && st.paused;
+    var bindings = {
+      0: 'KeyZ', 1: 'KeyX', 2: 'KeyX', 3: paused ? 'KeyF' : 'KeyC',
+      4: 'ShiftLeft', 5: paused ? 'KeyH' : 'ShiftRight', 9: 'KeyP',
+      left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown'
+    };
+    padHeld = {};
+    for (k in bindings) {
+      if (physical[k]) {
+        padHeld[bindings[k]] = true;
+        if (!padPrevious[k]) padEdges[bindings[k]] = true;
+      }
+    }
+    padPrevious = physical;
+    padMove.x = physical[14] || physical[15] ? (physical[15] ? 1 : 0) - (physical[14] ? 1 : 0) : x;
+    padMove.y = physical[12] || physical[13] ? (physical[13] ? 1 : 0) - (physical[12] ? 1 : 0) : y;
+  };
+  window.addEventListener('gamepaddisconnected', function (e) {
+    if (padIndex === e.gamepad.index) {
+      clearPad(); padIndex = null; padNeedsNeutral = true;
+      Engine.inputInterrupted++;
+    }
+  });
 
   var GAME_KEYS = {
     'ArrowUp': 1, 'ArrowDown': 1, 'ArrowLeft': 1, 'ArrowRight': 1,
@@ -222,16 +305,19 @@
     'KeyH': 1   // pause-menu enemy-health-bar toggle
   };
 
-  var firstGesture = null; // set by Game: called once on first keydown
+  var firstGesture = null; // set by Game: initialize once on first input
 
   Engine.onFirstGesture = function (fn) { firstGesture = fn; };
 
   window.addEventListener('keydown', function (e) {
-    if (firstGesture) { firstGesture(); firstGesture = null; }
+    lastInputWasPad = false;
+    gesture();
     if (GAME_KEYS[e.code]) e.preventDefault();
     if (!keys[e.code]) pressedSet[e.code] = true; // edge only on first
     keys[e.code] = true;
   }, { passive: false });
+
+  window.addEventListener('pointerdown', function () { lastInputWasPad = false; gesture(); });
 
   window.addEventListener('keyup', function (e) {
     keys[e.code] = false;
@@ -239,15 +325,19 @@
 
   window.addEventListener('blur', function () {
     for (var k in keys) keys[k] = false;
+    pressedSet = {};
+    clearPad(); inputFocused = false; padNeedsNeutral = true;
+    Engine.inputInterrupted++;
   });
+  window.addEventListener('focus', function () { inputFocused = true; });
 
   // held helpers
-  Engine.down = function (code) { return !!keys[code]; };
-  Engine.anyDown = function (a, b) { return !!keys[a] || !!keys[b]; };
+  Engine.down = function (code) { return !!keys[code] || !!padHeld[code]; };
+  Engine.anyDown = function (a, b) { return Engine.down(a) || Engine.down(b); };
 
   // edge helper (consumes)
   Engine.pressed = function (code) {
-    if (pressedSet[code]) { pressedSet[code] = false; return true; }
+    if (pressedSet[code] || padEdges[code]) { pressedSet[code] = false; padEdges[code] = false; return true; }
     return false;
   };
 
@@ -258,10 +348,10 @@
     if (keys['ArrowRight'] || keys['KeyD']) mx += 1;
     if (keys['ArrowUp'] || keys['KeyW']) my -= 1;
     if (keys['ArrowDown'] || keys['KeyS']) my += 1;
-    return { x: mx, y: my };
+    return { x: mx || padMove.x, y: my || padMove.y };
   };
-  Engine.focusHeld = function () { return !!keys['ShiftLeft'] || !!keys['ShiftRight']; };
-  Engine.fireHeld = function () { return !!keys['KeyZ'] || !!keys['Space']; };
+  Engine.focusHeld = function () { return Engine.anyDown('ShiftLeft', 'ShiftRight'); };
+  Engine.fireHeld = function () { return Engine.anyDown('KeyZ', 'Space'); };
 
   // ---- collision helpers ----------------------------------------------------
 
@@ -293,6 +383,7 @@
       last = t;
       if (dt > 0.25) dt = 0.25;   // clamp big gaps (tab unfocus) — never spiral
       acc += dt;
+      Engine.pollGamepads();
       var steps = 0;
       while (acc >= DT && steps < 5) {
         Engine.time += DT;
@@ -305,7 +396,7 @@
       // Clear stale edge presses only if at least one logic step ran this
       // frame (so they had a chance to be consumed). On high-refresh displays
       // some frames run zero steps — preserve presses for the next step.
-      if (steps > 0) { for (var k in pressedSet) pressedSet[k] = false; }
+      if (steps > 0) Engine.flushEdges();
     }
     requestAnimationFrame(frame);
   };
@@ -313,7 +404,10 @@
   // Headless verify only: flush edge presses exactly as a real frame with steps>0
   // would (the game drives fixed steps itself via Game.test.step). Zero cost unless
   // called.
-  Engine.flushEdges = function () { for (var k in pressedSet) pressedSet[k] = false; };
+  Engine.flushEdges = function () {
+    for (var k in pressedSet) pressedSet[k] = false;
+    padEdges = {};
+  };
 
   // ---- generic pooled physics update (used by game for bullets/particles) ---
   // Kept here so pools + integration live together.

@@ -31,7 +31,7 @@
   var MERCY = 0.5;
   var GOLD_VALUE = 120, GRAZE_SCORE = 50;
   var VAUNT_BASE = 800;
-  var BANK_PER_SHARD = 9;
+  var BANK_PER_SHARD = 0.5;    // wallet only; score/gauge keep their full shard value
   // special
   var SP_RECHARGE = 0.085;        // charges per second (passive)
   var SP_KILL = 0.11;             // charge added per kill
@@ -44,7 +44,7 @@
   var GUNGNIR_DMG = 18;          // Odin spear per-pierce damage
   var SERPENT_DMG = 55;          // Quetzalcoatl serpent DPS
   var killGoldMul = 1;           // transient gold multiplier for execute / judgment kills
-  // HUBRIS meter — a persistent stepped multiplier on ALL gold + score, composed
+  // HUBRIS meter — a persistent stepped score multiplier, composed
   // multiplicatively with the transient APOTHEOSIS burst (G.mult). Homage layer
   // (DANMAKU.md "Score as homage"): built by graze, point-blank kills, and named
   // skill events; a hit knocks it down one step (never below x1.0). Tuned so a
@@ -157,7 +157,7 @@
     if (verdictStamps) verdictStamps.length = 0;   // §36b clear transient verdict stamps on (re)start
     return {
       mode: 'title',
-      score: 0, wallet: 0,
+      score: 0, wallet: 0, walletFraction: 0,
       lives: opts.lives != null ? opts.lives : 3,
       graze: 0,
       mult: 1, multFrom: 1, multDecayT: 0,
@@ -255,7 +255,7 @@
       charms: {},
       charmElite: 1, critBonus: 0, charmShop: 0, noSpill: false, rerollHalf: false, keepMult: false, vauntBonusMul: 1, charmMark: 0,
       // ghost dodge (Shift tap-and-release dash; a held Shift is pure focus)
-      dash: { cd: 0, active: 0, dirx: 0, diry: 0, ghosts: [], shiftT: 0, pend: false, pendx: 0, pendy: 0, wasFocus: false },
+      dash: { cd: 0, active: 0, dirx: 0, diry: 0, ghosts: [], shiftT: 0, pend: false, pendx: 0, pendy: 0, wasFocus: false, inputInterrupted: Engine.inputInterrupted || 0 },
       // MIDAS cursed-gold gilding: t = freeze remaining (input ignored, invuln,
       // gold-statue), graceT = post-freeze window that blocks chain-freezing.
       freeze: { t: 0, graceT: 0 },
@@ -383,7 +383,7 @@
       structAlpha: 0, structTarget: 1, bright: 1, brightTarget: 1, scrollMul: 1, scrollTarget: 1,
       // Legacy parallax odometer. The authored destination strip has its own
       // fixed physical pace so wave choreography can never fast-forward it.
-      scrollY: 0,
+      scrollY: 0, flowY: 0,
       role: 'opener', dimFactor: 1,
       // The three authored plates form one physical vertical route. Adjacent
       // plates overlap; routeY advances the entire strip downward at a capped,
@@ -392,6 +392,7 @@
       sceneSpan: H * 0.88, scenePlateH: H * 1.18,
       routeY: 0, routeTarget: H * 0.39, routeSpeed: 58,
       landmark: null, landmarkIndex: -1,
+      crossingIndex: 0,
       obstacles: [],
       setpiece: { active: false, x: 0, y: 0, vy: 0, alpha: 0, parts: null },
       bossShadow: { active: false, y: 0, t: 0, alpha: 0 }
@@ -414,26 +415,55 @@
     var wi = Run && typeof Run.waveIdx === 'number' ? Run.waveIdx : 0;
     return Math.min(2, Math.floor((wi * 3) / Math.max(1, count)));
   }
-  function makeDestinationLandmark(sector) {
-    // One sparse physical crossing per sector. It is a foreground silhouette,
-    // not a replacement background, and leaves the middle half readable.
+  function makeDestinationLandmark(sector, crossing) {
+    // Each crossing uses its authored silhouette at a deliberate world position.
+    // Banks alternate with a gate, leaving open water/cloud between encounters.
     var specs = [
-      { slot: 's1-landmark', w: 1160, h: 653, dy: 174, ch: 330, lw: 425, rw: 425, speed: 108, kind: 'bronze' },
-      { slot: 's2-landmark', w: 1160, h: 773, dy: 138, ch: 455, lw: 425, rw: 425, speed: 98, kind: 'pylon' },
-      { slot: 's3-landmark', w: 1160, h: 653, dy: 52, ch: 530, lw: 425, rw: 425, speed: 114, kind: 'jade' }
+      { slot: 's1-landmark', ratio: 653 / 1160, speed: 108, kind: 'bronze',
+        placements: [{ name: 'left bank', x: -210, w: 1460 }, { name: 'offset gate', x: 640, w: 1480 }, { name: 'right bank', x: 1290, w: 1460 }],
+        outline: [[0.035,0.23],[0.17,0.23],[0.17,0.335],[0.40,0.335],
+          [0.40,0.43],[0.39,0.43],[0.39,0.64],[0.27,0.64],
+          [0.27,0.73],[0.12,0.73],[0.12,0.61],[0.025,0.53]] },
+      { slot: 's2-landmark', ratio: 773 / 1160, speed: 98, kind: 'pylon',
+        placements: [{ name: 'eastern quay', x: 1310, w: 1480 }, { name: 'judgement gate', x: 540, w: 1600 }, { name: 'western quay', x: -230, w: 1480 }],
+        // Obelisk, seated guardian, then the broad raised funerary platform.
+        outline: [[0,0.31],[0.035,0.31],[0.04,0.445],[0.12,0.445],
+          [0.147,0.18],[0.178,0.18],[0.195,0.405],[0.29,0.455],
+          [0.302,0.30],[0.326,0.20],[0.347,0.25],[0.365,0.30],
+          [0.393,0.43],[0.414,0.465],[0.40,0.70],[0.34,0.70],
+          [0.335,0.635],[0.15,0.635],[0.14,0.765],[0.065,0.765],
+          [0.07,0.705],[0,0.705]] },
+      { slot: 's3-landmark', ratio: 653 / 1160, speed: 114, kind: 'jade',
+        placements: [{ name: 'cloud bridge', x: 540, w: 1520 }, { name: 'eastern pavilion', x: 1300, w: 1480 }, { name: 'western pavilion', x: -220, w: 1480 }],
+        // Roof, tower and sloping bridge edge. The space below the bridge is
+        // not replaced with the old invisible full-height rectangular wall.
+        outline: [[0,0.58],[0.13,0.45],[0.28,0.385],[0.275,0.205],
+          [0.295,0.205],[0.295,0.15],[0.322,0.15],[0.332,0.075],
+          [0.343,0.15],[0.37,0.15],[0.37,0.205],[0.39,0.205],
+          [0.375,0.375],[0.402,0.39],[0.402,0.70],[0.345,0.73],
+          [0.285,0.67],[0.285,0.58],[0.258,0.59],[0.258,0.78],
+          [0.20,0.82],[0.20,0.635],[0.13,0.76],[0,0.97]] }
     ];
     var s = specs[sector] || specs[0];
-    var landmark = {
-      slot: s.slot, w: s.w, h: s.h, y: -s.h * 0.42, vy: s.speed,
-      kind: s.kind, collides: true, telegraph: 2.15,
-      // The cyan arrival treatment is presentation, not a grace period.
-      // Terrain is a player boundary from the first visible frame.
-      solid: true
-    };
-    landmark.obstacles = [
-      { x: 0, y: landmark.y + s.dy, dy: s.dy, w: s.lw, h: s.ch, side: -1, kind: s.kind, solid: true, telegraph: true },
-      { x: W - s.rw, y: landmark.y + s.dy, dy: s.dy, w: s.rw, h: s.ch, side: 1, kind: s.kind, solid: true, telegraph: true }
-    ];
+    var place = s.placements[Math.max(0, Math.min(2, crossing || 0))];
+    var landmark = { slot: s.slot, x: place.x, w: place.w, h: place.w * s.ratio,
+      y: -place.w * s.ratio * 0.72, vy: s.speed, routeName: place.name,
+      kind: s.kind, collides: true, telegraph: 2.15, solid: true, obstacles: [],
+      supportsInfantry: sector === 0 || sector === 1 };
+    for (var side = 0; side < 2; side++) {
+      var points = s.outline.map(function (pt) {
+        return { x: place.x - place.w / 2 + (side ? 1 - pt[0] : pt[0]) * place.w, y: pt[1] * landmark.h };
+      });
+      var minX = Math.min.apply(null, points.map(function (pt) { return pt.x; }));
+      var maxX = Math.max.apply(null, points.map(function (pt) { return pt.x; }));
+      if (maxX <= 0 || minX >= W) continue;
+      var top = Math.min.apply(null, points.map(function (pt) { return pt.y; }));
+      var bottom = Math.max.apply(null, points.map(function (pt) { return pt.y; }));
+      landmark.obstacles.push({ x: minX, y: landmark.y + top, dy: top,
+        w: maxX - minX, h: bottom - top, points: points,
+        originY: landmark.y, side: (minX + maxX) / 2 < W / 2 ? -1 : 1,
+        kind: s.kind, solid: true, telegraph: true });
+    }
     return landmark;
   }
   function enterDestination(idx) {
@@ -444,11 +474,6 @@
     // it. Unlocking never changes routeSpeed, so pacing stays physical.
     var stops = [0.44, 1.44, 2.0];
     b.routeTarget = Math.max(b.routeTarget, b.sceneSpan * stops[b.sceneGoal]);
-    if (idx === 1 && b.landmarkIndex < 1 && !b.landmark) {
-      b.landmarkIndex = 1;
-      b.landmark = makeDestinationLandmark(b.sector);
-      b.obstacles = b.landmark.obstacles;
-    }
   }
 
   // Choreograph the background with the wave-slot arc. Called from beginWave/
@@ -492,6 +517,7 @@
     b.dimFactor += (target - b.dimFactor) * Math.min(1, dt * 4);
     var sm = b.scrollMul;
     b.scrollY += sm * dt;
+    b.flowY += 34 * dt; // currents keep moving even while the next destination is locked
     // Move through the authored route in world space. This speed is deliberately
     // independent of crescendo/breather scroll multipliers.
     if (b.routeY < b.routeTarget) {
@@ -534,14 +560,25 @@
       bs.alpha = G.boss && G.boss.arrived ? Math.max(0, bs.alpha - dt * 0.8) : Math.min(1, bs.alpha + dt * 1.3);
       if (G.boss && G.boss.arrived && bs.alpha <= 0.01) bs.active = false;
     }
+    // Distance gates unlock landmarks; existing crossings finish before the
+    // next arrives. This creates open-water recovery between physical turns.
+    var crossingAt = [0.10, 0.58, 1.10];
+    if (b.role !== 'boss' && !b.landmark && b.crossingIndex < crossingAt.length &&
+        b.routeY >= b.sceneSpan * crossingAt[b.crossingIndex]) {
+      b.landmarkIndex = b.crossingIndex;
+      b.landmark = makeDestinationLandmark(b.sector, b.crossingIndex++);
+      b.obstacles = b.landmark.obstacles;
+    }
     var lm = b.landmark;
     if (lm) {
-      lm.y += lm.vy * sm * dt;
+      if (!lm.infantrySeeded && b.role !== 'boss' && G.mode === 'playing') spawnLandmarkInfantry(lm);
+      lm.y += lm.vy * dt;
       if (lm.collides && lm.telegraph > 0) {
         lm.telegraph = Math.max(0, lm.telegraph - dt);
       }
       for (i = 0; i < lm.obstacles.length; i++) {
         lm.obstacles[i].y = lm.y + lm.obstacles[i].dy;
+        lm.obstacles[i].originY = lm.y;
         lm.obstacles[i].solid = true;
         lm.obstacles[i].telegraph = lm.telegraph > 0;
       }
@@ -570,7 +607,7 @@
       destinationTravel: b.routeY,
       destinationTarget: b.routeTarget,
       landmarkIndex: b.landmarkIndex,
-      landmark: b.landmark ? { slot: b.landmark.slot, y: b.landmark.y, solid: b.landmark.solid, collides: b.landmark.collides } : null,
+      landmark: b.landmark ? { slot: b.landmark.slot, x: b.landmark.x == null ? W / 2 : b.landmark.x, y: b.landmark.y, routeName: b.landmark.routeName || 'crossing', solid: b.landmark.solid, collides: b.landmark.collides } : null,
       obstacles: b.obstacles.map(function (o) { return { x: o.x, y: o.y, w: o.w, h: o.h, kind: o.kind, solid: o.solid }; }),
       structCol: b.env.structCol.slice(), starCol: b.env.star.slice(),
       units: b.units.length, setpiece: b.setpiece.active, bossShadow: b.bossShadow.active, bossShadowY: b.bossShadow.y,
@@ -1059,9 +1096,15 @@
     var gw = G.up.goldWorth * (G.communion === 'KEMET' ? 1.15 : 1);   // Rite of Two Suns
     addScore(GOLD_VALUE * g.value * cm * G.mult * gw);
     addGauge(GOLD_GAUGE * g.value * cm);
-    var bank = g.bank > 0 ? g.bank : Math.round(BANK_PER_SHARD * g.value * cm * gw);
-    bank = Math.round(bank * hMult());   // HUBRIS multiplies all gold earned
-    G.wallet += bank;
+    // Score and gauge retain their full payout; spending money has a separate
+    // budget. Carry fractions so dense clouds of small shards remain worthwhile.
+    // Banked coins are recovered wallet money, never multiplied a second time.
+    var recovered = g.bank || 0;
+    var earned = BANK_PER_SHARD * g.value * cm * gw * (1 + G.hubris.step * 0.05);
+    var total = G.walletFraction + earned;
+    var bank = Math.floor(total + 1e-9);
+    G.walletFraction = Math.max(0, total - bank);
+    G.wallet += bank + recovered;
     Run.addCareerGold(bank);
     SFX.gold(goldCombo);
     flash(g.x, g.y, g.cursed ? [1, 0.75, 0.2] : [1, 0.85, 0.4], g.cursed ? 60 : 40, g.cursed ? 0.2 : 0.14);
@@ -1089,7 +1132,8 @@
   // ---------------------------------------------------------------------
   // scoring / gauge / vaunt
   // ---------------------------------------------------------------------
-  // HUBRIS multiplies ALL score (here) and gold (collectGold), composing with the
+  // HUBRIS multiplies score here; wallet rewards use a modest separate premium.
+  // Score composes with the
   // transient burst G.mult that callers already fold into n.
   function hMult() { return HUBRIS_MULT[G.hubris.step]; }
   // returns the amount actually granted (post-HUBRIS) so callers can show the
@@ -1184,7 +1228,7 @@
           else { e.charmMeter += 4; if (e.charmMeter >= (G.mods.aphroFast ? 3 : CHARM_THRESHOLD)) charmEnemy(e); }
         });
         break;
-      case 'ares':          // terror nova + frenzy jumps to max (terrify → Shaken on bosses)
+      case 'ares':          // terror nova + frenzy jumps to max
         each(function (e) { terrify(e, p.x, p.y); });
         G.frenzy.pinT = G.mods.aresDecay ? 3.0 : 1.5;   // pin max War-Heat for the apotheosis window (updateFrenzy honors pinT)
         break;
@@ -2088,7 +2132,8 @@
     // ETERNAL DEVOTION: the executed rise as charmed ghost allies instead of dying
     if (G.duos.eternalDevotion && !e.boss && !e.charmed) {
       creditForm(e);   // execute-conversion still counts as defeating the member (fix #1)
-      e.charmed = true; e.charmMeter = 0; e.charmT = 4; e.ghost = true; e.fireHold = 0;
+      e.charmed = true; e.charmMeter = 0;
+    if (e.ground) e.ground.windup = 0; e.charmT = 4; e.ghost = true; e.fireHold = 0;
       flash(e.x, e.y, [0.85, 0.3, 0.7], 80, 0.3); spark(e.x, e.y, [0.85, 0.3, 0.7], 12, 280, 26);
       return;
     }
@@ -2397,8 +2442,8 @@
     return found;
   }
   // WAR-HEAT proximity meter: stand a spear's length from a foe and the heat climbs;
-  // back off past FAR (after a 0.4s grace) and it cools. Proximity ALONE builds it —
-  // no trigger-hold. frenzyF (0..1) drives G.frenzy.stacks so all consumers keep working.
+  // close range fills in 1.6s; firing within FAR also builds at a slower pace.
+  // Back off past FAR (after a 0.9s grace) and it cools. frenzyF (0..1) drives G.frenzy.stacks so all consumers keep working.
   var WARHEAT_CLOSE = 260, WARHEAT_FAR = 440;
   function updateFrenzy(dt) {
     if (G.frenzy.bloom > 0) G.frenzy.bloom -= dt;
@@ -2425,14 +2470,17 @@
     var ne = nearestEnemy(G.player.x, G.player.y);
     var dist = ne ? Math.hypot(ne.x - G.player.x, ne.y - G.player.y) : 1e9;
     var hold = G.duos.bloodAndFire && anyBurning();           // BLOOD AND FIRE: never cool while burning
-    if (dist <= WARHEAT_CLOSE) { G.frenzy.frenzyF = Math.min(1, G.frenzy.frenzyF + 0.25 * dt); G.frenzy.graceT = 0.4; }
+    if (dist <= WARHEAT_CLOSE) { G.frenzy.frenzyF = Math.min(1, G.frenzy.frenzyF + 0.625 * dt); G.frenzy.graceT = 0.9; }
     else if (dist > WARHEAT_FAR) {
       if (G.frenzy.graceT > 0) G.frenzy.graceT -= dt;
       else if (!hold) {
         var drain = 0.18 * (G.mods.aresDecay ? 0.5 : 1) * (G.waveKind === 'boss' ? 0.5 : 1);   // aresDecay + boss-mode slow drain
         G.frenzy.frenzyF = Math.max(0, G.frenzy.frenzyF - drain * dt);
       }
-    } else { G.frenzy.graceT = 0.4; }                          // between bands: hold
+    } else {
+      G.frenzy.graceT = 0.9;
+      if (wantFire()) G.frenzy.frenzyF = Math.min(1, G.frenzy.frenzyF + 0.25 * dt);
+    }
     syncFrenzyStacks();
     // aresCharge fork: charge special ~2x faster while >= 5 stacks
     if (G.mods.aresCharge && G.frenzy.stacks >= 5) addCharge(SP_RECHARGE * G.stats.spRecharge * dt);
@@ -2442,7 +2490,10 @@
   // Terror application from a passing wraith (or LOVE AND WAR duo)
   function terrify(e, fromX, fromY) {
     if (e.dying || e.charmed) return;
-    if (e.boss) { e.shakenT = Math.max(e.shakenT, 1.0); pushDisp(e, fromX, fromY, 90); return; }
+    if (e.boss) {
+      if (e.terrorT <= 0 && SFX.status) SFX.status('terror');
+      e.terrorT = Math.max(e.terrorT, 1.0); pushDisp(e, fromX, fromY, 90); return;
+    }
     var dur = 2.5 * (G.mods.aresTerror ? 1.6 : 1);
     if (e.terrorT <= 0 && SFX.status) SFX.status('terror');   // Pass4: terror sting on the calm→terrified edge
     if (e.terrorT < dur) e.terrorT = dur;
@@ -2458,7 +2509,7 @@
   }
 
   // Phobos & Deimos — twin dread-wraiths that DIVE-BOMB: each picks a target,
-  // dives for real damage and inflicts Terror on impact (Shaken on bosses),
+  // dives for real damage and inflicts Terror on impact (shorter on bosses),
   // ~4 dives each over their lifetime.
   function phobosDeimos() {
     G.wraiths.length = 0;
@@ -2486,7 +2537,7 @@
         w.x += dx / d * 1150 * dt; w.y += dy / d * 1150 * dt;
         if (d < aimTargetR(tg) + 26) {
           damageEnemy(tg, diveDmg, false);
-          if (!tg.dying) terrify(tg, w.x, w.y);  // terrify → Shaken on bosses
+          if (!tg.dying) terrify(tg, w.x, w.y);
           spark(w.x, w.y, [0.9, 0.1, 0.15], 8, 340, 26); addShake(3);
           w.dives--; w.state = 0; w.cd = 0.35;
         }
@@ -2698,7 +2749,7 @@
         var pl = allocHazard();
         if (pl) { pl.type = 'ultpillar'; pl.x = p.x; pl.y = p.y; pl.halfW = 90; pl.timer = 4; pl.dur = 4; pl.tick = 0; }   // #11: set y so the recall FX fires at the pillar, not a stale slot value
         ringShock(p.x, p.y, [1, 0.8, 0.35], 100, 5200, 0.7); addShake(9);
-        eachFoe(function (e) { if (e.boss) { e.shakenT = Math.max(e.shakenT, 0.8); if (!e.dying) e.stunT = Math.max(e.stunT, 0.8); } else if (!e.dying) e.stunT = Math.max(e.stunT, 2.5); });
+        eachFoe(function (e) { if (e.boss) { e.terrorT = Math.max(e.terrorT, 0.8); if (!e.dying) e.stunT = Math.max(e.stunT, 0.8); } else if (!e.dying) e.stunT = Math.max(e.stunT, 2.5); });
         break;
       case 'artemis':   // THE GREAT HUNT — time you move through: slow the field, tag your column, loose on resume.
         announce('THE GREAT HUNT', '', 1.4);
@@ -3058,6 +3109,10 @@
     p.envPrevX = p.x; p.envPrevY = p.y;
     var mv = Engine.readMove();
     var focus = Engine.focusHeld();
+    if (G.dash.inputInterrupted !== (Engine.inputInterrupted || 0)) {
+      G.dash.inputInterrupted = Engine.inputInterrupted || 0;
+      G.dash.pend = false; G.dash.shiftT = 0; G.dash.wasFocus = focus;
+    }
     // Ghost dodge — tap-vs-hold discrimination, dash fires on RELEASE:
     // Focus engages on press exactly as before. If Shift is released in under
     // 0.15s AND a direction was held at press time, the dash fires (using the
@@ -3084,7 +3139,7 @@
     }
     G.dash.wasFocus = focus;
     var sp = (focus ? PLAYER_FOCUS * (1 + G.hermes.focus) : PLAYER_SPEED * (1 + G.hermes.speed));
-    var len = Math.hypot(mv.x, mv.y) || 1;
+    var len = Math.max(1, Math.hypot(mv.x, mv.y));
     p.x += (mv.x / len) * sp * dt; p.y += (mv.y / len) * sp * dt;
     if (G.dash.active > 0) {
       G.dash.active -= dt;
@@ -3128,6 +3183,17 @@
     return x + r > ob.x && x - r < ob.x + ob.w && y + r > ob.y && y - r < ob.y + ob.h;
   }
   function circleRectPenetration(x, y, r, ob) {
+    if (ob.points) {
+      var pts = ob.points, inside = false, nearest = Infinity;
+      var localY = y - ob.originY;
+      for (var i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        var a = pts[j], b = pts[i], dx = b.x - a.x, dy = b.y - a.y;
+        var along = Math.max(0, Math.min(1, ((x - a.x) * dx + (localY - a.y) * dy) / (dx * dx + dy * dy || 1)));
+        nearest = Math.min(nearest, Math.hypot(x - a.x - along * dx, localY - a.y - along * dy));
+        if ((a.y > localY) !== (b.y > localY) && x < (b.x - a.x) * (localY - a.y) / (b.y - a.y) + a.x) inside = !inside;
+      }
+      return inside ? r + nearest : Math.max(0, r - nearest);
+    }
     var nx = Math.max(ob.x, Math.min(x, ob.x + ob.w));
     var ny = Math.max(ob.y, Math.min(y, ob.y + ob.h));
     var dx = x - nx, dy = y - ny;
@@ -3154,7 +3220,8 @@
       // From outside, reject entry from every direction. If the scrolling
       // landmark has already reached the ship, allow only moves that strictly
       // reduce overlap; this provides escape without a shove or center snap.
-      if (prevPen <= 0 || nextPen >= prevPen - 0.01) {
+      var towardChannel = ob.points && prevPen > 0 && (p.x - px) * ob.side < -0.01;
+      if (!towardChannel && (prevPen <= 0 || nextPen >= prevPen - 0.01)) {
         p.x = px; p.y = py;
         G.dash.active = 0;
       }
@@ -3429,8 +3496,8 @@
     var spill = G.noSpill ? 0 : Math.floor(G.wallet * 0.25);   // HEART SCARAB charm: no spill
     if (spill > 0) {
       G.wallet -= spill;
-      var nn = 14;
-      for (var k = 0; k < nn; k++) spawnGold(p.x, p.y, 1, 0.4, Math.floor(spill / nn), 4.0);
+      var nn = Math.min(14, spill), share = Math.floor(spill / nn);
+      for (var k = 0; k < nn; k++) spawnGold(p.x, p.y, 1, 0, share + (k < spill % nn ? 1 : 0), 4.0);
     }
     if (G.communion === 'ASGARD' && G.lives > 0) doSpecial(true);   // Twilight Oath: death answers with a free special
     if (G.lives <= 0) Run.onGameOver();
@@ -3451,6 +3518,10 @@
     // sprite-fill sizing state (sizeEnemy): baked once, first frame the mapped PNG is
     // ready, into e.scale + e.radius. szDone gates the one-shot; szComp is the applied factor.
     e.szDone = false; e.szComp = 1;
+    e.motionShot = 1; e.motionPoseMax = 0;
+    e.ground = null; // pooled slots must never retain a departed bank or patrol
+
+    e.motion = { sx: 1, sy: 1, turn: 0, brace: 0, kick: 0 };
     e.r = col[0]; e.g = col[1]; e.b = col[2];
     e.t = 0; e.fireT = 0; e.fireCd = 1;
     e.s0 = 0; e.s1 = 0; e.s2 = 0; e.s3 = 0;
@@ -3458,7 +3529,7 @@
     e.pathT = 0; e.pathDur = 1; e.angle = Math.PI / 2; e.rot = Math.PI;
     e.gold = gold; e.score = score; e.hitFlash = 0;
     e.boss = false; e.phase = 0; e.name = ''; e.invuln = false; e.dying = false; e.elite = !!elite;
-    e.terrorT = 0; e.shakenT = 0;
+    e.terrorT = 0;
     e.charmMeter = 0; e.charmed = false; e.charmT = 0;
     e.marked = false; e.markT = 0; e.weak = false; e.weakT = 0; e.weakStacks = 0; e.markShimmer = 0; e.ghost = false;
     // ULTIMATES (§2.5) per-foe fields — GREAT HUNT column tag, ADORATION dwell timer.
@@ -3620,6 +3691,7 @@
     if (e.boss || e.charmed) return;
     creditForm(e);   // charming a squadron member counts as defeating it (fix #1)
     e.charmed = true; e.charmMeter = 0;
+    if (e.ground) e.ground.windup = 0;
     // §7 star fix #2: the HEARTSEEKER SPECIAL routes its charm DURATION through
     // specialR (durMul = G.specialR at the special call site) so a special star is
     // visible on the charm too; base-attack charms pass no durMul (star-flat torrent).
@@ -3641,9 +3713,8 @@
     if (e.stunT > 0) e.stunT -= dt;
     if (e.gateT > 0) e.gateT -= dt;   // GATE OF DUAT drag flag decays (refreshed each frame while gated)
     if (e.sealT > 0) e.sealT -= dt;   // JADE edict style-C seal-mark fade (drawn in drawKitOverlays)
-    // Ares terror / shaken
+    // Terror has one timer for every enemy; bosses keep moving and firing.
     if (e.terrorT > 0) e.terrorT -= dt;
-    if (e.shakenT > 0) e.shakenT -= dt;
     // charm meter slow decay
     if (!e.charmed && e.charmMeter > 0) e.charmMeter = Math.max(0, e.charmMeter - dt * 0.5);
     // QUETZ THE COIL — uncoil 0.9s after the last bite (whole coil releases at once).
@@ -3674,6 +3745,7 @@
 
   function updateCharmed(e, dt) {
     e.charmT -= dt;
+    if (e.ground && (e.stunT > 0 || e.terrorT > 0)) { if (e.charmT <= 0) expireCharm(e); return; }
     // find nearest non-charmed enemy
     var best = null, bd = 1e18;
     Engine.enemies.forEach(function (o) {
@@ -3683,7 +3755,8 @@
     });
     if (best) {
       var dx = best.x - e.x, dy = best.y - e.y, d = Math.sqrt(bd) || 1;
-      e.x += (dx / d) * 160 * dt; e.y += (dy / d) * 160 * dt;
+      if (!e.ground) { e.x += (dx / d) * 160 * dt; e.y += (dy / d) * 160 * dt; }
+      else e.ground.aim = Math.atan2(dy, dx);
       e.rot = Math.atan2(dy, dx) + Math.PI / 2;
       e.fireHold -= dt;
       if (e.fireHold <= 0) {
@@ -3693,9 +3766,10 @@
           s.x = e.x; s.y = e.y; s.vx = (dx / d) * 900; s.vy = (dy / d) * 900;
           s.radius = 12; s.scale = 26; s.damage = e.ghost ? 0.6 : 1.4; s.age = 0; s.life = 1.2;
           s.r = 1; s.g = 0.5; s.b = 0.85; s.pierce = 0; s.kind = 2; s.faction = 2; s.big = false;
+          if (e.ground) e.motionShot = 0;
         }
       }
-    } else { e.y -= 60 * dt; if (e.charmT > 0.4) e.charmT = 0.4; } // no targets left — wind down so waves can clear
+    } else { if (!e.ground) e.y -= 60 * dt; if (e.charmT > 0.4) e.charmT = 0.4; } // no targets left — wind down so waves can clear
     if (e.charmT <= 0) expireCharm(e);
   }
   function expireCharm(e) {
@@ -3737,7 +3811,7 @@
   function clampX(x, m) { m = m || 160; return x < m ? m : x > W - m ? W - m : x; }
   function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
   function qbez(a, c, b, t) { var u = 1 - t; return u * u * a + 2 * u * t * c + t * t * b; }
-  function muzzle(e, col) { col = col || [1, 0.6, 0.3]; flash(e.x, e.y, col, 74, 0.22); ringShock(e.x, e.y, col, 18, 900, 0.26); }
+  function muzzle(e, col) { e.motionPoseMax = Math.max(0.01, e.poseT); col = col || [1, 0.6, 0.3]; flash(e.x, e.y, col, 74, 0.22); ringShock(e.x, e.y, col, 18, 900, 0.26); }
 
   // --- path runner ---
   function initPath(e) { e.segI = 0; e.segT = 0; e.sx = e.x; e.sy = e.y; }
@@ -3918,8 +3992,83 @@
     ], 1.2, (phase || 0) * 0.2);
     e.onUpdate = pathEnemyUpdate; maybeAura(e);
   }
+  // Ground guards belong to a finite crossing, never to a wave formation.
+  // Scan the actual silhouette at their foot line, keeping patrols on masonry.
+  function infantryBankSpan(ob, localY) {
+    if (!ob.points) return [Math.max(48, ob.x + 40), Math.min(W - 48, ob.x + ob.w - 40)];
+    var xs = [];
+    for (var i = 0, j = ob.points.length - 1; i < ob.points.length; j = i++) {
+      var a = ob.points[j], b = ob.points[i];
+      if ((a.y > localY) !== (b.y > localY)) xs.push(a.x + (localY - a.y) * (b.x - a.x) / (b.y - a.y));
+    }
+    xs.sort(function (a, b) { return a - b; });
+    return xs.length >= 2 ? [Math.max(48, xs[0] + 40), Math.min(W - 48, xs[xs.length - 1] - 40)] : [0, 0];
+  }
+  function spawnLandmarkInfantry(lm) {
+    if (lm.infantrySeeded) return;
+    lm.infantrySeeded = true;
+    // Infantry inhabits the coast and riverbanks, never the sky route.
+    if (!lm.supportsInfantry || !G.bg || G.bg.sector === 2) return;
+    if (G.waveKind === 'boss' || G.boss || (G.bg && G.bg.role === 'boss')) return;
+    for (var i = 0; i < lm.obstacles.length; i++) {
+      var ob = lm.obstacles[i], footY = ob.dy + ob.h * 0.50;
+      var span = infantryBankSpan(ob, footY), width = span[1] - span[0];
+      if (width < 86) continue;
+      for (var n = 0; n < 2; n++) {
+        var x = span[0] + width * (n ? 0.72 : 0.26);
+        var e = spawnLoose(function () { return newEnemy(61, x, lm.y + footY - 28, 12 + G.rank * 2,
+          GL.SPR.CORE, 84, 25, [0.80, 0.25, 0.20], 2, 400, false); });
+        if (!e) return;
+        e.arch = n ? 'spearman' : 'archer'; e.szDone = true; e.rot = 0;
+        e.ground = { landmark: lm, footY: footY, baseX: x,
+          patrol: n ? Math.min(32, width * 0.11) : 0, walk: 0, aim: DOWN,
+          windup: 0, age: 0, cooldown: 1.0 + n * 0.8 + i * 0.45 };
+        e.onUpdate = groundInfantryUpdate;
+      }
+    }
+  }
+  function groundInfantryUpdate(e, dt) {
+    var g = e.ground;
+    e.t += dt; if (g.windup <= 0) g.walk += dt;
+    if (g.windup <= 0 && g.patrol) e.x = g.baseX + Math.sin(g.walk * 1.8) * g.patrol;
+    if (e.y < 75 || e.y > H - 180 || !G.player.alive) { g.windup = 0; return; }
+    if (g.windup > 0) {
+      g.windup -= dt;
+      if (g.windup <= 0) {
+        var spear = e.arch === 'spearman';
+        P.bullet(e.x + Math.cos(g.aim) * 28, e.y + Math.sin(g.aim) * 28, g.aim,
+          rankSpd(spear ? 370 : 440), { fam: P.FAM.KUNAI, tier: spear ? 'M' : 'S',
+            color: P.ORANGE, life: 4 });
+        e.motionShot = 0; g.cooldown = spear ? 2.9 : 2.3;
+      }
+    } else {
+      g.cooldown -= dt;
+      if (g.cooldown <= 0) {
+        // Commit aim on the visible draw-back, giving the player a dodge window.
+        g.aim = Math.atan2(AIMY(e) - e.y, AIMX(e) - e.x);
+        g.windup = e.arch === 'spearman' ? 0.65 : 0.5;
+      }
+    }
+  }
+  // Background transport is independent of AI/status time: a stunned or charmed
+  // guard still rides its bank. Offscreen/retired banks cannot hold a wave open.
+  function carryGroundInfantry(e, dt) {
+    var g = e.ground;
+    g.age += dt;
+    if (!G.bg || G.bg.sector === 2 || !g.landmark.supportsInfantry || G.bg.landmark !== g.landmark || g.age > 22 || G.waveKind === 'boss' || G.bg.role === 'boss') {
+      killEnemy(e, false); return;
+    }
+    e.y = g.landmark.y + g.footY - 28 + e.dispY;
+    if (e.y > H + 90) killEnemy(e, false);
+  }
+  function hasWaveEnemies() {
+    var found = false;
+    Engine.enemies.forEach(function (e) { if (!e.ground && !e.dying) found = true; });
+    return found;
+  }
   function spawnTurret(x, targetY) {
     var e = newEnemy(3, x, -100, 14, GL.SPR.SHIP_MID, 108, 40, TURR_COL, 7, 1500, true); if (!e) return;
+    e.arch = 'turret';
     var xA = clampX(x - 190, 180), xB = clampX(x + 190, 180);
     P_pendulum(e, xA, xB, targetY || 360);
     setScript(e, [
@@ -3991,6 +4140,7 @@
   function spawnWheelShip(cx, cy, rad, idx, n, phase) {
     var from = TAU * idx / n - DOWN;
     var e = newEnemy(3, cx + Math.cos(from) * rad, cy + Math.sin(from) * rad, 12, GL.SPR.SHIP_MID, 92, 34, TURR_COL, 6, 1200, true); if (!e) return;
+    e.arch = 'wheel';
     P_orbitPoint(e, cx, cy, rad, 1.5, from);
     setScript(e, [
       { t: 0.0, fn: function (e) { e.poseT = 0.3; muzzle(e, [0.96, 0.42, 0.7]); } },
@@ -4003,6 +4153,7 @@
   function spawnReactor(ax) {
     var hp = 130 * (1 + 0.5 * (G.rank - 1));
     var e = newEnemy(3, clampX(ax, 220), -160, hp, GL.SPR.SHIP_MID, 150, 58, [1, 0.55, 0.85], 16, 3200, true); if (!e) return;
+    e.arch = 'reactor';
     P_retreatReturn(e, clampX(ax, 220), 420, 0.5);
     setScript(e, [
       { t: 0.0, fn: function (e) { e.poseT = 0.4; muzzle(e, [1, 0.5, 0.85]); } },
@@ -4027,6 +4178,7 @@
   // crossfire. (S2+)
   function spawnFlanker(side, phase) {
     var e = newEnemy(4, side < 0 ? -140 : W + 140, 340, 30, GL.SPR.SHIP_GUN, 116, 46, [1, 0.5, 0.2], 10, 2400, true); if (!e) return;
+    e.arch = 'flanker';
     P_flankRail(e, side, 360);
     setScript(e, [
       { t: 0.0, fn: function (e) { e.poseT = 0.32; muzzle(e, [1, 0.5, 0.3]); } },
@@ -4038,6 +4190,7 @@
   // sector ambience under the crescendo's other patterns. VERB: rain. (S2+)
   function spawnRainmaker(ax) {
     var e = newEnemy(3, clampX(ax, 200), -80, 40, GL.SPR.SHIP_MID, 120, 46, [1, 0.5, 0.3], 10, 1600, true); if (!e) return;
+    e.arch = 'rainmaker';
     e.holdX = clampX(ax, 200); e.holdY = 150;
     e.pathSegs = [
       { k: 'line', dur: 0.9, ex: e.holdX, ey: 150 },
@@ -4578,7 +4731,7 @@
     var idx = freeRetSlot(boss);    // fix #3: stable free slot 0/1/2, not the live count
     var e = spawnLoose(function () { return newEnemy(1, boss.x, boss.y, 30, GL.SPR.SHIP_POP, 74, 30, col, 6, 900, false); });
     if (!e) return null;
-    e.retinueSeq = boss.seq; e.retinueRole = boss.retinueKind; e.arch = boss.retinueKind;   // arch → authored sprite (assessor/tribute have art; rivet falls back to SHIP_POP)
+    e.retinueSeq = boss.seq; e.retinueRole = boss.retinueKind; e.arch = boss.retinueKind;   // assessor, tribute and rivet resolve to their own authored art
     e.retIdx = idx;                       // stable slot for this add's life (fix #3)
     e.s0 = idx * Math.PI;                 // orbit phase / stagger
     e.s3 = (idx % 2) ? -1 : 1;            // counter-rotation sign
@@ -4975,6 +5128,8 @@
     Engine.enemies.forEach(function (e) {
       sizeEnemy(e);   // spawn-time sprite sizing (before collision this frame; one-shot via e.szDone)
       if (e.hitFlash > 0) e.hitFlash -= dt;
+      e.motionShot = Math.min(1, e.motionShot + dt);
+      if (e.ground) { carryGroundInfantry(e, dt); if (e.dying) return; }
       updateStatus(e, dt);
       if (e.dying) return;
       if (e.charmed) { updateCharmed(e, dt); return; }
@@ -4987,7 +5142,11 @@
       if (!terrified && e.stunT <= 0) {                 // Stun / Terror: fully frozen (no move, no fire)
         Patterns.setSource(e);
         var fr = e.aura === 'frenzied' ? 1.3 : 1;       // FRENZIED aura
+        var bulletsBefore = Engine.bullets.freeTop;
         if (e.onUpdate) e.onUpdate(e, dt * fr);
+        // Recoil follows an actual emission, including unscripted archetypes.
+        // No changes to pattern timing, emission points, paths or hitboxes.
+        if (Engine.bullets.freeTop < bulletsBefore) e.motionShot = 0;
         Patterns.clearSource();
       }
       if (terrified) {                                  // continued flee acceleration
@@ -5021,7 +5180,6 @@
     if (e.marked) m *= (G.mods.odinMark ? 1.4 : 1.25) + (G.mods.heimVigil ? 0.20 : 0) + G.charmMark; // Mark (+heimVigil, +WATCHMAN'S EYE)
     if (e.weak) m *= 1.10 + 0.08 * (e.weakStacks || 0);   // HEARTSEEKER Weaken stacks (+8%/heart)
     if (e.terrorT > 0) m *= 1.20;                 // Ares Terror
-    if (e.shakenT > 0) m *= 1.10;                 // Ares Shaken (boss)
     if (e.stunT > 0 && G.mods.jadeStun) m *= 1.25; // Jade: Stunned foes take +25%
     if ((e.boss || e.elite) && G.charmElite > 1) m *= G.charmElite; // EAGLE FEATHER charm
     dmg *= m;
@@ -5661,7 +5819,6 @@
       if (st.stun) e.stunT = st.stun;
       if (st.charm) { e.charmed = true; e.charmT = st.charm; e.charmMeter = 0; }
       if (st.terror) e.terrorT = st.terror;
-      if (st.shaken) e.shakenT = st.shaken;
     },
     // ---- Pass-2 kit verify surface (zero cost unless called) ----
     setAttackGod: function (g, r) { if (G.attackGod && G.attackGod !== g) expireOwned('attack'); G.attackGod = g; if (r != null) G.attackR = r; updateCommunion(); },
@@ -5772,7 +5929,7 @@
     hazTypeCount: function (type) { var n = 0; for (var i = 0; i < hazards.length; i++) if (hazards[i].active && hazards[i].type === type) n++; return n; },
     hazPos: function (type) { for (var i = 0; i < hazards.length; i++) if (hazards[i].active && hazards[i].type === type) return { x: hazards[i].x, y: hazards[i].y, r: hazards[i].r, halfW: hazards[i].halfW, timer: hazards[i].timer }; return null; },
     // per-foe ultimate state (verify only): great-hunt tag, adoration dwell.
-    enemyUlt: function (i) { var e = Engine.enemies.items[i]; if (!e || !e.active) return null; return { huntTag: !!e.huntTag, adoreT: e.adoreT || 0, stunT: e.stunT || 0, shakenT: e.shakenT || 0, weakStacks: e.weakStacks || 0, charmed: !!e.charmed, hp: e.hp, maxhp: e.maxhp, runes: e.runes || 0 }; },
+    enemyUlt: function (i) { var e = Engine.enemies.items[i]; if (!e || !e.active) return null; return { huntTag: !!e.huntTag, adoreT: e.adoreT || 0, stunT: e.stunT || 0, terrorT: e.terrorT || 0, weakStacks: e.weakStacks || 0, charmed: !!e.charmed, hp: e.hp, maxhp: e.maxhp, runes: e.runes || 0 }; },
     // ---- authored-art wiring verify surface (zero cost unless called) ----
     // whether a named authored sprite (art/PROMPTS.md §8-9) has loaded into its
     // atlas cell, and the running per-name draw counter incremented every time a
@@ -5811,7 +5968,7 @@
     if (G.waveKind === 'boss') {
       if (!G.boss) startClearBeat('boss');
     } else {
-      if (G.waveGrace <= 0 && timers.length === 0 && Engine.enemies.count() === 0) startClearBeat('wave');
+      if (G.waveGrace <= 0 && timers.length === 0 && !hasWaveEnemies()) startClearBeat('wave');
     }
   }
   function startClearBeat(kind) {
@@ -6045,7 +6202,7 @@
     }
   }
   function effMultCap() { return G.up.multCap + (G.communion === 'OLYMPUS' ? 1 : 0); }
-  function hasStatus(e) { return e.marked || e.weak || e.charmed || e.burnT > 0 || e.stunT > 0 || e.terrorT > 0 || e.shakenT > 0; }
+  function hasStatus(e) { return e.marked || e.weak || e.charmed || e.burnT > 0 || e.stunT > 0 || e.terrorT > 0; }
   function applyMod(id, mag) {
     var M = G.mods;
     switch (id) {
@@ -6421,14 +6578,18 @@
     if (hasScene) {
       var sceneA = deepA * 0.9;
       var plateH = b.scenePlateH, plateW = W * (plateH / H);
+      // Later plates sit above earlier ones. Feather only their lower edge,
+      // exactly across the shared overlap; the first/last exposed edges stay
+      // opaque. Put dimming in the tint so overlap cannot double brightness.
+      var sceneFeather = Math.max(0, (plateH - b.sceneSpan) / plateH);
       for (i = 0; i < 3; i++) {
         var sceneSlot = b.env.slot + '-scene' + (i + 1);
         if (!GL.backdropReady(sceneSlot)) continue;
         var sceneY = H / 2 + b.routeY - i * b.sceneSpan;
         if (sceneY + plateH / 2 < 0 || sceneY - plateH / 2 > H) continue;
         GL.drawBackdrop(sceneSlot, W / 2, sceneY, plateW, plateH,
-          0.78, 0.8, 0.82, sceneA, 0, 1.08, 0, false,
-          i > 0 ? 0.26 : 0, i < 2 ? 0.26 : 0);
+          0.78 * sceneA, 0.8 * sceneA, 0.82 * sceneA, 1, 0, 1.08, 0, false,
+          0, i > 0 ? sceneFeather : 0);
       }
     } else if (GL.backdropReady(b.env.slot + '-deep')) {
       GL.drawBackdrop(b.env.slot + '-deep', W / 2, H / 2, W, H, 1, 1, 1, deepA, (b.scrollY * 0.006) % 1);
@@ -6436,6 +6597,9 @@
       for (i = 0; i < b.nebula.length; i++) { var n = b.nebula[i]; GL.draw(GL.SPR.GLOW, n.x, n.y, n.r, n.r, 0, n.col[0], n.col[1], n.col[2], deepA); }
       for (i = 0; i < b.stars.length; i++) { var s = b.stars[i]; var tw = 0.7 + 0.3 * Math.sin(s.tw); GL.draw(GL.SPR.CORE, s.x, s.y, s.sz, s.sz, 0, st[0], st[1], st[2], s.a * tw * deepA); }
     }
+    // Broad continuous currents describe each place: harbor eddies, river bends,
+    // then long cloud ribbons. They sit below the encounter and never pulse.
+    drawEnvironmentFlow(b, deepA);
     // BOSS SHADOW — huge dim looming mass that precedes the boss (arrives FROM
     // the environment). Drawn even as the layers dim to near-black for the fight.
     var bs = b.bossShadow;
@@ -6457,7 +6621,9 @@
     // SET-PIECE — one big silhouette crossing under the fight on a feature wave;
     // dims further while a crest is live (dimFactor already low then).
     var sp = b.setpiece;
-    if (sp.active && sp.parts) drawStructUnitAt(sp.x, sp.y, sp.parts, sc, structBase * 1.1 * sp.alpha);
+    // Authored places already provide the architecture. Keep the old floating
+    // structure motif only for the procedural fallback, not over real banks.
+    if (!hasScene && sp.active && sp.parts) drawStructUnitAt(sp.x, sp.y, sp.parts, sc, structBase * 1.1 * sp.alpha);
     // NEAR-DEBRIS WEATHER — fast sparse motes/embers. Procedural flecks remain
     // over painted debris at low alpha so forward motion is always legible.
     var dc = b.env.debrisCol, debA = deepA * (hasScene ? 0.22 : 0.72);
@@ -6470,13 +6636,61 @@
       GL.draw(GL.SPR.SPARK, d.x, d.y, d.sz, d.sz, d.tw, dc[0], dc[1], dc[2], d.a * dt2 * debA * (paintedDebris ? 0.35 : 1));
     }
   }
+  // The ambient current follows the crossing's open water/air. Approach it over
+  // a broad distance so a newly arriving bank cannot snap scenery sideways.
+  // This is presentation only: the visible masonry polygons still own collision.
+  function environmentFlowLane(b, y) {
+    var left = 0, right = W;
+    var obs = b.obstacles || [];
+    for (var i = 0; i < obs.length; i++) {
+      var ob = obs[i];
+      var distance = Math.max(ob.y - y, y - ob.y - ob.h, 0);
+      var approach = Math.max(0, 1 - distance / 300);
+      approach = approach * approach * (3 - 2 * approach);
+      if (ob.side < 0) left = Math.max(left, Math.max(0, ob.x + ob.w) * approach);
+      else right = Math.min(right, W - Math.max(0, W - ob.x) * approach);
+    }
+    return { left: left, right: right, width: Math.max(0, right - left) };
+  }
+  function drawEnvironmentFlow(b, deepA) {
+    var colors = [[0.22,0.34,0.33],[0.30,0.27,0.20],[0.25,0.33,0.36]];
+    var c = colors[b.sector] || colors[0], cloud = b.sector === 2, river = b.sector === 1;
+    var drift = b.flowY == null ? b.routeY * 0.82 : b.flowY;
+    for (var flow = 0; flow < 3; flow++) {
+      var flowY = ((flow * 770 + drift) % (H + 700)) - 350;
+      var lane = environmentFlowLane(b, flowY);
+      var flowX = lane.left + lane.width * (flow === 1 ? 0.87 : 0.13);
+      var fit = Math.max(0.32, Math.min(1, lane.width / 740));
+      var prevX = 0, prevY = 0;
+      for (var seg = 0; seg < 25; seg++) {
+        var angle = seg * (river ? 0.15 : 0.23) + flow * 1.7;
+        var radius = (28 + seg * (cloud ? 7 : 5)) * fit;
+        var fx = flowX + Math.cos(angle) * radius * (cloud ? 1.3 : 1);
+        var fy = flowY + Math.sin(angle) * radius * (river ? 1.05 : 0.48);
+        // Cloud tails stretch into the wind; river strands remain long bends.
+        if (cloud) fx += seg * 2.8 * fit;
+        if (seg) GL.draw(GL.SPR.STREAK, (fx + prevX) / 2, (fy + prevY) / 2,
+          cloud ? 3.0 : 2.4, Math.hypot(fx - prevX, fy - prevY) + 1,
+          Math.atan2(fy - prevY, fx - prevX) - Math.PI / 2,
+          c[0], c[1], c[2], deepA * 0.17 * Math.sin(seg / 25 * Math.PI));
+        prevX = fx; prevY = fy;
+      }
+    }
+  }
   function drawEnvironmentLandmark() {
     var b = G.bg, lm = b.landmark;
     if (!lm || !GL.backdropReady(lm.slot)) return;
     // Important terrain retains enough presence under bullet-density dimming to
     // remain navigable; it still sits below every hazard, projectile and actor.
-    var alpha = (0.34 + b.dimFactor * 0.42) * Math.min(1, b.bright);
-    GL.drawBackdrop(lm.slot, W / 2, lm.y + lm.h / 2, lm.w, lm.h, 0.82, 0.86, 0.88, alpha, 0, 1.08, 0, false);
+    var alpha = (0.34 + b.dimFactor * 0.42) * Math.max(0.6, Math.min(1, b.bright));
+    var x = lm.x == null ? W / 2 : lm.x, y = lm.y + lm.h / 2;
+    // A tight cast shadow attaches the architecture to the world beneath it.
+    // Sky bridges stand farther above the cloud layer; banks sit close to water.
+    // Reuse the actual alpha silhouette, never a generic circle or extra wall.
+    var height = lm.kind === 'jade' ? 28 : 12;
+    GL.drawBackdrop(lm.slot, x + height * 0.5, y + height, lm.w, lm.h,
+      0.015, 0.025, 0.035, alpha * 0.46, 0, 1, 0, false);
+    GL.drawBackdrop(lm.slot, x, y, lm.w, lm.h, 0.82, 0.86, 0.88, alpha, 0, 1.08, 0, false);
   }
   function drawStructUnitAt(ox, oy, parts, col, alpha) {
     for (var i = 0; i < parts.length; i++) {
@@ -6494,6 +6708,21 @@
       var zoneTop = Math.max(0, ob.y), zoneBottom = Math.min(H, ob.y + ob.h);
       if (zoneBottom <= zoneTop) continue;
       hud.save();
+      if (ob.points) {
+        hud.beginPath();
+        for (var pi = 0; pi < ob.points.length; pi++) {
+          var point = ob.points[pi];
+          if (pi === 0) hud.moveTo(point.x, point.y + ob.originY);
+          else hud.lineTo(point.x, point.y + ob.originY);
+        }
+        hud.closePath();
+        hud.fillStyle = ob.kind === 'pylon' ? 'rgba(27,31,46,0.12)' : 'rgba(20,42,43,0.12)'; hud.fill();
+        hud.strokeStyle = ob.kind === 'jade' ? 'rgba(132,181,162,0.52)' : ob.kind === 'pylon' ? 'rgba(183,168,105,0.52)' : 'rgba(194,165,84,0.50)';
+        hud.lineWidth = 2;
+        hud.stroke();
+        hud.restore();
+        continue;
+      }
       // This is the collision contract made visible: the complete rectangle
       // used by physics, plus sparse chevrons pointing into solid terrain.
       hud.fillStyle = 'rgba(255,90,110,0.075)';
@@ -6570,24 +6799,27 @@
     carrier: '32-8-carrier-hulk', moth: '32-9-blink-moth', gardener: '32-10-bullet-gardener',
     apostate: '32-13-the-apostate',
     assessor: '32-15-assessor', tribute: '32-16-tribute-bearer',
-    courtier: '32-17-gilded-courtier', unweighed: '32-18-unweighed-heart'
+    courtier: '32-17-gilded-courtier', unweighed: '32-18-unweighed-heart',
+    turret: '32-19-bell-sentry', wheel: '32-20-wheel-guard', reactor: '32-21-reactor-scarab',
+    midship: '32-22-war-barge', flanker: '32-23-flank-crossbow',
+    rainmaker: '32-24-rain-ewer', rivet: '32-25-bronze-rivet'
   };
+  // Former generic roles keep their historical physics and painted footprint.
+  // These mappings replace artwork only; fill compensation belongs to drawing.
+  var ENEMY_DRAW_ONLY = { turret: 1, wheel: 1, reactor: 1, midship: 1, flanker: 1, rainmaker: 1, rivet: 1 };
   var ENEMY_SPR_NAME = { 'TALOS': '32-11-talos', 'AMMIT': '32-14-ammit', 'MIDAS': '32-12-midas', 'THE APOSTATE': '32-13-the-apostate' };
   // Resolve the atlas cell an enemy should draw with: boss-name match first, then
-  // archetype, then the generic slot (e.spr). The GILDED MIMIC only wears its
-  // authored gold-loot disguise while dormant (e.s0 === 0); once it reveals it
-  // falls back to e.spr so the hostile popcorn read survives.
+  // archetype, then the generic slot (e.spr). The mimic retains its living-urn
+  // identity after revealing; its lunge, spray and loss of gold glow are the tell.
   function enemyDrawCell(e) {
-    if (e.arch === 'mimic' && e.s0 !== 0) return e.spr;
     var name = ENEMY_SPR_NAME[e.name] || ENEMY_SPR_ARCH[e.arch];
     if (name) { var c = authCell(name); if (c >= 0) return c; }
     return e.spr;
   }
-  // The authored-sprite name an enemy sizes/draws to (null = procedural generic slot;
-  // mirrors enemyDrawCell's boss-name-then-archetype resolution, incl. the mimic-reveal
-  // fallback to its hostile popcorn read).
+  // The sprite used for historical spawn sizing. Revealed mimics preserve their
+  // original generic collision calculation even though their urn art persists.
   function enemySpriteName(e) {
-    if (e.arch === 'mimic' && e.s0 !== 0) return null;
+    if (ENEMY_DRAW_ONLY[e.arch] || (e.arch === 'mimic' && e.s0 !== 0)) return null;
     return ENEMY_SPR_NAME[e.name] || ENEMY_SPR_ARCH[e.arch] || null;
   }
   // SPAWN-TIME sprite sizing (was draw-time-only, commit 3534cd6). An authored sprite
@@ -6618,15 +6850,258 @@
   // module-level arrays (drawGold's coinC pattern) instead of concat-keying authCell
   // per glyph per enemy every frame (young-gen string churn in the hottest draw path).
   var RUNE_NAMES = ['35-1-rune', '35-2-rune', '35-3-rune', '35-4-rune', '35-5-rune', '35-6-rune', '35-7-rune', '35-8-rune', '35-9-rune'];
-  var FLAME_NAMES = ['37-1-flame', '37-2-flame', '37-3-flame', '37-4-flame', '37-5-flame', '37-6-flame'];
-  var runeCells = [-1, -1, -1, -1, -1, -1, -1, -1, -1], flameCells = [-1, -1, -1, -1, -1, -1];
+  var runeCells = [-1, -1, -1, -1, -1, -1, -1, -1, -1];
   function resolveGlyphCells() {
     var i;
     for (i = 0; i < 9; i++) runeCells[i] = authCell(RUNE_NAMES[i]);
-    for (i = 0; i < 6; i++) flameCells[i] = authCell(FLAME_NAMES[i]);
+  }
+  // Attack pose state comes from actual preparation and discharge. Physical
+  // bodies retain a fixed scale; articulated parts and authored frames animate.
+  function enemyMotionPose(e, time) {
+    var m = e.motion;
+    var heavy = e.boss || e.arch === 'gunship' || e.arch === 'carrier' || e.arch === 'midship' || e.arch === 'aegis' || e.type === 3;
+    var winged = e.arch === 'moth' || e.arch === 'weaver2' || e.type === 2;
+    var quiet = e.stunT > 0 || (e.terrorT > 0 && !e.boss) || e.dying || (e.arch === 'mimic' && e.s0 === 0);
+    var life = heavy ? 0.40 : 0.27;
+    var shot = Math.max(0, e.motionShot || 0);
+    // Sharp release, then a single damped recovery instead of perpetual wobble.
+    var kick = shot < life ? Math.sin(Math.min(1, shot / 0.055) * Math.PI / 2) * Math.pow(1 - shot / life, 2) : 0;
+    var brace = e.poseT > 0 ? 1 - Math.min(1, e.poseT / Math.max(0.01, e.motionPoseMax)) : 0;
+    brace = brace * brace * (3 - 2 * brace);
+    // Physical bodies keep a fixed size. Poses, hinged wings and cannon recoil
+    // carry animation; inflating the entire actor makes weight and anatomy vague.
+    m.sx = 1; m.sy = 1;
+    var direction = (e.seq & 1) ? 1 : -1;
+    m.turn = quiet || e.boss || heavy ? 0 : direction * (brace * 0.018 - kick * 0.026);
+    m.brace = quiet ? 0 : brace; m.kick = quiet ? 0 : kick;
+    return m;
+  }
+  // Animate the visible anatomy itself, not extra decorative weapon vanes.
+  // Each cropped quad meets its torso at a fixed hinge. Width changes fold a
+  // wing without tearing its root away from the body or changing collisions.
+  function drawEnemyWeaponMotion(e, ds, m, dim, cell, rot, r, g, b) {
+    if (!GL.drawRegion || e.ground || e.boss || (e.arch === 'mimic' && e.s0 === 0)) return false;
+    var hawk = cell === GL.SPR.SHIP_POP;
+    var moth = e.arch === 'moth', guns = e.arch === 'gunship';
+    // Human figures remain intact: their new arms, shield and robe do not share
+    // the old sprites' crop boundaries. Whole-body brace/recoil supplies motion.
+    if (!(hawk || moth || guns)) return false;
+    var quiet = e.stunT > 0 || (e.terrorT > 0 && !e.boss) || e.dying;
+    var ct = Math.cos(rot), st = Math.sin(rot);
+    // Crop coordinates are in the already-oriented atlas (nose up).
+    function part(u0, v0, u1, v1, x, y, w, h) {
+      GL.drawRegion(cell, e.x + x * ct - y * st, e.y + x * st + y * ct,
+        w, h, rot, r * dim, g * dim, b * dim, 1, u0, v0, u1, v1);
+    }
+    if (hawk || moth) {
+      var left = hawk ? 0.42 : 0.46;
+      var right = hawk ? 0.58 : 0.54;
+      var phase = G.time * (moth ? 11 : 6.2) + e.seq * 1.7;
+      var beat = quiet ? 0 : Math.sin(phase);
+      // Fast downstroke, slower lift, then a held tuck during the attack tell.
+      var fold = quiet ? 1 : (0.88 + beat * 0.12) - m.brace * 0.13;
+      var otherFold = quiet ? 1 : fold + Math.sin(phase + 0.35) * 0.025;
+      fold = Math.max(0.65, Math.min(1.04, fold));
+      otherFold = Math.max(0.65, Math.min(1.04, otherFold));
+      var lw = left * ds * fold, rw = (1 - right) * ds * otherFold;
+      // Wings draw first, with a tiny seam overlap hidden beneath the torso.
+      part(0, 0, left + 0.004, 1, (left - 0.5) * ds - lw / 2, 0, lw + ds * 0.004, ds);
+      part(right - 0.004, 0, 1, 1, (right - 0.5) * ds + rw / 2, 0, rw + ds * 0.004, ds);
+      part(left, 0, right, 1, ((left + right) / 2 - 0.5) * ds, 0, (right - left) * ds, ds);
+      return true;
+    }
+    if (guns) {
+      var recoil = quiet ? 0 : m.kick * ds * 0.048;
+      // Separate barrels retract into the chassis; the chipped barrel settles
+      // a little sooner. No invented fins and no flashing projectile-like bits.
+      var leftEnd = 0.37 - recoil / ds, rightEnd = 0.37 - recoil * 0.83 / ds;
+      part(0, 0.37, 1, 1, 0, ds * 0.185, ds, ds * 0.63);
+      part(0.42, 0, 0.58, 0.37, 0, -ds * 0.315, ds * 0.16, ds * 0.37);
+      // Clip at the fixed hull boundary instead of layering translucent rows:
+      // the barrels disappear into their sockets without an additive seam.
+      part(0, 0, 0.42, leftEnd, -ds * 0.29, (leftEnd / 2 - 0.5) * ds + recoil, ds * 0.42, ds * leftEnd);
+      part(0.58, 0, 1, rightEnd, ds * 0.29, (rightEnd / 2 - 0.5) * ds + recoil * 0.83, ds * 0.42, ds * rightEnd);
+      return true;
+    }
+    return false;
+  }
+  // A soldier reads as helmet, face, tunic, two boots and a separate weapon.
+  // Pose each limb explicitly; no hull deformation, floating aura or ornament.
+  function drawInfantry(e) {
+    // Opaque bodies/shadows must cover their bank, not add light through it.
+    if (GL.blendPremult) GL.blendPremult();
+    var g = e.ground, quiet = e.stunT > 0 || (e.terrorT > 0 && !e.boss) || e.dying;
+    var walking = !quiet && g.patrol && g.windup <= 0;
+    var prefix = e.arch === 'archer' ? 'infantry-archer-' : 'infantry-spearman-';
+    var frame = !quiet && e.motionShot < 0.30 ? 'release' : g.windup > 0 ? 'prepare'
+      : walking && Math.floor(g.walk * 5) % 2 ? 'walk' : 'idle';
+    var painted = authCell(prefix + frame);
+    if (painted >= 0) {
+      GL.draw(GL.SPR.CORE, e.x, e.y + 30, 55, 14, 0, 0.04, 0.03, 0.04, 0.65);
+      // Use one shared framing for every pose; body size cannot pulse as a bow
+      // extends or a foot steps. Ground/collision remain exactly as authored.
+      var archer = e.arch === 'archer';
+      var artSize = e.scale * (archer ? 1.12 : 1.40), mirror = Math.cos(g.aim) < -0.15 ? -1 : 1;
+      // Foot baselines in the selected v2 sheet quadrants. Fixed body scale,
+      // pose-specific placement: crouching and throwing cannot lift the actor
+      // off its bank. Atlas fitting uses 124px within the 126px sampled region.
+      var foot = archer ? { idle: 0.900, prepare: 0.900, release: 0.827, walk: 0.827 }
+        : { idle: 0.885, prepare: 0.885, release: 0.783, walk: 0.792 };
+      var artY = e.y + 30 - (foot[frame] - 0.5) * artSize * 124 / 126;
+      var hit = e.hitFlash > 0 ? 0.55 : 0;
+      GL.draw(painted, e.x, artY, artSize * mirror, artSize, 0,
+        (e.charmed ? 0.65 : 1) + hit, (e.charmed ? 0.92 : 1) + hit, 1 + hit, 1);
+      if (GL.blendAdditive) GL.blendAdditive();
+      return;
+    }
+    var stride = walking ? Math.sin(g.walk * 9) * 7 : 0;
+    var drawBack = Math.max(0, Math.min(1, g.windup / (e.arch === 'archer' ? 0.5 : 0.65)));
+    drawBack = g.windup > 0 ? 1 - drawBack : 0;
+    var recoil = quiet ? 0 : Math.max(0, 1 - e.motionShot / 0.28);
+    var lean = drawBack * 3 - recoil * 5;
+    var dark = [0.12, 0.075, 0.10], skin = [0.77, 0.54, 0.38];
+    var cloth = e.charmed ? [0.35, 0.73, 0.78] : [0.66, 0.17, 0.18];
+    var bronze = e.charmed ? [0.58, 0.87, 0.91] : [0.70, 0.43, 0.26];
+    if (e.hitFlash > 0) {
+      for (var ci = 0; ci < 3; ci++) { skin[ci] += 0.55; cloth[ci] += 0.65; bronze[ci] += 0.55; }
+    }
+    function oval(x, y, w, h, c) {
+      GL.draw(GL.SPR.CORE, e.x + x, e.y + y, w, h, 0, c[0], c[1], c[2], 1);
+    }
+    function limb(x1, y1, x2, y2, w, c) {
+      var dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy);
+      GL.draw(GL.SPR.INFANTRY_LIMB, e.x + (x1 + x2) / 2, e.y + (y1 + y2) / 2,
+        w, len * 1.12 + w * 0.30, Math.atan2(dy, dx) - Math.PI / 2, c[0], c[1], c[2], 1);
+    }
+    // Tight contact shadow and planted boots establish ground contact.
+    GL.draw(GL.SPR.CORE, e.x, e.y + 30, 61, 15, 0, 0.04, 0.03, 0.04, 0.65);
+    limb(-9, 10, -12 - stride * 0.5, 27 + stride * 0.35, 15, dark);
+    limb(9, 10, 12 + stride * 0.5, 27 - stride * 0.35, 15, dark);
+    GL.draw(GL.SPR.INFANTRY_BOOT, e.x - 14 - stride * 0.5, e.y + 29 + stride * 0.35, 21, 14, 0, bronze[0], bronze[1], bronze[2], 1);
+    GL.draw(GL.SPR.INFANTRY_BOOT, e.x + 14 + stride * 0.5, e.y + 29 - stride * 0.35, 21, 14, 0, bronze[0], bronze[1], bronze[2], 1);
+    GL.draw(GL.SPR.INFANTRY_BODY, e.x + lean, e.y, 43, 44, 0, cloth[0], cloth[1], cloth[2], 1);
+    limb(-14 + lean, 8, 14 + lean, 8, 7, bronze); // plain belt, no medallion
+    oval(lean, -23, 25, 28, skin);
+    GL.draw(GL.SPR.INFANTRY_HELM, e.x + lean, e.y - 29, 37, 36, 0, bronze[0], bronze[1], bronze[2], 1);
+    limb(2 + lean, -41, -5 + lean, -45, 7, cloth); // short bent crest
+    // Weapon is in front of the torso, aimed independently from the upright body.
+    var ca = Math.cos(g.aim), sa = Math.sin(g.aim);
+    function weapon(u1, v1, u2, v2, w, c) {
+      limb(lean + u1 * ca - v1 * sa, u1 * sa + v1 * ca,
+        lean + u2 * ca - v2 * sa, u2 * sa + v2 * ca, w, c);
+    }
+    if (e.arch === 'archer') {
+      weapon(4, -12, 26, 0, 13, skin); // extended bow arm
+      weapon(-8, 10, 12 - drawBack * 15 + recoil * 12, 0, 12, skin);
+      GL.draw(GL.SPR.INFANTRY_BOW, e.x + lean + 31 * ca, e.y + 31 * sa, 18, 54,
+        g.aim + Math.PI, bronze[0], bronze[1], bronze[2], 1);
+      weapon(25, -24, 18 - drawBack * 15, 0, 2.5, skin);
+      weapon(18 - drawBack * 15, 0, 25, 24, 2.5, skin);
+      if (e.motionShot > 0.3) weapon(4 - drawBack * 12, 0, 46 - drawBack * 12, 0, 4, bronze);
+      // Visible quiver behind the left shoulder.
+      limb(-18, -10, -24, -31, 10, dark);
+      limb(-24, -31, -28, -40, 4, bronze);
+    } else {
+      var grip = 12 - drawBack * 18 + recoil * 20;
+      weapon(-6, -12, grip, -14, 13, skin);
+      if (e.motionShot > 0.32) {
+        weapon(grip - 27, -14, grip + 38, -14, 5, bronze);
+        GL.draw(GL.SPR.FLAT_TRIANGLE, e.x + lean + (grip + 39) * ca + 14 * sa,
+          e.y + (grip + 39) * sa - 14 * ca, 9, 15, g.aim + Math.PI / 2,
+          bronze[0] + 0.08, bronze[1] + 0.12, bronze[2] + 0.12, 1);
+      }
+      // A small plain round shield hangs from the non-throwing arm.
+      GL.draw(GL.SPR.FLAT_DISC, e.x - 23 + lean, e.y, 30, 34, 0, dark[0], dark[1], dark[2], 1);
+      GL.draw(GL.SPR.FLAT_DISC, e.x - 23 + lean, e.y, 25, 29, 0, cloth[0], cloth[1], cloth[2], 1);
+      limb(-29 + lean, -7, -18 + lean, 7, 5, bronze);
+    }
+    if (GL.blendAdditive) GL.blendAdditive();
+  }
+  // The tether-weaver is a complete spider: eight jointed legs, a broad
+  // abdomen and a small forward head. Its web/combat contract stays unchanged.
+  function drawWeaver(e, m) {
+    if (GL.blendPremult) GL.blendPremult();
+    var ds = e.scale, rot = e.rot, ct = Math.cos(rot), st = Math.sin(rot);
+    var quiet = e.stunT > 0 || (e.terrorT > 0 && !e.boss) || e.dying;
+    var painted = authCell('32-4-weaver');
+    if (painted >= 0) {
+      // Keep all eight legs attached to the replacement's own anatomy. A small
+      // attack-driven turn settles after discharge without inflating the body.
+      var turn = quiet ? 0 : m.brace * 0.025 - m.kick * 0.035;
+      var hit = e.hitFlash > 0 ? 0.7 : 0;
+      GL.draw(painted, e.x, e.y, ds, ds, rot + turn,
+        (e.charmed ? 0.65 : 1) + hit, (e.charmed ? 0.92 : 1) + hit, 1 + hit, 1);
+      if (GL.blendAdditive) GL.blendAdditive();
+      return;
+    }
+    var dark = [0.14, 0.075, 0.14];
+    var shell = e.charmed ? [0.30, 0.66, 0.71] : [0.37, 0.16, 0.29];
+    var limbCol = e.charmed ? [0.38, 0.70, 0.75] : [0.56, 0.26, 0.36];
+    var light = e.charmed ? [0.63, 0.88, 0.86] : [0.70, 0.48, 0.49];
+    if (e.hitFlash > 0) {
+      for (var c = 0; c < 3; c++) { shell[c] += 0.55; limbCol[c] += 0.55; light[c] += 0.30; }
+    }
+    function body(x, y, w, h, col) {
+      GL.draw(GL.SPR.FLAT_DISC, e.x + (x * ct - y * st) * ds,
+        e.y + (x * st + y * ct) * ds, w * ds, h * ds, rot, col[0], col[1], col[2], 1);
+    }
+    function segment(ax, ay, bx, by, width, col) {
+      var dx = bx - ax, dy = by - ay, x = (ax + bx) / 2, y = (ay + by) / 2;
+      GL.draw(GL.SPR.INFANTRY_LIMB, e.x + (x * ct - y * st) * ds,
+        e.y + (x * st + y * ct) * ds, width * ds,
+        (Math.hypot(dx, dy) * 1.12 + width * 0.25) * ds,
+        rot + Math.atan2(dy, dx) - Math.PI / 2, col[0], col[1], col[2], 1);
+    }
+    for (var side = -1; side <= 1; side += 2) {
+      for (var leg = 0; leg < 4; leg++) {
+        var beat = quiet ? 0 : Math.sin(G.time * 3.4 + e.seq * 0.9 + leg * 2.2 + side) * 0.014;
+        var rootY = -0.13 + leg * 0.077;
+        var kneeY = -0.235 + leg * 0.153 + beat;
+        var footY = -0.36 + leg * 0.245 + beat * 2;
+        var front = leg === 0 ? m.brace * 0.07 - m.kick * 0.055 : 0;
+        var kneeX = side * (0.255 + Math.sin(leg * 1.05) * 0.03 - m.brace * 0.012);
+        var footX = side * (leg === 0 || leg === 3 ? 0.32 : 0.39);
+        footY -= front;
+        segment(side * 0.10, rootY, kneeX, kneeY, 0.050, dark);
+        segment(kneeX, kneeY, footX, footY, 0.038, dark);
+        segment(side * 0.10, rootY, kneeX, kneeY, 0.034, limbCol);
+        segment(kneeX, kneeY, footX, footY, 0.023, limbCol);
+      }
+    }
+    body(0, 0.075, 0.34, 0.40, dark);
+    body(0, 0.075, 0.285, 0.35, shell);
+    // A single soft-looking plane, no jewelry or glowing pattern.
+    body(-0.055, 0.075, 0.055, 0.19, limbCol);
+    body(0, -0.16, 0.235, 0.215, dark);
+    body(0, -0.16, 0.19, 0.17, shell);
+    body(-0.043, -0.195, 0.024, 0.035, light);
+    body(0.043, -0.195, 0.024, 0.035, light);
+    // Two short mouthparts finish the forward silhouette without a large crest.
+    segment(-0.035, -0.23, -0.045, -0.265, 0.019, limbCol);
+    segment(0.035, -0.23, 0.045, -0.265, 0.019, limbCol);
+    if (GL.blendAdditive) GL.blendAdditive();
+  }
+  // Select authored poses from existing combat state only. Static cells still
+  // own sizing/collisions, so raised shields or outstretched arms cannot alter them.
+  function enemyActionFrame(e) {
+    var frame = 'idle';
+    var quiet = e.stunT > 0 || (e.terrorT > 0 && !e.boss) || e.dying;
+    if (!quiet) {
+      if (e.motionShot < 0.12) frame = 'release';
+      else if (e.motionShot < 0.40) frame = 'recover';
+      else if (e.poseT > 0) frame = 'prepare';
+      else if (e.arch === 'acolyte' && e.link && e.link.active && !e.link.dying) frame = 'release';
+      else if (e.arch === 'aegis' && e.shieldT > 0) frame = 'recover';
+    }
+    return frame;
+  }
+  function enemyActionCell(e) {
+    var talos = e.name === 'TALOS';
+    if (!talos && e.arch !== 'aegis' && e.arch !== 'acolyte') return -1;
+    return authCell((talos ? 'talos' : e.arch) + '-action-' + enemyActionFrame(e));
   }
   function drawEnemies() {
-    resolveGlyphCells();   // per-frame glyph-cell resolve (feeds drawKitOverlays runes + drawStatus flames)
+    resolveGlyphCells();   // per-frame authored rune lookup (status shapes use procedural atlas cells)
     Engine.enemies.forEach(function (e) {
       sizeEnemy(e);   // one-shot spawn-time sizing (also covers a frozen-test spawn that never ticked update)
       var f = e.hitFlash > 0 ? 1 : 0;
@@ -6638,22 +7113,53 @@
       // at spawn by sizeEnemy, so DRAW and COLLISION agree — no per-draw re-scaling here.
       var authored = cell !== e.spr;
       var ds = e.scale;
+      if (authored && ENEMY_DRAW_ONLY[e.arch]) ds *= GL.sprFill(cell) / GL.sprFill(e.spr);
+      // The revealed mimic remains the same living urn. Its existing reveal
+      // collision sizing stays generic; only compensate the authored draw.
+      if (e.arch === 'mimic' && e.s0 !== 0 && authored) ds *= GL.sprFill(cell);
+      var motion = enemyMotionPose(e, G.time), bodyRot = e.rot + motion.turn;
+      var bodyW = ds * motion.sx, bodyH = ds * motion.sy;
       // TALOS THE NAIL: the torso is IMMUNE — desaturate it to ~0.55 luminance so the
       // eye tracks straight to the bright ankle weak point drawn below.
       var dim = e.nailActive ? 0.55 : 1;
-      GL.draw(GL.SPR.GLOW, e.x, e.y, ds * 1.5, ds * 1.5, 0, er, eg, eb, (e.boss ? 0.5 : 0.35) * dim);
-      drawStateRimA(e, cell, ds);   // state = silhouette rim-light BEHIND the body (the one language; no rings)
-      if (authored) {
+      // Bodies are opaque painted objects. Idle glow erases their dark contours;
+      // reserve light for the state rim, shield opening, casts and hit feedback.
+      if (!e.ground && e.arch !== 'weaver2') drawStateRimA(e, cell, ds);   // state = silhouette rim-light BEHIND the body (the one language; no rings)
+      if (e.ground) {
+        drawInfantry(e);
+      } else if (e.arch === 'weaver2') {
+        drawWeaver(e, motion);
+      } else if (authored) {
+        if (GL.blendPremult) GL.blendPremult();
         // authored sprite carries its own faction-correct colour: draw near-white
         // so it shows true, punch toward white on hit-flash, flip cyan when charmed.
         var tr = 1, tg = 1, tb = 1;
         if (e.charmed) { tr = 0.7; tg = 0.95; tb = 1; }
         else if (f) { tr = tg = tb = 1 + 0.7 * f; }
-        GL.draw(cell, e.x, e.y, ds, ds, e.rot, tr * dim, tg * dim, tb * dim, 1);
-        if (e.boss) GL.draw(cell, e.x, e.y, ds * 0.6, ds * 0.6, e.rot, dim, dim, dim, (0.4 + 0.2 * Math.sin(G.time * 4)) * dim);
+        var actionCell = enemyActionCell(e);
+        if (actionCell >= 0) {
+          // Frame poses carry the limb movement; keep their common frame rigid.
+          var actionY = e.y;
+          if (e.name === 'TALOS') {
+            // Feet in the v2 four-pose sheet share a world baseline. The release
+            // crouches through its actual anatomy, never by shrinking the figure.
+            // Atlas padding is 1/64 per edge; source framing is uniform per sheet.
+            var frame = enemyActionFrame(e);
+            var sole = frame === 'idle' ? 619 : frame === 'prepare' ? 621 : 581;
+            var frameScale = (window.SPRITE_FRAME_SCALE || {})['talos-action-sheet'] || 0.82;
+            var soleOffset = (sole / 627 - 0.5) * frameScale * (31 / 32) * ds;
+            actionY = e.y + ds * 0.44 + 18 - soleOffset;
+          }
+          GL.draw(actionCell, e.x, actionY, ds, ds, bodyRot, tr * dim, tg * dim, tb * dim, 1);
+        } else if (!drawEnemyWeaponMotion(e, ds, motion, dim, cell, bodyRot, tr, tg, tb)) {
+          GL.draw(cell, e.x, e.y, bodyW, bodyH, bodyRot, tr * dim, tg * dim, tb * dim, 1);
+        }
+        if (GL.blendAdditive) GL.blendAdditive();
       } else {
-      GL.draw(e.spr, e.x, e.y, e.scale, e.scale, e.rot, r * dim, g * dim, bl * dim, 1);
-      if (e.boss) GL.draw(e.spr, e.x, e.y, e.scale * 0.6, e.scale * 0.6, e.rot, dim, dim, dim, (0.4 + 0.2 * Math.sin(G.time * 4)) * dim);
+      if (GL.blendPremult) GL.blendPremult();
+      if (!drawEnemyWeaponMotion(e, ds, motion, dim, cell, bodyRot, r, g, bl))
+        GL.draw(e.spr, e.x, e.y, bodyW, bodyH, bodyRot, r * dim, g * dim, bl * dim, 1);
+      if (GL.blendAdditive) GL.blendAdditive();
       }
       // MIDAS THE HOARD — the heaped mound of stolen gold at the king's feet, growing
       // with e.hoard (the gold-theft loop). §34d the ONE enemy-adjacent loot-gold. Drawn
@@ -6672,30 +7178,29 @@
         }
       }
       // TALOS THE NAIL — the glowing ankle weak point (the only thing that can be
-      // hurt in the final phase): a green-gold ichor node, pulsing so it reads.
+      // hurt in the final phase): a steady green-gold ichor target.
       if (e.nailActive) {
-        // THE TARGET: hitbox stays nailR=30, but the READ is big and hot (~84px sprite,
-        // wide halo, double pulse ring) so against the dimmed torso the eye locks on it.
-        var np = 0.6 + 0.4 * Math.sin(G.time * 8), np2 = 0.5 + 0.5 * Math.sin(G.time * 5.3);
-        var nailC = authCell('34d-1-the-nail');   // §34d THE NAIL — the finale weak point
-        GL.draw(GL.SPR.GLOW, e.nailX, e.nailY, 128, 128, 0, 0.55, 1, 0.4, 0.42 * np2);       // wide green-gold aura draws the eye
-        GL.draw(GL.SPR.GLOW, e.nailX, e.nailY, 88 + 12 * np, 88 + 12 * np, 0, 0.75, 1, 0.5, 0.6 * np);
+        // The reticle matches the actual weakpoint diameter. Its steady size
+        // makes this a precise target rather than a second expanding boss body.
+        var nailC = authCell('34d-1-the-nail');
+        var nailSize = (e.nailR || 30) * 2;
+        GL.draw(GL.SPR.GLOW, e.nailX, e.nailY, nailSize * 1.2, nailSize * 1.2, 0, 0.65, 1, 0.45, 0.25);
         if (nailC >= 0) {
-          GL.draw(nailC, e.nailX, e.nailY, 84 + 6 * np, 84 + 6 * np, 0, 1, 1, 1, 0.98);
+          if (GL.blendPremult) GL.blendPremult();
+          GL.draw(nailC, e.nailX, e.nailY, nailSize, nailSize, 0, 1, 1, 1, 1);
+          if (GL.blendAdditive) GL.blendAdditive();
         } else {
-          GL.draw(GL.SPR.NEEDLE, e.nailX, e.nailY, 30, 70, 0, 1, 0.95, 0.6, 0.95);
-          GL.draw(GL.SPR.CORE, e.nailX, e.nailY, 32, 32, 0, 0.7, 1, 0.5, 0.7 + 0.3 * np);
+          GL.draw(GL.SPR.NEEDLE, e.nailX, e.nailY, 18, nailSize, 0, 1, 0.95, 0.6, 1);
         }
-        // LOCK-ON BRACKETS — 4 L-corners converging on the nail (genre reticle read); they
-        // breathe inward on the pulse. The hot green-gold glow above is the loud part; no circles.
-        var lockR = 66 + 30 * (1 - np2), larm = 30, lth = 8;
+        var lockR = (e.nailR || 30) + 5, larm = 10, lth = 2;
         for (var nbi = 0; nbi < 4; nbi++) {
           var sxg = (nbi & 1) ? 1 : -1, syg = (nbi & 2) ? 1 : -1;
           var bxN = e.nailX + sxg * lockR, byN = e.nailY + syg * lockR;
-          GL.draw(GL.SPR.STREAK, bxN - sxg * larm * 0.5, byN, lth, larm, Math.PI / 2, 0.6, 1, 0.5, 0.92);   // horizontal arm of the L
-          GL.draw(GL.SPR.STREAK, bxN, byN - syg * larm * 0.5, lth, larm, 0, 0.6, 1, 0.5, 0.92);             // vertical arm of the L
+          GL.draw(GL.SPR.FLAT_RECT, bxN - sxg * larm * 0.5, byN, larm, lth, 0, 0.65, 1, 0.5, 0.9);
+          GL.draw(GL.SPR.FLAT_RECT, bxN, byN - syg * larm * 0.5, lth, larm, 0, 0.65, 1, 0.5, 0.9);
         }
       }
+
       // AEGIS / BULWARK front shield — a directional PLATE ARC hugging the player-facing
       // (lower) hull edge; folds aside with a glint when spun open.
       if (e.arch === 'aegis' || e.aura === 'bulwark') drawAegisShield(e, ds);
@@ -6743,18 +7248,20 @@
   // arc hinges outward and folds aside with a glint, exposing the hull; it snaps back closed.
   function drawAegisShield(e, ds) {
     var openT = e.shieldT > 0 ? Math.min(1, e.shieldT / 0.8) : 0;   // 1 = flung open .. 0 = wall closed
-    var N = 5, R = ds * 0.62, cx = e.x, cy = e.y + ds * 0.24, spread = 0.66, i;
+    var humanShield = e.arch === 'aegis';
+    var N = 5, R = ds * (humanShield ? 0.26 : 0.62), cx = e.x;
+    var cy = e.y + ds * (humanShield ? 0.02 : 0.24), spread = 0.66, i;
     var closed = 1 - openT * 0.85;
     // soft directional backing glow — gives the WALL presence (a low banded glow hugging the
     // lower hull, NOT a ring); fades as the arc swings aside.
-    GL.draw(GL.SPR.GLOW, cx, cy + R * 0.72, ds * 1.5, ds * 0.72, 0, 0.42, 0.66, 1.0, 0.4 * closed);
+    GL.draw(GL.SPR.GLOW, cx, cy + R * 0.72, ds * (humanShield ? 0.55 : 1.1), ds * 0.24, 0, 0.42, 0.66, 1.0, 0.12 * closed);
     for (i = 0; i < N; i++) {
       var f = i / (N - 1) - 0.5;                       // -0.5..0.5 across the arc
       var a = Math.PI / 2 + f * 2 * spread;            // PI/2 = straight down = player-facing
       var oa = a + openT * f * 1.9;                    // hinge from centre when opening
       var rr = R * (1 + openT * 0.55);                 // push outward, exposing hull
       var px = cx + Math.cos(oa) * rr, py = cy + Math.sin(oa) * rr;
-      var alpha = 1 - openT * 0.8, segL = ds * 0.46, segT = ds * 0.17, rot = oa + openT * f;   // long enough to OVERLAP into a continuous thick wall; rot=radius angle → plate tangent
+      var alpha = 1 - openT * 0.8, segL = ds * (humanShield ? 0.16 : 0.46), segT = ds * (humanShield ? 0.026 : 0.08), rot = oa + openT * f;   // long enough to OVERLAP into a continuous thick wall; rot=radius angle → plate tangent
       GL.draw(GL.SPR.STREAK, px, py, segT, segL, rot, 0.34, 0.52, 0.74, 0.95 * alpha);         // steel plate body
       GL.draw(GL.SPR.STREAK, px - Math.cos(oa) * segT * 0.32, py - Math.sin(oa) * segT * 0.32, segT * 0.5, segL * 0.92, rot, 0.85, 0.95, 1.0, 0.9 * alpha);   // bright plate rim highlight (the lit edge)
     }
@@ -6890,117 +7397,93 @@
       i++;
     }
   }
-  // §4 STATUS SHAPE-LANGUAGE. Read WHERE (zone) before WHAT (shape). Four disjoint
-  // zones around the enemy (offsets in e.scale): FRAME (4 corners), CROWN (over-
-  // head), UNDERFOOT (below), BODY (on the hull). Same-zone collisions resolve by
-  // fixed priority (marked>weak in FRAME, stun>charm in CROWN); the loser demotes
-  // to a 6px CORE pip upper-right. Disjoint zones all render at once. Confuse is
-  // gone (ruling 1). Each glyph carries a faint dark backing so it survives bloom.
-  function darkBack(x, y, r) { GL.draw(GL.SPR.GLOW, x, y, r, r, 0, 0.02, 0.02, 0.03, 0.55); }
-  function statusPip(e, col) {
-    var px = e.x + e.scale * 0.6, py = e.y - e.scale * 0.6;
-    darkBack(px, py, 16); GL.draw(GL.SPR.CORE, px, py, 6, 6, 0, col[0], col[1], col[2], 0.95);
-  }
+  // Status shapes stay subordinate to the body and incoming bullets. Icons
+  // occupy separate zones; capped sizes keep bosses from acquiring huge badges.
+  // Rune stacks are drawn separately by drawKitOverlays and remain unchanged.
   function drawStatus(e) {
-    var s = e.scale, t = G.time;
-    var stun = e.stunT > 0, charm = e.charmed;
-    var mark = e.marked, weak = e.weak;
-    // ---- BODY: terror vignette / shaken cracks ----
-    if (e.terrorT > 0 && !e.boss) {
-      var tp = 0.5 + 0.5 * Math.sin(t * 188);                     // 30Hz contracting dark vignette
-      GL.draw(GL.SPR.GLOW, e.x, e.y, s * (1.7 - 0.3 * tp), s * (1.7 - 0.3 * tp), 0, 0.25, 0.02, 0.05, 0.42 + 0.28 * tp);
+    var s = e.scale, t = G.time, rim = s * 0.43;
+    var icon = Math.max(17, Math.min(27, s * 0.25));
+    var top = e.y - rim - icon * 0.62;
+    if (GL.blendPremult) GL.blendPremult();
+    function glyph(cell,x,y,w,h,rot,col,a) {
+      GL.draw(cell,x,y,w,h,rot,col[0],col[1],col[2],a == null ? 1 : a);
     }
-    if (e.shakenT > 0) {                                          // boss variant: 2 flickering STREAK cracks, no vignette
-      var sf = 0.4 + 0.6 * Math.abs(Math.sin(t * 40));
-      GL.draw(GL.SPR.STREAK, e.x - s * 0.18, e.y, s * 0.14, s * 1.0, 0.5, 0.9, 0.25, 0.3, sf);
-      GL.draw(GL.SPR.STREAK, e.x + s * 0.2, e.y, s * 0.12, s * 0.9, -0.4, 0.9, 0.25, 0.3, sf * 0.85);
+    if (e.marked) {
+      var arm = Math.max(13, Math.min(22, s * .22));
+      for (var i=0;i<4;i++) {
+        var sx=(i&1)?1:-1, sy=(i&2)?1:-1;
+        var rot=sx<0?(sy<0?0:-Math.PI/2):(sy<0?Math.PI/2:Math.PI);
+        glyph(GL.SPR.STATUS_BRACKET,e.x+sx*rim,e.y+sy*rim,arm,arm,rot,[.88,.69,.29]);
+      }
+      // A small bullseye states the meaning at the actual enemy centre. The
+      // open middle leaves room for the weak badge when both effects coexist.
+      var targetSize = e.weak ? 48 : 40;
+      glyph(GL.SPR.STATUS_TARGET,e.x,e.y,targetSize,targetSize,0,[.94,.76,.35]);
     }
-    // ---- FRAME (4 corners): marked L-brackets; weak sagging lower brackets ----
-    if (mark) {
-      var mc = [0.95, 0.75, 0.2], off = s * 0.62, arm = s * 0.26, th = s * 0.05;
-      // §36 authored MARKED bracket — one sprite placed in 4 rotated copies (per manifest),
-      // corner facing outward; the paired procedural L-arms are the fallback.
-      var brC = authCell('36-5-bracket');
-      for (var ci = 0; ci < 4; ci++) {
-        var sx = (ci & 1) ? 1 : -1, sy = (ci & 2) ? 1 : -1;
-        var cx = e.x + sx * off, cy = e.y + sy * off;
-        if (brC >= 0) {
-          var brot = (sx < 0 && sy < 0) ? 0 : (sx > 0 && sy < 0) ? Math.PI / 2 : (sx > 0 && sy > 0) ? Math.PI : -Math.PI / 2;
-          GL.draw(brC, cx, cy, s * 0.42, s * 0.42, brot, 1, 1, 1, 0.9);
-        } else {
-          GL.draw(GL.SPR.STREAK, cx, cy + sy * arm * 0.5, th, arm, 0, mc[0], mc[1], mc[2], 0.9);          // vertical arm
-          GL.draw(GL.SPR.STREAK, cx + sx * arm * 0.5, cy, th, arm, Math.PI / 2, mc[0], mc[1], mc[2], 0.9); // horizontal arm
-        }
+    if (e.weak) glyph(GL.SPR.STATUS_WEAK,e.x,e.y,32,36,0,[1,1,1]);
+    // Paired high-contrast stress strokes read at gameplay scale, without a face
+    // or a flashing body overlay. Keep the centre free for Marked and Weak.
+    if (e.terrorT>0) {
+      var fearW = Math.max(24, Math.min(30, s*.18));
+      for (var side=-1;side<=1;side+=2) {
+        glyph(GL.SPR.STATUS_FEAR,e.x+side*(s*.35+9),e.y-rim*.40,
+          -side*fearW,fearW*1.4,side*.12,[1,1,1],1);
       }
     }
-    if (weak) {
-      if (mark) { statusPip(e, [0.6, 0.5, 0.65]); }               // demoted: marked wins the FRAME
-      else {
-        var wc = [0.6, 0.5, 0.65], woff = s * 0.62, warm = s * 0.24, wth = s * 0.05;
-        for (var wi = 0; wi < 2; wi++) {                          // lower two corners, sagging (tilted)
-          var wsx = wi ? 1 : -1, wx = e.x + wsx * woff, wy = e.y + woff;
-          GL.draw(GL.SPR.STREAK, wx, wy - warm * 0.4, wth, warm, wsx * 0.35, wc[0], wc[1], wc[2], 0.85);
-          GL.draw(GL.SPR.STREAK, wx + wsx * warm * 0.4, wy + wth, wth, warm, Math.PI / 2 + 0.2, wc[0], wc[1], wc[2], 0.85);
-        }
-        var ff = (t * 0.6) % 1;                                   // falling SHARD flakes
-        GL.draw(GL.SPR.SHARD, e.x - s * 0.2, e.y + s * (0.55 + ff * 0.5), s * 0.14, s * 0.2, 0, wc[0], wc[1], wc[2], 0.7 * (1 - ff));
-        GL.draw(GL.SPR.SHARD, e.x + s * 0.22, e.y + s * (0.6 + ((ff + 0.5) % 1) * 0.5), s * 0.12, s * 0.18, 0, wc[0], wc[1], wc[2], 0.7 * (1 - ((ff + 0.5) % 1)));
+    if (e.stunT>0) {
+      // Two small stars describe a crown, without an oversized glowing orbit.
+      for (var k=0;k<2;k++) {
+        var a=t*2.4+k*Math.PI;
+        glyph(GL.SPR.STATUS_STUN,e.x+Math.cos(a)*icon*.63,top+Math.sin(a)*3,
+          icon*.51,icon*.51,0,[.83,.86,.76]);
       }
     }
-    // ---- UNDERFOOT: burn flame ticks ----
-    if (e.burnT > 0) {
-      var flick = 0.55 + 0.45 * Math.sin(t * 88);                 // ~14Hz
-      // §37 authored flame flipbook — 6 frames cycled ~12Hz at the UNDERFOOT zone,
-      // stacked as a few offset tongues (heavier/boss foes get more). SHARD on miss.
-      var fr = (Math.floor(t * 12) % 6) + 1, flC = flameCells[fr - 1];   // §37 pre-resolved once per frame
-      if (flC >= 0) {
-        var nT = e.boss ? 3 : 2;
-        for (var fi = 0; fi < nT; fi++) {
-          var offx = (fi - (nT - 1) * 0.5) * s * 0.26, fby = e.y + s * 0.78;
-          // each tongue reads its own frame (offset) so they don't pulse in lock-step
-          var ffr = ((Math.floor(t * 12) + fi * 2) % 6) + 1, tC = flameCells[ffr - 1];
-          darkBack(e.x + offx, fby, s * 0.24);
-          GL.draw(tC >= 0 ? tC : flC, e.x + offx, fby, s * 0.4, s * 0.5, 0, 1, 1, 1, 0.85 + 0.15 * flick);
-        }
-      } else {
-        for (var bi = 0; bi < 3; bi++) {
-          var rise = ((t * 1.6 + bi * 0.33) % 1);
-          var bx = e.x + (bi - 1) * s * 0.24, by = e.y + s * (0.7 + rise * 0.35);
-          var cr = 1, cg = 0.85 - rise * 0.55, cb = 0.3 - rise * 0.25;   // yellow core -> red tip
-          darkBack(bx, by, s * 0.24);
-          GL.draw(GL.SPR.SHARD, bx, by, s * 0.16, s * 0.28, 0, cr, cg, Math.max(0.05, cb), (0.55 + 0.4 * flick) * (1 - rise * 0.5));
-        }
+    if (e.charmed) glyph(GL.SPR.STATUS_HEART,e.x+(e.stunT>0?icon*1.35:0),top,
+      icon*.77,icon*.77,0,[.91,.43,.56]);
+    if (e.burnT>0) {
+      // Fire grows from the lower body, not a row of floating icons underneath.
+      // The roots stay put as the silhouette's tips curl upward through frames.
+      var count=e.boss?3:2, fh=Math.max(25,Math.min(56,s*.42));
+      var width=fh*.80;
+      for (var f=0;f<count;f++) {
+        var phase=t*10+(e.seq||0)+f*2, frame=Math.floor(phase)%6;
+        var mix=phase-Math.floor(phase);
+        // Uneven patches catch on the body's edges rather than identical
+        // candles in a row. Roots remain fixed through the animation cycle.
+        var fx=e.x+(f===0?-.20:f===1?.20:-.03)*s;
+        var baseY=e.y+(f===0?.18:f===1?.32:.04)*s;
+        if (e.ground) baseY=e.y+(f===0?7:25);
+        // Source-over crossfade with normalized shared coverage: the root
+        // never dims between drawings, while separate tips dissolve smoothly.
+        var nextAlpha=.96*mix, currentAlpha=.96*(1-mix)/(1-nextAlpha);
+        glyph(GL.SPR.STATUS_FIRE0+frame,fx,baseY-fh*.38,width,fh,0,[1,1,1],currentAlpha);
+        if(nextAlpha>0.0001) glyph(GL.SPR.STATUS_FIRE0+(frame+1)%6,fx,baseY-fh*.38,width,fh,0,[1,1,1],nextAlpha);
       }
     }
-    // ---- CROWN: stun sparks (priority) or charm hearts ----
-    var crownY = e.y - s * 0.82;
-    if (stun) {
-      for (var si = 0; si < 3; si++) {
-        var a2 = t * 3 + si * (Math.PI * 2 / 3);
-        var spx = e.x + Math.cos(a2) * s * 0.26, spy = crownY + Math.sin(a2) * s * 0.1;
-        darkBack(spx, spy, s * 0.2);
-        GL.draw(GL.SPR.SPARK, spx, spy, s * 0.26, s * 0.26, t * 4 + si, 0.7, 0.95, 1, 0.95);
-      }
-      if (charm) statusPip(e, [1, 0.3, 0.55]);                    // demoted: stun wins the CROWN
-    } else if (charm) {
-      for (var hi2 = 0; hi2 < 3; hi2++) {
-        var hr = ((t * 0.8 + hi2 * 0.33) % 1);
-        var hx = e.x + (hi2 - 1) * s * 0.22, hy = crownY - hr * s * 0.35;
-        var ha = 0.85 * (1 - hr);
-        darkBack(hx, hy, s * 0.2);
-        GL.draw(GL.SPR.GLOW, hx, hy, s * 0.2, s * 0.2, 0, 1, 0.3, 0.55, ha * 0.6);
-        GL.draw(GL.SPR.CORE, hx, hy, s * 0.09, s * 0.09, 0, 1, 0.4, 0.6, ha);
-      }
-    }
+    if (GL.blendAdditive) GL.blendAdditive();
   }
-  // Signature projectile scaffold: an authored sprite over a tinted GLOW haze, the shape
-  // every §9 kind (9/15/17/5/4-loosed/crescent) shared inline. Cell is PRE-RESOLVED once
-  // per frame (see drawShots) so this never string-keys authCell per shot. Returns true
-  // when the authored cell is loaded + drawn (caller returns); false to keep its fallback.
+  // A short wake trails the actual velocity, leaving the weapon itself unobscured.
+  // Length grows during release, so new volleys have a crisp nose rather than a
+  // fully formed luminous cloud. This is presentation only: no shot state changes.
+  function drawShotWake(s, length, r, g, b, alpha) {
+    var speed = Math.sqrt(s.vx * s.vx + s.vy * s.vy);
+    if (speed < 0.01) return;
+    var ux = s.vx / speed, uy = s.vy / speed;
+    var grow = Math.min(1, Math.max(0, s.age || 0) / 0.08);
+    var len = s.scale * length * grow;
+    if (len < 0.5) return;
+    var setback = s.scale * 0.35 + len * 0.5;
+    GL.draw(GL.SPR.STREAK, s.x - ux * setback, s.y - uy * setback,
+      s.scale * 0.22, len, Math.atan2(uy, ux) + Math.PI / 2, r, g, b, alpha);
+  }
+  // Authored silhouettes carry identity; a narrow wake supplies direction.
+  // Keep the legacy signature parameters so callers retain their individual colour.
   function drawSigShot(s, cell, gw, gh, gang, gr, gg, gb, ga, sprS, orient) {
     if (cell < 0) return false;
-    GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * gw, s.scale * gh, gang, gr, gg, gb, ga);
+    drawShotWake(s, Math.min(1.5, gh * 0.65), gr, gg, gb, Math.min(0.42, ga));
+    if (GL.blendPremult) GL.blendPremult();
     GL.draw(cell, s.x, s.y, s.scale * sprS, s.scale * sprS, orient, 1, 1, 1, 1);
+    if (GL.blendAdditive) GL.blendAdditive();
     return true;
   }
   function drawShots() {
@@ -7015,9 +7498,12 @@
       // ARTEMIS arrow-needle (kind 9): silver-white body + moon-blue rim, oriented.
       if (s.kind === 9) {
         if (drawSigShot(s, cHunt, 0.55, 1.9, ang, 0.55, 0.75, 1.0, 0.4, 1.7, ang)) return;   // §9 volley arrow
-        GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 0.55, s.scale * 1.9, ang, 0.55, 0.75, 1.0, 0.45);
-        GL.draw(GL.SPR.NEEDLE, s.x, s.y, s.scale * 0.5, s.scale * 1.7, ang, 0.9, 0.95, 1.0, 0.95);
-        GL.draw(GL.SPR.CORE, s.x, s.y, s.scale * 0.24, s.scale * 0.24, 0, 1, 1, 1, 0.9);
+        drawShotWake(s, 1.3, 0.55, 0.75, 1, 0.35);
+        GL.draw(GL.SPR.FLAT_RECT, s.x, s.y, s.scale * 0.06, s.scale * 1.35, ang, 0.75, 0.88, 1, 0.95);
+        GL.draw(GL.SPR.FLAT_TRIANGLE, s.x + Math.sin(ang) * s.scale * 0.65, s.y - Math.cos(ang) * s.scale * 0.65,
+          s.scale * 0.32, s.scale * 0.42, ang, 0.95, 0.98, 1, 1);
+        GL.draw(GL.SPR.FLAT_TRIANGLE, s.x - Math.sin(ang) * s.scale * 0.5, s.y + Math.cos(ang) * s.scale * 0.5,
+          s.scale * 0.25, s.scale * 0.24, ang, 0.48, 0.7, 0.9, 0.8);
         return;
       }
       if (s.kind === 10) {   // Hunt SPLINTER shard
@@ -7029,7 +7515,7 @@
       // ODIN rune-bolt (15): steel-blue STREAK + NEEDLE spine, gold core once at doom.
       if (s.kind === 15) {
         if (drawSigShot(s, cRune, 0.7, 2.0, ang, 0.6, 0.72, 0.95, 0.5, 1.8, ang)) return;   // §9 heavy NINE NIGHTS bolt
-        GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 0.7, s.scale * 2.0, ang, 0.6, 0.72, 0.95, 0.5);
+        drawShotWake(s, 1.2, 0.6, 0.72, 0.95, 0.35);
         GL.draw(GL.SPR.STREAK, s.x, s.y, s.scale * 0.5, s.scale * 1.9, ang, 0.8, 0.85, 0.95, 0.95);
         GL.draw(GL.SPR.NEEDLE, s.x, s.y, s.scale * 0.28, s.scale * 1.4, ang, 0.95, 0.98, 1, 0.9);
         GL.draw(GL.SPR.CORE, s.x, s.y, s.scale * 0.34, s.scale * 0.34, 0, 1, 0.95, 0.85, 0.9);
@@ -7040,10 +7526,11 @@
       // ANUBIS THE WEIGHING amber ankh-bolt (kind 17).
       if (s.kind === 17) {
         if (drawSigShot(s, cAnkh, 0.6, 1.7, ang, 1, 0.72, 0.28, 0.45, 1.5, ang)) return;   // §9 thrown ankh
-        GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 0.6, s.scale * 1.7, ang, 1, 0.72, 0.28, 0.5);
-        GL.draw(GL.SPR.STREAK, s.x, s.y, s.scale * 0.34, s.scale * 1.3, ang, 1, 0.72, 0.28, 0.95);
-        GL.draw(GL.SPR.RING, s.x, s.y - s.scale * 0.2, s.scale * 0.34, s.scale * 0.34, 0, 1, 0.82, 0.4, 0.9);   // ankh loop
-        GL.draw(GL.SPR.CORE, s.x, s.y, s.scale * 0.24, s.scale * 0.24, 0, 1, 0.95, 0.7, 0.9);
+        drawShotWake(s, 1.1, 1, 0.72, 0.28, 0.35);
+        GL.draw(GL.SPR.FLAT_RECT, s.x - Math.sin(ang) * s.scale * 0.2, s.y + Math.cos(ang) * s.scale * 0.2,
+          s.scale * 0.09, s.scale * 0.65, ang, 1, 0.72, 0.28, 0.95);
+        GL.draw(GL.SPR.FLAT_RECT, s.x, s.y, s.scale * 0.48, s.scale * 0.08, ang, 1, 0.82, 0.4, 0.95);
+        GL.draw(GL.SPR.RING, s.x + Math.sin(ang) * s.scale * 0.2, s.y - Math.cos(ang) * s.scale * 0.2, s.scale * 0.34, s.scale * 0.34, ang, 1, 0.82, 0.4, 0.9);   // ankh loop
         return;
       }
       // APHRODITE heartseeker (kind 5) — a slow votive seeking heart (§9). Authored
@@ -7056,7 +7543,7 @@
       // HEIMDALL SPECTRUM LANCE (kind 18) — prismatic rainbow bolt, cycling hue.
       if (s.kind === 18) {
         var lc = Patterns.hue(G.time * 0.5 + s.y * 0.002);
-        GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 0.8, s.scale * 2.6, ang, lc[0], lc[1], lc[2], 0.55);
+        drawShotWake(s, 1.7, lc[0], lc[1], lc[2], 0.4);
         GL.draw(GL.SPR.STREAK, s.x, s.y, s.scale * 0.5, s.scale * 2.4, ang, lc[0], lc[1], lc[2], 0.95);
         GL.draw(GL.SPR.CORE, s.x, s.y, s.scale * 0.4, s.scale * 0.5, 0, 1, 1, 1, 0.9);
         return;
@@ -7074,19 +7561,19 @@
         var slashT = Math.min(1, s.age / 0.22);
         var weaponAng = ang + Math.sin(slashT * Math.PI) * 0.55 * slashDir;
         if (drawSigShot(s, cCres, 1.6, 2.2, weaponAng, s.r, s.g, s.b, 0.45 + 0.3 * pow, 2.8, weaponAng)) return;   // §9 compact Green Dragon guandao
-        GL.draw(GL.SPR.GLOW, s.x, s.y, cw * 1.1, cw * 2.4, perp, s.r, s.g, s.b, 0.5 + 0.35 * pow);
+        drawShotWake(s, 1.2, s.r, s.g, s.b, 0.35);
         GL.draw(GL.SPR.STREAK, s.x, s.y, cw * 0.7, cw * 2.0, perp, s.r, s.g, s.b, 0.95);
         GL.draw(GL.SPR.STREAK, s.x, s.y, cw * 0.4, cw * 1.3, perp, 1, 1, 1, 0.85);
         GL.draw(GL.SPR.CORE, s.x, s.y, cw * 0.34, cw * 0.34, 0, 1, 1, 1, 0.8);
         return;
       }
       if (s.big) {
-        GL.draw(GL.SPR.GLOW, s.x, s.y, s.scale * 1.4, s.scale * 3.2, ang, s.r, s.g, s.b, 0.6);
+        drawShotWake(s, 1.8, s.r, s.g, s.b, 0.42);
         GL.draw(GL.SPR.STREAK, s.x, s.y, s.scale * 0.9, s.scale * 3.0, ang, s.r, s.g, s.b, 0.95);
         GL.draw(GL.SPR.STREAK, s.x, s.y, s.scale * 0.45, s.scale * 2.2, ang, 1, 1, 1, 0.95);
         GL.draw(GL.SPR.CORE, s.x, s.y, s.scale * 0.6, s.scale * 0.6, 0, 1, 1, 1, 0.9);
       } else {
-        GL.draw(GL.SPR.STREAK, s.x, s.y, s.scale * 0.5, s.scale * 1.7, ang, s.r * 0.7, s.g, s.b, 0.5);
+        drawShotWake(s, 1.0, s.r, s.g, s.b, 0.32);
         GL.draw(GL.SPR.STREAK, s.x, s.y, s.scale * 0.3, s.scale * 1.1, ang, s.r, s.g, s.b, 0.95);
         GL.draw(GL.SPR.CORE, s.x, s.y, s.scale * 0.32, s.scale * 0.32, 0, 1, 1, 1, 0.9);
       }
@@ -7101,7 +7588,7 @@
   function drawMiniBolt(s) {
     var vx = s.vx, vy = s.vy, sp = Math.sqrt(vx * vx + vy * vy) || 1;
     var ux = vx / sp, uy = vy / sp, px = -uy, py = ux;          // travel unit + perpendicular
-    var L = s.scale * 2.4, half = L * 0.5, amp = s.scale * 0.6;
+    var L = s.scale * 2.1, half = L * 0.5, amp = s.scale * 0.52;
     var bucket = Math.floor(G.time * 22), seed = (s.fireId % 1000) + bucket * 33.7;
     var N = 4, i;                                               // 4 segments -> 5 points
     for (i = 0; i <= N; i++) {
@@ -7112,12 +7599,12 @@
       _mScr[i * 2 + 1] = s.y + uy * along + py * lat;
     }
     var r = s.r, g = s.g, b = s.b, wr = r * 0.35 + 0.65, wg = g * 0.35 + 0.65, wb = b * 0.35 + 0.65;
-    var cw = s.scale * 0.30, hw = s.scale * 0.66;
+    var cw = s.scale * 0.20, hw = s.scale * 0.38;
     for (i = 0; i < N; i++) {
       var x0 = _mScr[i * 2], y0 = _mScr[i * 2 + 1], x1 = _mScr[i * 2 + 2], y1 = _mScr[i * 2 + 3];
       var dx = x1 - x0, dy = y1 - y0, len = Math.sqrt(dx * dx + dy * dy); if (len < 0.5) continue;
       var mx = (x0 + x1) * 0.5, my = (y0 + y1) * 0.5, rot = Math.atan2(-dx, dy), ov = boltOverlap(len);   // feather-matched overlap → no joint bead
-      GL.draw(GL.SPR.BOLT, mx, my, hw, len + ov, rot, r, g, b, 0.34);             // coloured haze underlay
+      GL.draw(GL.SPR.BOLT, mx, my, hw, len + ov, rot, r, g, b, 0.24);             // narrow coloured edge
       GL.draw(GL.SPR.BOLT, mx, my, cw, len + ov, rot, wr, wg, wb, 0.95);          // near-white core (2x the old lance read)
     }
     // occasional micro-fork off a mid vertex (bucketed, so it flickers not shimmers)
@@ -7138,36 +7625,40 @@
   // no new atlas cells): a slim leaf-point javelin, a waisted xiphos leaf-blade, a
   // broad-headed doru, and a mirrored twin-head labrys (unmistakable vs Guan Yu).
   function drawArmoryShot(s, ang) {
-    var sc = s.scale, r = s.r, g = s.g, b = s.b, sp = s.age * 14;
-    // authored Ares armory sprites (§9): akontia/xiphos/doru fly nose-first; the
-    // labrys spins (radially symmetric). Soft additive glow first to seat it in
-    // the bloom field, then the sprite in its own colours; procedural on miss.
-    var aname = s.kind === 11 ? '33-4-akontia' : s.kind === 12 ? '33-5-xiphos' : s.kind === 13 ? '33-6-doru-bundle' : '33-3-labrys';
-    var ac = authCell(aname);
-    if (ac >= 0) {
-      if (s.kind === 14) { GL.draw(GL.SPR.GLOW, s.x, s.y, sc * 1.5, sc * 1.5, sp, r, g, b, 0.45); GL.draw(ac, s.x, s.y, sc * 1.7, sc * 1.7, sp, 1, 1, 1, 1); }
-      else { GL.draw(GL.SPR.GLOW, s.x, s.y, sc * 0.8, sc * 2.0, ang, r, g, b, 0.4); GL.draw(ac, s.x, s.y, sc * 1.9, sc * 1.9, ang, 1, 1, 1, 1); }
+    var sc = s.scale, r = s.r, g = s.g, b = s.b, spin = s.age * 14;
+    var ux = Math.sin(ang), uy = -Math.cos(ang), rx = Math.cos(ang), ry = Math.sin(ang);
+    var name = s.kind === 11 ? '33-4-akontia' : s.kind === 12 ? '33-5-xiphos' : s.kind === 13 ? '33-6-doru-bundle' : '33-3-labrys';
+    var cell = authCell(name);
+    drawShotWake(s, s.kind === 14 ? 0.8 : 1.4, r, g, b, 0.38);
+    if (cell >= 0) {
+      var size = s.kind === 14 ? 1.7 : 1.9;
+      if (GL.blendPremult) GL.blendPremult();
+      GL.draw(cell, s.x, s.y, sc * size, sc * size, s.kind === 14 ? spin : ang, 1, 1, 1, 1);
+      if (GL.blendAdditive) GL.blendAdditive();
       return;
     }
-    if (s.kind === 11) {          // akontia javelin — slim shaft + small bronze leaf point
-      GL.draw(GL.SPR.STREAK, s.x, s.y, sc * 0.18, sc * 1.5, ang, r, g, b, 0.9);          // shaft
-      GL.draw(GL.SPR.SHARD, s.x + Math.sin(ang) * 0 - Math.sin(ang) * sc * 0.5, s.y - Math.cos(ang) * sc * 0.5, sc * 0.34, sc * 0.5, ang, 0.9, 0.65, 0.3, 0.95);   // leaf point
-    } else if (s.kind === 12) {   // xiphos — waisted leaf-blade + bronze hilt glint
-      GL.draw(GL.SPR.GLOW, s.x, s.y, sc * 0.5, sc * 1.4, ang, r, g, b, 0.4);
-      GL.draw(GL.SPR.SHARD, s.x, s.y - Math.cos(ang) * sc * 0.15, sc * 0.5, sc * 1.5, ang, r, g, b, 0.95);   // waisted blade
-      GL.draw(GL.SPR.CORE, s.x, s.y, sc * 0.24, sc * 0.24, 0, 1, 1, 1, 0.85);
-      GL.draw(GL.SPR.CORE, s.x + Math.sin(ang) * sc * 0.6, s.y + Math.cos(ang) * sc * 0.6, sc * 0.2, sc * 0.2, 0, 1, 0.75, 0.35, 0.8);   // hilt glint
-    } else if (s.kind === 13) {   // doru bundle — broad bronze head
-      GL.draw(GL.SPR.GLOW, s.x, s.y, sc * 0.7, sc * 1.8, ang, r, g, b, 0.5);
-      GL.draw(GL.SPR.STREAK, s.x, s.y, sc * 0.3, sc * 1.7, ang, r, g, b, 0.95);
-      GL.draw(GL.SPR.SHARD, s.x - Math.sin(ang) * sc * 0.6, s.y - Math.cos(ang) * sc * 0.6, sc * 0.6, sc * 0.7, ang, 0.95, 0.7, 0.35, 0.95);   // broad head
-      GL.draw(GL.SPR.CORE, s.x, s.y, sc * 0.34, sc * 0.34, 0, 1, 1, 0.9, 0.85);
-    } else {                      // labrys — spinning mirrored double-axe
-      GL.draw(GL.SPR.GLOW, s.x, s.y, sc * 1.6, sc * 1.6, sp, 0.78, 0.12, 0.12, 0.5);
-      GL.draw(GL.SPR.SHARD, s.x, s.y, sc * 0.9, sc * 0.6, sp + Math.PI / 2, 0.85, 0.15, 0.12, 0.95);   // head A
-      GL.draw(GL.SPR.SHARD, s.x, s.y, sc * 0.9, sc * 0.6, sp - Math.PI / 2, 0.85, 0.15, 0.12, 0.95);   // head B (mirrored)
-      GL.draw(GL.SPR.STREAK, s.x, s.y, sc * 0.16, sc * 1.1, sp, 0.9, 0.7, 0.35, 0.9);                  // bronze haft
-      GL.draw(GL.SPR.CORE, s.x, s.y, sc * 0.3, sc * 0.3, 0, 1, 0.85, 0.6, 0.85);
+    if (s.kind === 11 || s.kind === 13) {
+      // A javelin has one shaft; the heavier doru volley has three distinct points.
+      var count = s.kind === 13 ? 3 : 1;
+      for (var i = 0; i < count; i++) {
+        var side = (i - (count - 1) * 0.5) * sc * 0.22;
+        var x = s.x + rx * side, y = s.y + ry * side;
+        GL.draw(GL.SPR.FLAT_RECT, x - ux * sc * 0.12, y - uy * sc * 0.12, sc * 0.065, sc * 1.45, ang, 0.85, 0.57, 0.28, 0.9);
+        GL.draw(GL.SPR.FLAT_TRIANGLE, x + ux * sc * 0.53, y + uy * sc * 0.53, sc * 0.28, sc * 0.48, ang, 1, 0.84, 0.57, 1);
+      }
+    } else if (s.kind === 12) {
+      // Blade, crossguard, and grip: legible as a sword without a halo or gem.
+      GL.draw(GL.SPR.SHARD, s.x + ux * sc * 0.2, s.y + uy * sc * 0.2, sc * 0.52, sc * 1.2, ang, 1, 0.78, 0.62, 1);
+      GL.draw(GL.SPR.FLAT_RECT, s.x - ux * sc * 0.45, s.y - uy * sc * 0.45, sc * 0.62, sc * 0.08, ang, 0.95, 0.59, 0.25, 1);
+      GL.draw(GL.SPR.FLAT_RECT, s.x - ux * sc * 0.65, s.y - uy * sc * 0.65, sc * 0.09, sc * 0.4, ang, 0.72, 0.3, 0.19, 0.9);
+    } else {
+      // Twin axe cheeks sit on opposite sides of a visible haft.
+      var ax = Math.cos(spin), ay = Math.sin(spin);
+      GL.draw(GL.SPR.FLAT_RECT, s.x, s.y, sc * 0.07, sc * 1.5, spin, 0.95, 0.65, 0.3, 1);
+      for (var side = -1; side <= 1; side += 2) {
+        GL.draw(GL.SPR.SHARD, s.x + ax * sc * 0.27 * side, s.y + ay * sc * 0.27 * side,
+          sc * 0.7, sc * 0.75, spin + side * Math.PI / 2, 0.96, 0.36, 0.22, 0.95);
+      }
     }
   }
   // JADE EMPEROR imperial edict — the ONE rectangular projectile in the game. Three
@@ -7178,48 +7669,43 @@
   var EV = [0.79, 0.6, 1.0], EG = [1, 0.82, 0.4];   // violet body, gold border
   function drawEdict(s, ang) {
     var sc = s.scale, style = GL.edictStyle;
-    // authored §9 edict sprite (33.7 was genned for the live style-A scroll-talisman);
-    // styles B/C keep their procedural treatment. Sprite is nose-up → rotate to travel.
-    if (style === 'A') {
-      var ec = authCell('33-7-imperial-edict');
-      if (ec >= 0) {
-        GL.draw(GL.SPR.GLOW, s.x, s.y, sc * 0.7, sc * 1.1, ang, EG[0], EG[1], EG[2], 0.4);
-        GL.draw(ec, s.x, s.y, sc * 1.25, sc * 1.25, ang, 1, 1, 1, 1);
-        return;
+    var ux = Math.sin(ang), uy = -Math.cos(ang), rx = Math.cos(ang), ry = Math.sin(ang);
+    // The talisman is an actual flat paper rectangle, rather than three rounded
+    // glows. Its red seal and two ink strokes remain readable at volley density.
+    var w = sc * (style === 'C' ? 0.72 : 0.5);
+    var h = sc * (style === 'B' ? 1.5 : style === 'C' ? 0.72 : 0.95);
+    drawShotWake(s, style === 'B' ? 1.6 : 0.85, EV[0], EV[1], EV[2], 0.28);
+    if (GL.blendPremult) GL.blendPremult();
+    if (style === 'B') {
+      // One flexible tail follows travel, including sideways and returning shots.
+      for (var k = 1; k <= 3; k++) {
+        var sway = Math.sin(G.time * 8 + k * 0.7) * sc * 0.08;
+        var back = h * 0.5 + k * sc * 0.2;
+        GL.draw(GL.SPR.FLAT_RECT, s.x - ux * back + rx * sway, s.y - uy * back + ry * sway,
+          w * (0.7 - k * 0.12), sc * 0.25, ang + sway / sc, EV[0], EV[1], EV[2], 0.5 - k * 0.1);
       }
     }
-    var ux = Math.sin(ang), uy = -Math.cos(ang);    // unit vector toward travel (tablet "up")
-    var rx = Math.cos(ang), ry = Math.sin(ang);      // perpendicular (tablet "right")
-    if (style === 'B') {                             // hanging vertical banner + ribbon trail
-      var bw = sc * 0.42, bh = sc * 1.5;
-      for (var t = 5; t >= 1; t--) {                 // ribbon segments trailing downward (behind)
-        var sway = Math.sin(G.time * 8 + t) * sc * 0.12;
-        GL.draw(GL.SPR.CORE, s.x + sway, s.y + t * sc * 0.34, bw * 0.8, sc * 0.36, 0, EV[0], EV[1], EV[2], 0.5 - t * 0.07);
+    GL.draw(GL.SPR.FLAT_RECT, s.x, s.y, w * 0.8, h * 0.88, ang, 0.24, 0.13, 0.38, 1);
+    // Separate edge strips survive the additive projectile pass without filling
+    // the entire paper with gold underneath its violet centre.
+    for (var edge = -1; edge <= 1; edge += 2) {
+      GL.draw(GL.SPR.FLAT_RECT, s.x + rx * w * 0.45 * edge, s.y + ry * w * 0.45 * edge,
+        w * 0.1, h, ang, EG[0], EG[1], EG[2], 0.85);
+      GL.draw(GL.SPR.FLAT_RECT, s.x + ux * h * 0.47 * edge, s.y + uy * h * 0.47 * edge,
+        w * 0.8, h * 0.06, ang, EG[0], EG[1], EG[2], 0.85);
+    }
+    // A square red chop is distinct from every round projectile core in the game.
+    var sealY = style === 'C' ? 0 : -h * 0.2;
+    GL.draw(GL.SPR.FLAT_RECT, s.x + ux * sealY, s.y + uy * sealY,
+      w * 0.34, w * 0.34, ang, 1, 0.27, 0.21, 1);
+    if (style !== 'C') {
+      for (var j = 0; j < 2; j++) {
+        var along = h * (0.14 + j * 0.16);
+        GL.draw(GL.SPR.FLAT_RECT, s.x + ux * along, s.y + uy * along,
+          w * (j ? 0.32 : 0.45), sc * 0.04, ang, 0.94, 0.81, 1, 0.9);
       }
-      GL.draw(GL.SPR.GLOW, s.x, s.y, bw * 1.5, bh * 1.1, 0, EV[0], EV[1], EV[2], 0.4);
-      GL.draw(GL.SPR.CORE, s.x, s.y, bw, bh, 0, EV[0], EV[1], EV[2], 0.95);       // banner body
-      GL.draw(GL.SPR.STREAK, s.x, s.y - bh * 0.5, bw, sc * 0.1, Math.PI / 2, EG[0], EG[1], EG[2], 0.95);   // gold top rail
-      GL.draw(GL.SPR.STREAK, s.x, s.y + bh * 0.5, bw, sc * 0.1, Math.PI / 2, EG[0], EG[1], EG[2], 0.95);   // gold bottom rail
-      GL.draw(GL.SPR.CORE, s.x, s.y, sc * 0.16, sc * 0.16, 0, 1, 0.2, 0.25, 0.95);                          // red seal-dot
-      return;
     }
-    var w, h;
-    if (style === 'C') { w = sc * 0.72; h = sc * 0.72; }   // square seal-stamp chop
-    else { w = sc * 0.5; h = sc * 0.95; }                   // A: tall scroll-talisman
-    var hw = w * 0.5, hh = h * 0.5;
-    GL.draw(GL.SPR.GLOW, s.x, s.y, w * 1.2, h * 1.2, ang, EG[0], EG[1], EG[2], 0.4);      // gold rim glow (behind)
-    GL.draw(GL.SPR.GLOW, s.x, s.y, w * 0.95, h * 0.98, ang, EV[0], EV[1], EV[2], 0.85);   // violet body (soft GLOW → reads violet, no white core)
-    GL.draw(GL.SPR.GLOW, s.x, s.y, w * 0.6, h * 0.62, ang, EV[0], EV[1], EV[2], 0.7);      // denser violet centre
-    // crisp gold edge bars sell the rectangle
-    GL.draw(GL.SPR.STREAK, s.x - rx * hw, s.y - ry * hw, sc * 0.06, h, ang, EG[0], EG[1], EG[2], 0.95);   // left edge
-    GL.draw(GL.SPR.STREAK, s.x + rx * hw, s.y + ry * hw, sc * 0.06, h, ang, EG[0], EG[1], EG[2], 0.95);   // right edge
-    GL.draw(GL.SPR.STREAK, s.x + ux * hh, s.y + uy * hh, w, sc * 0.06, ang + Math.PI / 2, EG[0], EG[1], EG[2], 0.95);   // top edge
-    GL.draw(GL.SPR.STREAK, s.x - ux * hh, s.y - uy * hh, w, sc * 0.06, ang + Math.PI / 2, EG[0], EG[1], EG[2], 0.95);   // bottom edge
-    if (style === 'C') GL.draw(GL.SPR.RING, s.x, s.y, w * 0.5, h * 0.5, G.time * 2, 1, 0.2, 0.25, 0.95);   // seal chop ring
-    else {
-      GL.draw(GL.SPR.CORE, s.x, s.y, sc * 0.14, sc * 0.14, 0, 1, 0.2, 0.25, 0.95);       // red seal-dot
-      for (var k = 1; k <= 3; k++) GL.draw(GL.SPR.CORE, s.x - ux * (hh + k * sc * 0.16), s.y - uy * (hh + k * sc * 0.16), sc * 0.05, sc * 0.05, 0, EV[0], EV[1], EV[2], 0.6 - k * 0.15);   // trailing script ticks
-    }
+    if (GL.blendAdditive) GL.blendAdditive();
   }
   // Enemy bullets draw in two passes. PASS A (additive): a dim family-colour
   // halo UNDER the body — glow without eating the outline. PASS B (premult):
@@ -7410,8 +7896,13 @@
     hud.textAlign = 'center';
     hud.font = '700 18px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     hud.fillStyle = G.aff.name ? UI_GOLD : UI_CYAN;
-    var stxt = 'SECTOR ' + (Run.sectorIdx + 1) + '/3';
+    var stxt = Run.sectorName(Run.sectorIdx);
     if (G.aff.name) stxt += '  ·  ' + G.aff.name;
+    var sectorFont = 18;
+    while (hud.measureText(stxt).width > 390 && sectorFont > 12) {
+      sectorFont--;
+      hud.font = '700 ' + sectorFont + 'px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
+    }
     var sw = hud.measureText(stxt).width + 38;
     hud.fillStyle = 'rgba(3,11,16,0.78)'; roundRect(hud, W / 2 - sw / 2, 18, sw, 38, 12); hud.fill();
     hud.strokeStyle = 'rgba(95,230,255,0.22)'; hud.lineWidth = 1;
@@ -7424,8 +7915,7 @@
     drawSpecialMeter();
     drawLives();
     if (G.boss) drawBossBar();
-    drawLoadout();
-    drawGodTags();
+    drawLoadout(drawGodTags());
     drawPopups();
     drawAnnounce();
   }
@@ -7521,7 +8011,7 @@
     hud.translate(x + w + 14, y + h); hud.rotate(-Math.PI / 2);
     hud.textAlign = 'left'; hud.font = '700 22px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     if (v.active) { hud.fillStyle = UI_GOLD; hud.fillText('DIVINE INTERVENTION', 0, 0); }
-    else if (v.ready) { var pl = 0.5 + 0.5 * Math.sin(G.time * 8); hud.fillStyle = 'rgba(255,225,110,' + (0.5 + 0.5 * pl) + ')'; hud.fillText('DIVINE INTERVENTION — C', 0, 0); }
+    else if (v.ready) { var pl = 0.5 + 0.5 * Math.sin(G.time * 8); hud.fillStyle = 'rgba(255,225,110,' + (0.5 + 0.5 * pl) + ')'; hud.fillText(Engine.controllerActive() ? 'DIVINE INTERVENTION — Y / △' : 'DIVINE INTERVENTION — C', 0, 0); }
     else { hud.fillStyle = UI_DIM(); hud.fillText('DIVINE INTERVENTION', 0, 0); }
     hud.restore();
   }
@@ -7550,7 +8040,7 @@
     hud.translate(x + w + 14, y + h); hud.rotate(-Math.PI / 2);
     hud.textAlign = 'left'; hud.font = '700 22px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     hud.fillStyle = G.sp.charge >= 1 ? '#d89bff' : UI_DIM();
-    hud.fillText('SPECIAL — X', 0, 0);
+    hud.fillText(Engine.controllerActive() ? 'SPECIAL — X / □' : 'SPECIAL — X', 0, 0);
     hud.restore();
   }
   function drawLives() {
@@ -7624,17 +8114,19 @@
       var cc = { OLYMPUS: '#9fd8ff', ASGARD: '#cfd6e0', KEMET: '#ffe89a' };
       hud.fillStyle = cc[G.communion] || '#ffd766';
       hud.fillText('✦ COMMUNION · ' + G.communion, W - 34, y + 8);
+      y += 34;
     }
+    return Math.max(294, y + 20);
   }
   var charmNameGod = null;   // '◈ <NAME>' loadout line -> god key, built once from Run.CHARMS
   function charmGodByLine(line) {
     if (!charmNameGod) { charmNameGod = {}; if (Run.CHARMS) for (var k in Run.CHARMS) charmNameGod['◈ ' + Run.CHARMS[k].name] = Run.CHARMS[k].god; }
     return charmNameGod[line] || null;
   }
-  function drawLoadout() {
+  function drawLoadout(startY) {
     var lines = Game.upgradeSummary();
     hud.textAlign = 'right';
-    var y = 294;
+    var y = startY || 294;
     hud.font = '500 22px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
     for (var i = 0; i < lines.length; i++) {
       hud.fillStyle = 'rgba(150,220,235,0.7)'; hud.fillText(lines[i], W - 34, y + i * 26);
@@ -7693,23 +8185,23 @@
   }
   function pauseOverlay() {
     hud.fillStyle = 'rgba(1,5,8,0.7)'; hud.fillRect(0, 0, W, H);
-    var x = 150, y = H * 0.35, w = W - 300, h = 390;
-    var pg = hud.createLinearGradient(0, y, 0, y + h);
-    pg.addColorStop(0, 'rgba(10,28,36,0.97)'); pg.addColorStop(1, 'rgba(3,10,15,0.97)');
-    hud.fillStyle = pg; roundRect(hud, x, y, w, h, 24); hud.fill();
-    hud.strokeStyle = 'rgba(95,230,255,0.5)'; hud.lineWidth = 3;
-    roundRect(hud, x, y, w, h, 24); hud.stroke();
-    hud.textAlign = 'center'; hud.fillStyle = UI_CYAN; hud.font = '700 80px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-    drawSpaced('PAUSED', W / 2, y + 64, 12);
+    var x = 150, y = H * 0.35, w = W - 300, h = 430;
+    hud.fillStyle = '#08141b'; hud.fillRect(x, y, w, h);
+    hud.textAlign = 'center'; hud.fillStyle = '#e9e6d8'; hud.font = '700 64px system-ui, sans-serif';
+    hud.fillText('PAUSED', W / 2, y + 72);
     hudRule(x + 70, y + 166, w - 140, false);
     hud.fillStyle = '#eefcff'; hud.font = '600 30px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-    hud.fillText('Z / P / Esc   RESUME', W / 2, y + 196);
+    var pad = Engine.controllerActive();
+    hud.fillText(pad ? 'A / ×  ·  START   RESUME' : 'Z / P / Esc   RESUME', W / 2, y + 196);
     hud.fillStyle = UI_DIM(); hud.font = '500 26px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-    hud.fillText('X   ABANDON TO TITLE', W / 2, y + 244);
+    hud.fillText(pad ? 'X / □   RETURN TO TITLE' : 'X   RETURN TO TITLE', W / 2, y + 244);
     hud.fillStyle = Run.meta.autoFire ? UI_GOLD : UI_DIM(); hud.font = '600 26px "SFMono-Regular", "Cascadia Mono", Consolas, monospace';
-    hud.fillText('F   AUTO-FIRE  ' + (Run.meta.autoFire ? 'ON' : 'OFF'), W / 2, y + 292);
+    hud.fillText((pad ? 'Y / △' : 'F') + '   AUTO-FIRE  ' + (Run.meta.autoFire ? 'ON' : 'OFF'), W / 2, y + 292);
     hud.fillStyle = Run.meta.enemyHealthBars === false ? UI_DIM() : UI_GOLD;
-    hud.fillText('H   ENEMY HEALTH BARS  ' + (Run.meta.enemyHealthBars === false ? 'OFF' : 'ON'), W / 2, y + 338);
+    hud.fillText((pad ? 'RB / R1' : 'H') + '   ENEMY HEALTH BARS  ' + (Run.meta.enemyHealthBars === false ? 'OFF' : 'ON'), W / 2, y + 338);
+    var muted = SFX.isMuted();
+    hud.fillStyle = muted ? UI_GOLD : UI_DIM();
+    hud.fillText('M   MUTE  ' + (muted ? 'ON' : 'OFF'), W / 2, y + 384);
   }
   function roundRect(ctx, x, y, w, h, r) {
     if (w < 2 * r) r = w / 2; if (h < 2 * r) r = h / 2;

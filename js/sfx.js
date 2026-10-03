@@ -77,7 +77,7 @@
 
   SFX.ensure = function () {
     if (ctx) {
-      if (ctx.state === 'suspended') ctx.resume();
+      SFX.resume();
       return;
     }
     var AC = window.AudioContext || window.webkitAudioContext;
@@ -89,7 +89,7 @@
 
     lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
-    lp.frequency.value = 10000;   // keep the arcade top; SFX carry the top band
+    lp.frequency.value = 7600;    // retain cue attacks, soften constant high-frequency hiss
     lp.Q.value = 0.4;
 
     comp = ctx.createDynamicsCompressor();
@@ -150,7 +150,17 @@
     renderAll();   // async offline render of the rich patches (non-blocking)
   };
 
-  SFX.resume = function () { if (ctx && ctx.state === 'suspended') ctx.resume(); };
+  SFX.resume = function () {
+    if (!ctx || ctx.state !== 'suspended') return;
+    var pending = ctx.resume();
+    // A gamepad poll may initialize audio before a browser-recognized gesture.
+    // If autoplay blocks that attempt, a later trusted input retries it.
+    if (pending && pending.catch) pending.catch(function () {});
+  };
+  // Resume the existing graph without rerunning the game's first-input callback
+  // (which selects the title theme). Keep these listeners for OS/tab suspension.
+  window.addEventListener('keydown', SFX.resume);
+  window.addEventListener('pointerdown', SFX.resume);
 
   // Shared AudioContext accessor for MUSIC — ensures the context exists (same
   // lazy/unlock path as SFX) and returns it, so the score never spawns a second
@@ -716,6 +726,7 @@
 
   // throttle constantly-fired sounds so they never machine-gun the mixer
   var lastShot = 0;
+  var lastGold = -Infinity; // group a pickup cluster into one readable coin cue
   var lastGraze = 0;   // graze whisper rate-limit (grazing a wall must not machine-gun)
   var lastPop = 0;     // popcorn tick anti-stack (a formation wipe shouldn't clip)
   var shotRR = 0;      // shot round-robin pitch index (avoids a monotone drone)
@@ -735,7 +746,7 @@
   function shotDefault() {
     if (!ready || muted) return;
     var t = now();
-    if (t - lastShot < 0.028) return;
+    if (t - lastShot < 0.045) return;
     lastShot = t;
     var f0 = SHOT_PITCH[shotRR % SHOT_PITCH.length] * (1 + (Math.random() - 0.5) * 0.04); shotRR++;
     var o = ctx.createOscillator();
@@ -747,7 +758,7 @@
     f.frequency.setValueAtTime(2600, t);
     var g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.045, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.032, t + 0.004);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
     o.connect(f); f.connect(g); g.connect(master);
     o.start(t); o.stop(t + 0.08);
@@ -772,18 +783,19 @@
       scl = 1 / Math.sqrt(d + 1);       // N simultaneous hits ~= one hit's loudness
     }
     var o = ctx.createOscillator();
-    o.type = 'square';
+    o.type = 'triangle';
     o.frequency.setValueAtTime(1200, t);
     o.frequency.exponentialRampToValueAtTime(720, t + 0.035);
     var g = ctx.createGain();
-    g.gain.setValueAtTime(0.045 * scl, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.04 * scl, t + 0.002);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
     o.connect(g); g.connect(master);
     o.start(t); o.stop(t + 0.06);
     var n = noiseVoice(t, 0.005, null);
     var nf = ctx.createBiquadFilter(); nf.type = 'highpass'; nf.frequency.setValueAtTime(2000, t);
     n.s.disconnect(); n.s.connect(nf); nf.connect(n.g);
-    n.g.gain.setValueAtTime(0.02 * scl, t);
+    n.g.gain.setValueAtTime(0.012 * scl, t);
     n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.006);
   };
 
@@ -1002,15 +1014,17 @@
 
   // gold pickup: the classic two-note arcade COIN blip (the Jamestown dopamine).
   // Two proper coin voices a fifth apart; the base pitch climbs with the combo
-  // index so a rapid pickup streak arpeggios upward. Fires constantly — kept
+  // index in a pentatonic climb. Pickup clusters share a cue — kept
   // lovely and DRY (no reverb) so a gold vacuum doesn't wash out.
   SFX.gold = function (combo) {
     if (!ready || muted) return;
     var t = now();
-    var step = Math.min(combo || 0, 24);
-    var lo = 784 * Math.pow(2, step / 32);   // climbs up to ~a 5th over a long streak
-    coin(lo, t, 0.045, master);
-    coin(lo * 1.5, t + 0.05, 0.065, master);
+    if (t - lastGold < 0.065) return;
+    lastGold = t;
+    var step = Math.max(0, Math.min(4, Math.floor((combo || 0) / 6)));
+    var lo = 659.25 * Math.pow(2, [0, 2, 4, 7, 9][step] / 12);
+    coin(lo, t, 0.035, master);
+    coin(lo * 1.5, t + 0.05, 0.045, master);
   };
 
   // barely-audible whisper tick. Rate-limited to ~8/s. A filtered-noise "tss"
@@ -2087,7 +2101,7 @@
       ad.connect(g2.gain); am.start(t); am.stop(t + 0.3);
       var f2 = ctx.createBiquadFilter(); f2.type = 'lowpass'; f2.frequency.value = 500;
       o2.connect(f2); f2.connect(g2); g2.connect(master); o2.start(t); o2.stop(t + 0.32);
-    } else {                                                    // mark/weak/burn/charmed/shaken tick
+    } else {                                                    // mark/weak/burn/charmed/terror tick
       var hi = (name === 'charmed');
       var o3 = ctx.createOscillator(); o3.type = 'triangle';
       o3.frequency.setValueAtTime(hi ? 880 : 520, t);

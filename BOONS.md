@@ -119,8 +119,8 @@ armory, Odin NINE NIGHTS, Heimdall THE BIFRÖST.
 
 **ARES** — WAR-HEAT (proximity) · Phobos & Deimos (attack REWORKED, ares rec)
 - **ATK WAR-HEAT**: meter `frenzyF` (0..1) → `G.frenzy.stacks=round(frenzyF*10)` (all existing consumers keep
-  working). Each step `dist=nearestEnemy(player)` (boss body valid). Bands CLOSE=260/FAR=440px. CLOSE `+0.25/s`;
-  beyond FAR (0.4s grace) `−0.18/s`; between = hold. **Proximity alone builds** — no trigger-hold. `frenzyRate()`
+  working). Each step `dist=nearestEnemy(player)` (boss body valid). Bands CLOSE=260/FAR=440px. CLOSE `+0.625/s` (full heat in 1.6s);
+  beyond FAR (0.9s grace) `−0.18/s`; between builds `+0.25/s` while firing, otherwise holds. **Close proximity alone builds** — no trigger-hold. `frenzyRate()`
   rewritten +6%→**+3%/stack**. Three hard tiers off stacks, payoff in `fireStreams`:
 
   | Tier | stacks | shape (GREEK ARMORY, owner 2026-07-18) | spread | scale | radius | pierce | color |
@@ -428,8 +428,7 @@ manager. **Confuse removed** (ruling 1); roster = 7.
 | BURN | UNDERFOOT | 3 rising SHARD flame ticks, yellow-core→red-tip, 14Hz | `1,0.85,0.3`→`1,0.3,0.05` | DoT 22/s |
 | STUN | CROWN + BODY | 3 SPARK stars overhead **+ body FREEZES** (fire-bob halts) | cyan-white `0.7,0.95,1` | frozen |
 | CHARMED | CROWN + BODY | rising pink hearts + **body recolors player cyan**; suppresses hostile tells | hot-pink `1,0.3,0.55` | fights for you |
-| TERROR | BODY | 30Hz jitter, sinks + leans away, dark contracting vignette | `0.25,0.02,0.05` | flee, ×1.20 taken |
-| SHAKEN | BODY (boss) | half-amp jitter + 2 flickering STREAK cracks, no vignette | — | ×1.10 taken (terror's boss-variant) |
+| TERROR | SHOULDER | steady fear mask on ordinary enemies and bosses | dark red | ×1.20 taken; ordinary enemies flee, bosses keep moving and firing; shorter boss duration |
 
 - **Same-zone collision** → fixed priority (stun>charm in CROWN; marked>weak in FRAME); loser demotes to a 6px CORE pip
   upper-right. Disjoint zones = marked+burning+stunned+terrified all render at once.
@@ -657,7 +656,7 @@ ratification, default proceeds; `[SCOPE]` = content-work confirm.
   walls). · [SCOPE] DOPPELGANGER green-boss capstone (default DEFERRED — not built this pass).
 - **Specials** — [VARIANT] the three silhouettes (Zeus column height, Artemis needle proportions, Aphrodite heart geometry).
   · [CONFIRM] Zeus 140px aim-lock vs pure-lane (playtest). · [CONFIRM] THE QUIVER ships now as a mod (default now).
-- **Status** — [CONFIRM] keep SHAKEN as terror's boss-variant (default keep). · [CONFIRM] charm recolor to player-cyan
+- **Status** — Terror is shared by ordinary enemies and bosses. · [CONFIRM] charm recolor to player-cyan
   (default acceptable — cyan = faction law). · [VARIANT] BURN placement (default UNDERFOOT vs shoulders) + WEAK color (default grey-violet).
 - **Sound** — [CONFIRM] Loki = ELECTRIC + warble (default) vs a bespoke 10th glitch material. · [CONFIRM] Communion stings
   assume Pantheon Communion ships (default include).

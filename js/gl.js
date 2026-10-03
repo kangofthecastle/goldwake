@@ -76,7 +76,14 @@
     // the authored-sprite reservation (cells 19-49) and inside the 8x8/64-cell
     // atlas. Crisp along its LENGTH, feathered only laterally, so a bolt drawn as
     // stretched segment-quads reads as one continuous jagged crack, never beads.
-    BOLT: 50
+    BOLT: 50,
+    // Articulated infantry parts, isolated above the authored reservation.
+    INFANTRY_BODY: 120, INFANTRY_HELM: 121, INFANTRY_LIMB: 122,
+    INFANTRY_BOW: 123, INFANTRY_BOOT: 124,
+    FLAT_RECT: 125, FLAT_TRIANGLE: 126, FLAT_DISC: 127,
+    STATUS_FIRE0: 128, // six fixed-root flame drawings, not scaled stickers
+    STATUS_HEART: 134, STATUS_FEAR: 135, STATUS_WEAK: 136,
+    STATUS_STUN: 137, STATUS_BRACKET: 138, STATUS_TARGET: 140
   };
 
   var gl = null;
@@ -283,14 +290,10 @@
   // intends. Default 1 (procedural cells + un-loaded authored cells: no change).
   // Draw-size ONLY — never touched by collision (hitboxes read e.radius, not this).
   var sprFill = [];      // index -> draw-size compensation factor (>= 1)
-  // Atlas grown to 8x16 = 128 cells (was 8x8 = 64). Width is unchanged (8 cols x
-  // 128); height is doubled to 2048 to seat the 2026-07-19 signature/glyph/field
-  // batch as cells 51+. Cell PIXEL positions are untouched (cellRect derives x/y
-  // from COLS/CELL only, never the atlas extent), so every existing index —
-  // procedural 0-18, authored 19-49, BOLT 50 — lands on the exact same texels;
-  // only the V denominator changes (y / ATLAS_H). The paste Y uses the same
-  // pixel rc.y, so sampling is identical: no UV drift. U still divides by ATLAS_W.
-  var ATLAS_W = 1024;   // 8 cols x 128
+  // Original 128px cells retain their pixel positions in the left half.
+  // Four dedicated 512px boss pose cells occupy the right half. UVs use the
+  // full 2048-square texture; no collision or ordinary sprite sizing changes.
+  var ATLAS_W = 2048;   // legacy cells left; four 512px boss poses right
   var ATLAS_H = 2048;   // 16 rows x 128
   var CELL = 128;
   var COLS = 8;
@@ -307,9 +310,14 @@
   }
 
   function cellRect(i) {
+    // Keep ordinary cells and their alpha-derived collision sizing untouched.
+    // Boss animation gets native-sized storage instead of enlarging 128px art.
+    if (i >= 112 && i <= 115) return { x: 1024 + ((i - 112) % 2) * 512, y: Math.floor((i - 112) / 2) * 512, size: 512 };
+    if (i >= 144 && i <= 150) return { x: 1024 + ((i - 144) % 4) * 256, y: 1280 + Math.floor((i - 144) / 4) * 256, size: 256 };
+    if (i >= 128 && i < 192) return { x: 1024 + ((i - 128) % 8) * CELL, y: 1024 + Math.floor((i - 128) / 8) * CELL, size: CELL };
     var cx = (i % COLS) * CELL;
     var cy = ((i / COLS) | 0) * CELL;
-    return { x: cx, y: cy };
+    return { x: cx, y: cy, size: CELL };
   }
 
   // ---- enemy-bullet family painters -----------------------------------------
@@ -761,6 +769,122 @@
       ctx.closePath();
     }
 
+    // Ground soldiers are solid little figures, not a collection of glow FX.
+    // Separate flat parts let their stance, gait and weapon release be animated.
+    function infantryShape(ctx, r, points) {
+      ctx.beginPath();
+      for (var p = 0; p < points.length; p++) {
+        if (p === 0) ctx.moveTo(points[p][0] * r, points[p][1] * r);
+        else ctx.lineTo(points[p][0] * r, points[p][1] * r);
+      }
+      ctx.closePath(); ctx.fill();
+    }
+    draw(GL.SPR.INFANTRY_BODY, function (ctx, r) {
+      ctx.fillStyle = '#fff';
+      infantryShape(ctx, r, [[-.38,-.85],[.38,-.85],[.88,-.48],[.56,.06],[.76,.88],[-.72,.88],[-.56,.06],[-.88,-.48]]);
+      ctx.fillStyle = '#999';
+      infantryShape(ctx, r, [[.12,-.78],[.38,-.85],[.88,-.48],[.56,.06],[.76,.88],[.18,.88]]);
+    });
+    draw(GL.SPR.INFANTRY_HELM, function (ctx, r) {
+      ctx.fillStyle = '#fff';
+      infantryShape(ctx, r, [[-.65,-.45],[-.4,-.83],[.38,-.83],[.68,-.42],[.72,.75],[.32,.87],[.23,.12],[-.22,.12],[-.33,.85],[-.72,.71]]);
+      ctx.fillStyle = '#555';
+      infantryShape(ctx, r, [[-.56,-.18],[.55,-.18],[.47,.08],[-.44,.08]]);
+      ctx.fillStyle = '#bbb';
+      infantryShape(ctx, r, [[-.12,-.98],[.2,-.98],[.24,-.35],[-.07,-.35]]);
+    });
+    draw(GL.SPR.INFANTRY_LIMB, function (ctx, r) {
+      ctx.fillStyle = '#fff';
+      roundRectPath(ctx, -r * .7, -r * .94, r * 1.4, r * 1.88, r * .24); ctx.fill();
+    });
+    draw(GL.SPR.INFANTRY_BOW, function (ctx, r) {
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = r * .14; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(r * .42, -r * .92);
+      ctx.bezierCurveTo(-r * .86, -r * .72, -r * .86, r * .72, r * .42, r * .92); ctx.stroke();
+    });
+    draw(GL.SPR.INFANTRY_BOOT, function (ctx, r) {
+      ctx.fillStyle = '#fff';
+      infantryShape(ctx, r, [[-.52,-.9],[.3,-.9],[.32,.25],[.85,.5],[.83,.87],[-.56,.87]]);
+    });
+    draw(GL.SPR.FLAT_RECT, function (ctx, r) {
+      ctx.fillStyle = '#fff'; ctx.fillRect(-r, -r, r * 2, r * 2);
+    });
+    draw(GL.SPR.FLAT_TRIANGLE, function (ctx, r) {
+      ctx.fillStyle = '#fff'; infantryShape(ctx, r, [[0,-1],[1,1],[-1,1]]);
+    });
+    draw(GL.SPR.FLAT_DISC, function (ctx, r) {
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+    });
+
+    // Status art is deliberately flat and small. Each flame has a fixed root;
+    // the tip travels sideways/up through the six drawings, with no glow mask.
+    for (var fireFrame = 0; fireFrame < 6; fireFrame++) {
+      (function (frame) {
+        draw(GL.SPR.STATUS_FIRE0 + frame, function (ctx, r) {
+          var lean = [-.22, -.06, .18, .28, .08, -.18][frame];
+          var tip = [-.82, -.96, -.88, -.76, -.92, -.98][frame];
+          ctx.beginPath(); ctx.moveTo(-r*.51,r*.77);
+          ctx.quadraticCurveTo(-r*.73,r*.24,-r*.61,-r*.24);
+          ctx.quadraticCurveTo(-r*.36,r*.04,-r*.33,r*.28);
+          ctx.bezierCurveTo(-r*.11,-r*.04,-r*.38,-r*.35,r*lean,r*tip);
+          ctx.quadraticCurveTo(r*(lean+.05),-r*.35,r*.23,r*.04);
+          ctx.quadraticCurveTo(r*.39,r*.22,r*.51,-r*.16);
+          ctx.bezierCurveTo(r*.70,r*.11,r*.67,r*.49,r*.44,r*.77);
+          ctx.quadraticCurveTo(0,r*.87,-r*.51,r*.77);
+          ctx.fillStyle='#e85a24';ctx.fill();
+          ctx.beginPath();ctx.moveTo(-r*.34,r*.77);
+          ctx.quadraticCurveTo(-r*.35,r*.49,-r*.16,r*.25);
+          ctx.lineTo(-r*.09,r*.46);
+          ctx.quadraticCurveTo(r*(.04+lean*.18),r*.25,r*(.04+lean*.25),r*(.05+(tip+.9)*.4));
+          ctx.quadraticCurveTo(r*.26,r*.37,r*.19,r*.56);
+          ctx.lineTo(r*.35,r*.38);ctx.quadraticCurveTo(r*.38,r*.62,r*.25,r*.77);
+          ctx.closePath();ctx.fillStyle='#ffd274';ctx.fill();
+        });
+      })(fireFrame);
+    }
+    function statusStroke(ctx,r) {ctx.strokeStyle='#fff';ctx.lineWidth=r*.15;ctx.lineCap='round';ctx.lineJoin='round';}
+    draw(GL.SPR.STATUS_HEART,function(ctx,r){
+      ctx.fillStyle='#fff';ctx.beginPath();ctx.moveTo(0,r*.80);
+      ctx.bezierCurveTo(-r*1.35,-r*.08,-r*.64,-r*1.10,0,-r*.43);
+      ctx.bezierCurveTo(r*.64,-r*1.10,r*1.35,-r*.08,0,r*.80);ctx.fill();
+    });
+    // Broad pale strokes with a dark keyline remain visible on light/dark hulls.
+    draw(GL.SPR.STATUS_FEAR,function(ctx,r){
+      ctx.lineCap='round';ctx.lineJoin='round';
+      ctx.beginPath();ctx.moveTo(-r*.34,-r*.72);
+      ctx.quadraticCurveTo(-r*.60,-r*.25,-r*.28,r*.04);
+      ctx.quadraticCurveTo(0,r*.33,-r*.30,r*.72);
+      ctx.moveTo(r*.30,-r*.53);
+      ctx.quadraticCurveTo(r*.04,-r*.08,r*.36,r*.20);
+      ctx.quadraticCurveTo(r*.54,r*.41,r*.35,r*.64);
+      ctx.strokeStyle='#291d29';ctx.lineWidth=r*.37;ctx.stroke();
+      ctx.strokeStyle='#f1b9c7';ctx.lineWidth=r*.21;ctx.stroke();
+    });
+    draw(GL.SPR.STATUS_WEAK,function(ctx,r){
+      // Two solid shield halves and a dark fracture stay legible over any hull.
+      ctx.fillStyle='#e3d9f1';ctx.strokeStyle='#241b30';ctx.lineWidth=r*.14;ctx.lineJoin='round';
+      ctx.beginPath();ctx.moveTo(-r*.12,-r*.82);ctx.lineTo(-r*.78,-r*.57);
+      ctx.lineTo(-r*.60,r*.30);ctx.lineTo(-r*.09,r*.83);ctx.lineTo(-r*.22,r*.16);
+      ctx.lineTo(-r*.03,-r*.10);ctx.closePath();ctx.fill();ctx.stroke();
+      ctx.beginPath();ctx.moveTo(r*.10,-r*.82);ctx.lineTo(r*.78,-r*.57);
+      ctx.lineTo(r*.60,r*.30);ctx.lineTo(r*.14,r*.78);ctx.lineTo(r*.04,r*.20);
+      ctx.lineTo(r*.26,-r*.06);ctx.closePath();ctx.fill();ctx.stroke();
+    });
+    draw(GL.SPR.STATUS_STUN,function(ctx,r){
+      ctx.fillStyle='#fff';infantryShape(ctx,r,[[0,-.9],[.24,-.25],[.9,0],[.24,.25],[0,.9],[-.24,.25],[-.9,0],[-.24,-.25]]);
+    });
+    draw(GL.SPR.STATUS_BRACKET,function(ctx,r){
+      statusStroke(ctx,r);ctx.beginPath();ctx.moveTo(r*.65,-r*.65);ctx.lineTo(-r*.65,-r*.65);ctx.lineTo(-r*.65,r*.65);ctx.stroke();
+    });
+    draw(GL.SPR.STATUS_TARGET,function(ctx,r){
+      ctx.strokeStyle='#fff';ctx.lineWidth=r*.095;
+      // Open center leaves room for a simultaneous Weak badge.
+      ctx.beginPath();ctx.arc(0,0,r*.60,0,Math.PI*2);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(-r*.94,0);ctx.lineTo(-r*.44,0);
+      ctx.moveTo(r*.44,0);ctx.lineTo(r*.94,0);ctx.moveTo(0,-r*.94);ctx.lineTo(0,-r*.44);
+      ctx.moveTo(0,r*.44);ctx.lineTo(0,r*.94);ctx.stroke();
+    });
+
     // Upload premultiplied (see premultiplied(); procedural cells are white,
     // so this leaves their rendered output bit-identical to the old alpha path).
     atlasTex = gl.createTexture();
@@ -809,10 +933,11 @@
   var SPR_FILL_ALPHA = 24;    // 0..255 — alpha at/under this is fringe, not subject
   var SPR_FILL_MAX = 1.8;     // hard ceiling on the up-scale (guards glow-halo sprites)
   function measureSubjectFill(cell, data) {
-    var px = data.data, minX = CELL, minY = CELL, maxX = -1, maxY = -1, x, y, i;
-    for (y = 0; y < CELL; y++) {
-      for (x = 0; x < CELL; x++) {
-        i = (y * CELL + x) * 4 + 3;
+    var size = data.width || CELL;
+    var px = data.data, minX = size, minY = size, maxX = -1, maxY = -1, x, y, i;
+    for (y = 0; y < size; y++) {
+      for (x = 0; x < size; x++) {
+        i = (y * size + x) * 4 + 3;
         if (px[i] > SPR_FILL_ALPHA) {
           if (x < minX) minX = x; if (x > maxX) maxX = x;
           if (y < minY) minY = y; if (y > maxY) maxY = y;
@@ -822,41 +947,49 @@
     if (maxX < minX) { sprFill[cell] = 1; return; }   // empty cell — no compensation
     // Dominant span (the cell is square and drawn square at e.scale); +1 = inclusive.
     var span = Math.max(maxX - minX + 1, maxY - minY + 1);
-    var comp = CELL / span;
+    var comp = size / span;
     sprFill[cell] = comp < 1 ? 1 : (comp > SPR_FILL_MAX ? SPR_FILL_MAX : comp);
   }
 
   // Composite one loaded PNG into atlas cell `cell`, rotated by `rot` at paste
   // time (enemy art faces DOWN and is rotated pi to land nose-up in the cell,
   // matching the procedural nose-up convention; player-side art is pasted as-is).
-  function compositeSprite(cell, rot, img) {
+  function compositeSprite(cell, rot, img, frameScale, crop) {
     // Compose on a black-cleared offscreen cell (NOT the shared atlas canvas,
     // so a tainted file:// image can never taint the procedural atlas source).
     var off = document.createElement('canvas');
-    off.width = CELL; off.height = CELL;
+    var size = cellRect(cell).size;
+    off.width = size; off.height = size;
     var oc = off.getContext('2d');
-    var pad = 2, avail = CELL - pad * 2;
-    var sc = Math.min(avail / img.width, avail / img.height);   // fit centered, keep aspect
-    var dw = img.width * sc, dh = img.height * sc;
+    var pad = size / 64, avail = size - pad * 2;
+    var sw = crop ? crop[2] * img.width : img.width;
+    var sh = crop ? crop[3] * img.height : img.height;
+    var sc = Math.min(avail / sw, avail / sh);   // fit source frame centered, keep aspect
+    // Versioned art may arrive with different transparent margins. Keep its
+    // framing stable so an art-only swap does not silently resize the collider
+    // via measureSubjectFill. Scale lives with the asset selection, not physics.
+    if (Number.isFinite(frameScale) && frameScale > 0 && frameScale <= 2) sc *= frameScale;
+    var dw = sw * sc, dh = sh * sc;
     oc.save();
-    oc.translate(CELL / 2, CELL / 2);
+    oc.translate(size / 2, size / 2);
     if (rot) oc.rotate(rot);
-    oc.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+    if (crop) oc.drawImage(img, crop[0] * img.width, crop[1] * img.height, sw, sh, -dw / 2, -dh / 2, dw, dh);
+    else oc.drawImage(img, -dw / 2, -dh / 2, dw, dh);
     oc.restore();
     // getImageData throws SecurityError here if the image was cross-origin
     // (Chrome file:// probe) — caller catches and keeps the procedural cell.
-    var data = oc.getImageData(0, 0, CELL, CELL);
+    var data = oc.getImageData(0, 0, size, size);
     measureSubjectFill(cell, data);
     var rc = cellRect(cell);
     gl.bindTexture(gl.TEXTURE_2D, atlasTex);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, rc.x, rc.y, CELL, CELL, gl.RGBA, gl.UNSIGNED_BYTE, premultiplied(data));
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, rc.x, rc.y, size, size, gl.RGBA, gl.UNSIGNED_BYTE, premultiplied(data));
   }
 
   function applyOverride(slot, img) {
     var cfg = SPRITE_SLOTS[slot];
-    compositeSprite(cfg.spr, cfg.rot, img);
+    compositeSprite(cfg.spr, cfg.rot, img, (window.SPRITE_FRAME_SCALE || {})[slot]);
     console.info('HUBRIS: authored sprite loaded for slot "' + slot + '"');
   }
 
@@ -914,7 +1047,7 @@
   // 2026-07-19 DELTA batch — cells 51+ (BOLT owns 50). Signature projectiles,
   // owned-entity segments, field objects, and the glyph/flame sheets. All authored
   // nose-UP (or orientation-free glyphs) so rot 0 — the draw site rotates to travel.
-  // The 8x16 atlas fits these as cells 51..94 (33 free cells remain, 95..127).
+  // Keep cells 120..127 reserved for articulated infantry and flat primitives.
   var AUTH_NAMES2 = [
     // A — signature projectiles
     '33-10-green-dragon-crescent', '33-11-hunt-arrow', '33-12-ankh-bolt',
@@ -937,6 +1070,21 @@
     // 36.2 — Loki's real pickpocket blade; replaces the semantically-empty triskele.
     '36-13-pilfer-knife'
   ];
+  // Authored animation sheets occupy 96..103; procedural components retain
+  // 120..127. Sources stay intact: atlas upload samples the four 2x2 frames.
+  var INFANTRY_SHEETS = [
+    { source: 'infantry-archer-sheet', prefix: 'infantry-archer', base: 96 },
+    { source: 'infantry-spearman-sheet', prefix: 'infantry-spearman', base: 100 }
+  ];
+  var INFANTRY_FRAMES = ['idle', 'prepare', 'release', 'walk'];
+  // Human enemy poses use independent cells, never cropped limbs from a static
+  // painting. Source frames face down; pi atlas rotation matches other enemies.
+  var ENEMY_SHEETS = [
+    { source: 'aegis-action-sheet', prefix: 'aegis-action', base: 104 },
+    { source: 'acolyte-action-sheet', prefix: 'acolyte-action', base: 108 },
+    { source: 'talos-action-sheet', prefix: 'talos-action', base: 112 }
+  ];
+  var ENEMY_FRAMES = ['idle', 'prepare', 'release', 'recover'];
   var AUTH_DELTA_BASE = GL.SPR.BOLT + 1;   // 51 — first free cell after BOLT (50)
   (function initAuthored() {
     var i, name;
@@ -948,14 +1096,37 @@
       name = AUTH_NAMES2[i];
       authored[name] = { cell: AUTH_DELTA_BASE + i, rot: 0, ready: false };
     }
+    var roles = ['32-19-bell-sentry', '32-20-wheel-guard', '32-21-reactor-scarab',
+      '32-22-war-barge', '32-23-flank-crossbow', '32-24-rain-ewer', '32-25-bronze-rivet'];
+    for (var ri = 0; ri < roles.length; ri++) {
+      authored[roles[ri]] = { cell: 144 + ri, rot: ri === 2 ? 0 : Math.PI, ready: false };
+    }
+    for (var si = 0; si < INFANTRY_SHEETS.length; si++) {
+      var sheet = INFANTRY_SHEETS[si];
+      for (var fi = 0; fi < INFANTRY_FRAMES.length; fi++) {
+        authored[sheet.prefix + '-' + INFANTRY_FRAMES[fi]] = {
+          cell: sheet.base + fi, rot: 0, ready: false, sheet: sheet.source,
+          crop: [(fi % 2) * 0.5, Math.floor(fi / 2) * 0.5, 0.5, 0.5]
+        };
+      }
+    }
+    for (var ei = 0; ei < ENEMY_SHEETS.length; ei++) {
+      var enemySheet = ENEMY_SHEETS[ei];
+      for (var ef = 0; ef < ENEMY_FRAMES.length; ef++) {
+        authored[enemySheet.prefix + '-' + ENEMY_FRAMES[ef]] = {
+          cell: enemySheet.base + ef, rot: Math.PI, ready: false, sheet: enemySheet.source,
+          crop: [(ef % 2) * 0.5, Math.floor(ef / 2) * 0.5, 0.5, 0.5]
+        };
+      }
+    }
   })();
 
   function loadAuthored() {
     // Give every authored cell its atlas UV region (buildAtlas only records the
     // procedural cells 0..18). Same 1px inset formula so GL.draw can index them.
     for (var nm in authored) {
-      var rc = cellRect(authored[nm].cell), pad = 1.0;
-      regions[authored[nm].cell] = [(rc.x + pad) / ATLAS_W, (rc.y + pad) / ATLAS_H, (CELL - pad * 2) / ATLAS_W, (CELL - pad * 2) / ATLAS_H];
+      var rc = cellRect(authored[nm].cell), pad = rc.size / 128;
+      regions[authored[nm].cell] = [(rc.x + pad) / ATLAS_W, (rc.y + pad) / ATLAS_H, (rc.size - pad * 2) / ATLAS_W, (rc.size - pad * 2) / ATLAS_H];
     }
     var registry = (typeof window !== 'undefined' && window.SPRITES) || {};
     var isChromium = /Chrome\/|Chromium\/|HeadlessChrome/.test(navigator.userAgent);
@@ -963,18 +1134,54 @@
     for (var name in authored) {
       (function (name) {
         var a = authored[name];
+        if (a.sheet) return; // one image decode supplies all four states below
         var src = registry[name] ? registry[name]
           : (canProbe ? 'art/sprites/' + name + '.png' : null);
         if (!src) return;
         var img = new Image();
         img.onload = function () {
-          try { compositeSprite(a.cell, a.rot, img); a.ready = true; }
+          try { compositeSprite(a.cell, a.rot, img, (window.SPRITE_FRAME_SCALE || {})[name]); a.ready = true; }
           catch (e) { /* tainted / bad image: keep the generic/procedural fallback */ }
         };
         img.onerror = function () { /* no art for this sprite: fall back */ };
         img.src = src;
       })(name);
     }
+    INFANTRY_SHEETS.forEach(function (sheet) {
+      var src = registry[sheet.source] || (canProbe ? 'art/refinements/clarity/' + sheet.source + '-v1.png' : null);
+      if (!src) return;
+      var img = new Image();
+      img.onload = function () {
+        try {
+          for (var fi = 0; fi < INFANTRY_FRAMES.length; fi++) {
+            var frame = authored[sheet.prefix + '-' + INFANTRY_FRAMES[fi]];
+            compositeSprite(frame.cell, 0, img, (window.SPRITE_FRAME_SCALE || {})[sheet.source], frame.crop);
+          }
+          // Publish the complete animation at once, never half a loaded sheet.
+          for (var ready = 0; ready < INFANTRY_FRAMES.length; ready++)
+            authored[sheet.prefix + '-' + INFANTRY_FRAMES[ready]].ready = true;
+        } catch (e) { /* invalid/tainted image: retain the existing fallback */ }
+      };
+      img.onerror = function () {};
+      img.src = src;
+    });
+    ENEMY_SHEETS.forEach(function (sheet) {
+      var src = registry[sheet.source] || (canProbe ? 'art/refinements/clarity/' + sheet.source + '-v1.png' : null);
+      if (!src) return;
+      var img = new Image();
+      img.onload = function () {
+        try {
+          for (var fi = 0; fi < ENEMY_FRAMES.length; fi++) {
+            var frame = authored[sheet.prefix + '-' + ENEMY_FRAMES[fi]];
+            compositeSprite(frame.cell, frame.rot, img, (window.SPRITE_FRAME_SCALE || {})[sheet.source], frame.crop);
+          }
+          for (var ready = 0; ready < ENEMY_FRAMES.length; ready++)
+            authored[sheet.prefix + '-' + ENEMY_FRAMES[ready]].ready = true;
+        } catch (e) { /* retain the complete static figure if sheet upload fails */ }
+      };
+      img.onerror = function () {};
+      img.src = src;
+    });
   }
 
   // Atlas cell index for a named authored sprite, or -1 until (and unless) it
@@ -1210,6 +1417,21 @@
     d[o + 4] = rot;
     d[o + 5] = r; d[o + 6] = g; d[o + 7] = b; d[o + 8] = a;
     d[o + 9] = reg[0]; d[o + 10] = reg[1]; d[o + 11] = reg[2]; d[o + 12] = reg[3];
+    instCount++;
+  };
+
+  // Crop a part of an atlas cell without copying textures. Width and height
+  // describe the cropped quad, so callers can pivot wings/weapon sections
+  // around their attachment points while leaving the body and collider still.
+  GL.drawRegion = function (spr, x, y, sx, sy, rot, r, g, b, a, u0, v0, u1, v1) {
+    if (a <= 0 || u1 <= u0 || v1 <= v0) return;
+    var reg = regions[spr]; if (!reg) return;
+    if (instCount >= CAP) flushSprites();
+    var o = instCount * STRIDE, d = instData;
+    d[o] = x; d[o + 1] = y; d[o + 2] = sx; d[o + 3] = sy; d[o + 4] = rot;
+    d[o + 5] = r; d[o + 6] = g; d[o + 7] = b; d[o + 8] = a;
+    d[o + 9] = reg[0] + reg[2] * u0; d[o + 10] = reg[1] + reg[3] * v0;
+    d[o + 11] = reg[2] * (u1 - u0); d[o + 12] = reg[3] * (v1 - v0);
     instCount++;
   };
 
