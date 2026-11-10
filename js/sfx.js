@@ -1731,6 +1731,38 @@
     o.connect(f); f.connect(g); g.connect(out); o.start(t); o.stop(t + 0.42);
   }
 
+  // Gjallarhorn: a blown brass voice, not Heimdall's crystalline bridge bell.
+  // Slightly detuned reeds + a low fundamental, with breath opening the filter.
+  // Power comes from the sustained harmonic body, not a louder master gain.
+  function spHorn(t, out) {
+    var brass = ctx.createBiquadFilter(); brass.type = 'lowpass'; brass.Q.value = 0.7;
+    brass.frequency.setValueAtTime(550, t);
+    brass.frequency.exponentialRampToValueAtTime(2300, t + 0.065);
+    brass.frequency.exponentialRampToValueAtTime(1500, t + 0.36);
+    brass.frequency.exponentialRampToValueAtTime(420, t + 0.9);
+    brass.connect(out);
+    var pitches = [110, 110.65, 55], levels = [0.15, 0.11, 0.1];
+    for (var i = 0; i < pitches.length; i++) {
+      var o = ctx.createOscillator(); o.type = i === 2 ? 'sine' : 'sawtooth';
+      o.frequency.setValueAtTime(pitches[i] * 0.91, t);
+      o.frequency.exponentialRampToValueAtTime(pitches[i], t + 0.055);
+      o.frequency.setValueAtTime(pitches[i], t + 0.44);
+      o.frequency.exponentialRampToValueAtTime(pitches[i] * 0.975, t + 0.92);
+      var g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(levels[i], t + 0.045);
+      g.gain.setValueAtTime(levels[i] * 0.86, t + 0.32);
+      g.gain.exponentialRampToValueAtTime(levels[i] * 0.5, t + 0.57);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.94);
+      o.connect(g); g.connect(brass); o.start(t); o.stop(t + 0.96);
+    }
+    var breath = noiseVoice(t, 0.22, out), filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass'; filter.frequency.value = 850; filter.Q.value = 0.7;
+    breath.s.disconnect(); breath.s.connect(filter); filter.connect(breath.g);
+    breath.g.gain.setValueAtTime(0.0001, t);
+    breath.g.gain.exponentialRampToValueAtTime(0.085, t + 0.018);
+    breath.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+  }
+
   var MAT_SPECIAL = {
     ELECTRIC: spElectric, KINETIC: spKinetic, BLADE: spBlade, BEAM: spBeam,
     BELL: spBell, SERPENT: spSerpent, BOW: spBow, CHARM: spCharm, FLUTTER: spFlutter
@@ -1750,7 +1782,8 @@
     lastSpecialT = t;
     var p = panOf(god);
     var h = hub(p.rev); var out = sat(ctx); out.connect(h);
-    MAT_SPECIAL[v.mat](t, out, v.f0 * p.reg, v);
+    if (god === 'heimdall') spHorn(t, out);
+    else MAT_SPECIAL[v.mat](t, out, v.f0 * p.reg, v);
   };
 
   // ---- bespoke kit-event cues (§2 kit sheets) -------------------------------

@@ -189,7 +189,7 @@
       communion: null,
       mods: {
         zeusChain: 0, zeusCrit: false, zeusFork: false, zeusField: false,
-        artemisCrit: 0, artemisRefund: false, artemisSpread: false, artemisMulti: false,
+        artemisCrit: 0, artemisSpread: false,
         aphroLong: false, aphroExplode: false, aphroTaunt: false, aphroFast: false,
         aresDecay: false, aresCharge: false, aresTerror: false, aresSpoils: false,
         heimVigil: false, heimPrism: false, heimHorn: false, heimEcho: false,
@@ -199,7 +199,7 @@
         odinRaven: false, odinMark: false, odinRavenMark: false, odinGungnir: false,
         wukongClones: false, wukongStaff: false, wukongSpecial: false, wukongChance: false,
         quetzBig: false, quetzGold: false, quetzCircle: false, quetzPierce: false,
-        thorBelt: false, thorFast: false, thorGauntlet: false, thorSkymark: false,
+        thorBelt: false, thorFast: false, thorGauntlet: false, thorSkymark: false, thorStun: false,
         guanWide: false, guanOath: false, guanWake: false, guanSpoils: false,
         jadeOften: false, jadeStun: false, jadeMirror: false, jadeTribute: false
       },
@@ -218,9 +218,9 @@
       frenzy: { stacks: 0, decayT: 0, frenzyF: 0, boost: 0, pinT: 0, graceT: 0, prevTier: 0, bloom: 0 },
       thorBuff: 0,
       hammers: [],
-      // ARTEMIS THE HUNT — the Hunted brand lives here (a pointer + ramp), not per-enemy,
-      // so it survives target motion and chains cleanly. huntSwap/huntStray = sticky counter.
-      hunt: { foe: null, foeSeq: 0, stacks: 0, stackT: 0, stray: null, straySeq: 0, swap: 0 },
+      kitBursts: [],          // cosmetic cast accents only; never participates in collision
+      // Artemis reserves one attack-mark target until it dies; no separate status/ramp.
+      artemisMark: { foe: null, foeSeq: 0 },
       // HEIMDALL THE BIFRÖST — a drawn hazard (not a pooled entity): t = cadence clock,
       // seamT = telegraph clock, x = band's vertical-seam player-x, life = band remaining once solid.
       bifrost: { t: 0, seamT: 0, x: 0, life: 0, active: false },
@@ -1239,8 +1239,7 @@
       case 'anubis':        // THE WEIGHING: DIVINE INTERVENTION tips every foe's scales at once
         each(function (e) { anubisVerdict(e); });
         break;
-      case 'loki':          // Loki rider: free decoy + boss Weaken (CONFUSE removed, ruling 1; PILFER arrives Pass 2)
-        each(function (e) { if (e.boss) { e.weak = true; e.weakT = 6; } });
+      case 'loki':          // Loki rider: free decoy; no unrelated Weak application.
         shadowTwin();
         break;
       case 'odin': {        // Gungnir storm: 6 spears round-robin (all land on a lone boss)
@@ -1283,11 +1282,7 @@
           s.r = 0.30; s.g = 0.95; s.b = 0.55;
         }
         break;
-      case 'jade': {        // mass Stun 1.2s (bosses take damage instead) + an edict fan burst
-        each(function (e) {
-          if (e.boss) damageEnemy(e, 12 * G.stats.atkDmg * R, false);
-          else { e.stunT = Math.max(e.stunT, 1.2); flash(e.x, e.y, [0.8, 0.6, 1], 60, 0.2); }
-        });
+      case 'jade': {        // Edict fan loads Weighing; Stun belongs to Judgement only.
         fireJadeEdicts(p.x, p.y, false, 1.5);
         break;
       }
@@ -1444,10 +1439,10 @@
     var s = Engine.shots.alloc(); if (!s) return null;
     s.homing = false; s.turn = 0;
     s.weave = 0; s.phase = 0;
-    s.cloneShot = false; s.crescent = false;
+    s.cloneShot = false; s.crescent = false; s.plume = false;
     s.mandateBolt = false;                     // §6: recycled slot must never inherit a prior MANDATE-bolt's proc-suppression
     s.markHit = false; s.forceCrit = 0;
-    s.huntHome = false; s.loosed = false; s.brandedFirst = false;
+    s.artemisHome = false; s.loosed = false;
     resetShotHits(s);
     return s;
   }
@@ -1510,7 +1505,7 @@
     spark(colX, baseY, [0.85, 0.92, 1.0], 5, 260, 16);         // streak-shaped ground crackle (SPARK, not a round pop)
   }
   // ARTEMIS THE LOOSED ARROW — fastest moon-silver needle; pierces everything (999),
-  // always precise, Marks each pierced foe; the FIRST struck becomes the Hunted at 8.
+  // always precise, Marks each pierced foe without a second target status.
   function huntArrow() {
     var s = allocShot(); if (!s) return;
     var t = loosedTarget();
@@ -1520,7 +1515,7 @@
     s.radius = 14; s.scale = 64; s.damage = LANCE_DMG * 2.2 * G.stats.spDmg * G.specialR;
     s.age = 0; s.life = 0.9; s.r = 0.85; s.g = 0.9; s.b = 1.0;
     s.pierce = 999; s.kind = 4; s.faction = 1; s.big = true; s.markHit = true; s.forceCrit = 1;
-    s.homing = true; s.turn = 5.0; s.loosed = true; s.brandedFirst = false;
+    s.homing = true; s.turn = 5.0; s.loosed = true;
     flash(s.x, s.y, [0.85, 0.9, 1], 150, 0.2);
   }
   // LOOSED ARROW target priority: marked → lowest-HP → boss → straight up.
@@ -1533,7 +1528,7 @@
     return lo;
   }
   // APHRODITE HEARTSEEKER — a slow weaving heart that charms a minion, or Weakens a
-  // boss (+8%/heart ×3) and sweeps its nearby bullets to gold.
+  // boss (+8%/heart, capped at two) and sweeps nearby bullets to gold.
   function charmMissile() {
     var s = allocShot(); if (!s) return;
     s.x = G.player.x; s.y = G.player.y - 30; s.vx = 0; s.vy = -900;
@@ -1543,19 +1538,18 @@
     s.homing = true; s.turn = 3.0; s.weave = 1; s.phase = 0;
     flash(s.x, s.y, [1, 0.5, 0.85], 120, 0.2);
   }
-  // HEIMDALL — Gjallarhorn (special): wound + Mark all foes, shove their bullets.
+  // HEIMDALL — Gjallarhorn (special): wound + Stun survivors, shove their bullets.
   // The shove is distinct from apotheosis: bullets are displaced, not canceled.
   function gjallarhorn(mult) {
     var hard = G.mods.heimHorn;
     var dmg = 16 * G.stats.spDmg * G.specialR * (hard ? 1.35 : 1) * mult;
     var shove = (hard ? 350 : 220) * mult;
-    ringShock(G.player.x, G.player.y, [1, 0.89, 0.76], 100, 5200, 0.7);
-    flash(G.player.x, G.player.y, [1, 0.9, 0.78], 300, 0.3);
+    pushKitBurst('horn', G.player.x, G.player.y);
     G.flashAll = Math.max(G.flashAll, 0.2); addShake(6);
     Engine.enemies.forEach(function (e) {
       if (e.dying || e.charmed) return;
       damageEnemy(e, dmg, false);
-      if (!e.dying) markEnemy(e);
+      if (!e.dying) e.stunT = Math.max(e.stunT, 1.2);
     });
     shoveBullets(G.player.x, G.player.y, shove);
     if (G.mods.heimEcho && mult === 1) G.hornEchoT = 1.0;   // echoes once at 50%
@@ -1697,6 +1691,179 @@
     }
   }
 
+  // Shared, deterministic ink/streak primitives. These draw only: no RNG, timers,
+  // collision changes or particles whose pool pressure could affect combat.
+  function kitStroke(x0, y0, x1, y1, width, r, g, b, a) {
+    var dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy);
+    if (len < 0.01 || width <= 0 || a <= 0) return;
+    GL.draw(GL.SPR.FLAT_RECT, (x0 + x1) / 2, (y0 + y1) / 2,
+      width, len + Math.min(width * 0.2, 2), Math.atan2(dy, dx) + Math.PI / 2, r, g, b, a);
+  }
+  function kitArc(x, y, radius, start, end, width, col, alpha) {
+    var n = Math.max(8, Math.ceil(Math.abs(end - start) * Math.min(24, Math.sqrt(radius) * 0.8)));
+    for (var k = 0; k < n; k++) {
+      var a0 = start + (end - start) * k / n, a1 = start + (end - start) * (k + 1) / n;
+      var taper = Math.pow(Math.sin(Math.PI * (k + 0.5) / n), 0.55);
+      kitStroke(x + Math.cos(a0) * radius, y + Math.sin(a0) * radius,
+        x + Math.cos(a1) * radius, y + Math.sin(a1) * radius, width * taper,
+        col[0], col[1], col[2], alpha);
+    }
+  }
+  function pushKitBurst(kind, x, y) {
+    G.kitBursts.push({ kind: kind, x: x, y: y, t: G.time });
+    if (G.kitBursts.length > 8) G.kitBursts.shift();
+  }
+  function hornPressure() {
+    // The composite refraction supports the visible pressure mass below.
+    for (var i = G.kitBursts.length - 1; i >= 0; i--) {
+      var v = G.kitBursts[i], age = G.time - v.t;
+      if (v.kind === 'horn' && age >= 0 && age < 0.38) {
+        return { x: v.x, y: v.y, age: age, playerX: G.player.x, playerY: G.player.y };
+      }
+    }
+    return null;
+  }
+  function drawHornBlast(v, age) {
+    if (age < 0 || age >= 0.46) return;
+    var u = age / 0.46, fade = Math.pow(1 - u, 1.2);
+    var attack = Math.min(1, (age + 0.012) / 0.035), alpha = attack * fade;
+    var travel = age / 0.38 * H * 1.25;
+    var mouth = v.y - shipDrawSize(46), front = v.y - H * 0.08 - travel;
+    var half = 95 + travel * 0.64, depth = 130 + travel * 0.24;
+    // A single solid-looking, translucent mass of compressed air. Overlapping
+    // soft lobes merge into a wide flaring blast; no rays or closed rings.
+    for (var i = -4; i <= 4; i++) {
+      var f = i / 4, shoulder = Math.pow(1 - f * f * 0.8, 0.7);
+      var x = v.x + f * half, y = front + f * f * depth * 0.62;
+      var w = half * 0.78 + 75, h = depth * (0.9 + shoulder * 0.45);
+      GL.draw(GL.SPR.GLOW, x, y + depth * 0.34, w * 1.25, h * 1.5, 0,
+        1, 0.76, 0.38, alpha * shoulder * 0.27);
+      GL.draw(GL.SPR.GLOW, x, y, w, h, 0,
+        1, 0.94, 0.76, alpha * shoulder * 0.52);
+      GL.draw(GL.SPR.CORE, x, y - depth * 0.12, w * 0.7, h * 0.52, 0,
+        1, 1, 0.92, alpha * shoulder * 0.18);
+    }
+    // One continuous, thick crest defines the arc of the existing pressure mass.
+    // Filled overlapping highlights stay attached to the body, not a separate
+    // thin wave outline. The ends soften into the surrounding condensation.
+    for (var j = 0; j < 28; j++) {
+      var f = (j + 0.5) / 28 * 2 - 1;
+      var taper = Math.pow(Math.max(0, 1 - f * f), 0.65);
+      var angle = Math.atan2(f * depth * 1.24, half);
+      GL.draw(GL.SPR.CORE, v.x + f * half, front - depth * 0.24 + f * f * depth * 0.62,
+        half * 0.16 + 18, (32 + depth * 0.06) * taper, angle,
+        1, 0.98, 0.83, alpha * taper * 0.58);
+    }
+    // Broad throat flash anchors the cast to the ship, then immediately clears.
+    // All of this renders before opaque bullets and the ship/hurtbox pass.
+    var ignition = Math.pow(Math.max(0, 1 - age / 0.16), 1.4);
+    if (ignition > 0) {
+      GL.draw(GL.SPR.GLOW, v.x, mouth - 70, 240, 260, 0, 1, 0.86, 0.55, ignition * 0.8);
+      GL.draw(GL.SPR.CORE, v.x, mouth - 50, 90, 140, 0, 1, 1, 0.9, ignition * 0.55);
+    }
+  }
+  function drawSolarPressure(v, age) {
+    var u = age / 0.8; if (u < 0 || u >= 1) return;
+    var fade = Math.pow(1 - u, 1.2), ignite = Math.min(1, age / 0.025);
+    var radius = 26 + 2200 * (1 - Math.pow(1 - u, 1.7));
+    // A torn, outward-running corona. Uneven jets replace the regular sun icon
+    // and ruler-straight spokes; all motion is continuous and deterministic.
+    var n = 72;
+    for (var j = 0; j < n; j++) {
+      var a0 = j * TAU / n, a1 = (j + 1) * TAU / n, a = (a0 + a1) / 2;
+      var scallop0 = 1 + 0.018 * Math.sin(a0 * 9) + 0.012 * Math.cos(a0 * 17);
+      var scallop1 = 1 + 0.018 * Math.sin(a1 * 9) + 0.012 * Math.cos(a1 * 17);
+      var r0 = radius * scallop0, r1 = radius * scallop1;
+      var x0 = v.x + Math.cos(a0) * r0, y0 = v.y + Math.sin(a0) * r0;
+      var x1 = v.x + Math.cos(a1) * r1, y1 = v.y + Math.sin(a1) * r1;
+      var strength = 0.7 + 0.3 * Math.sin(j * 1.71) * Math.sin(j * 1.71);
+      var alpha = fade * ignite * strength;
+      kitStroke(x0, y0, x1, y1, 36 * fade + 8, 1, 0.42, 0.045, alpha * 0.22);
+      kitStroke(x0, y0, x1, y1, 13 * fade + 3, 1, 0.76, 0.2, alpha * 0.8);
+      kitStroke(x0, y0, x1, y1, 4 * fade + 2, 1, 1, 0.82, alpha);
+      if (j % 2 === 0) {
+        var tail = (60 + 130 * strength) * (0.35 + u);
+        var inner = Math.max(8, radius - tail), bend = 0.016 * Math.sin(j * 2.3);
+        var mx = v.x + Math.cos(a + bend) * (radius - tail * 0.45);
+        var my = v.y + Math.sin(a + bend) * (radius - tail * 0.45);
+        kitStroke(v.x + Math.cos(a + bend * 2) * inner, v.y + Math.sin(a + bend * 2) * inner, mx, my,
+          5 * fade, 1, 0.5, 0.08, alpha * 0.5);
+        kitStroke(mx, my, v.x + Math.cos(a) * radius, v.y + Math.sin(a) * radius,
+          10 * fade, 1, 0.82, 0.32, alpha * 0.8);
+      }
+    }
+    // The ignition is a short white-gold flash with a horizontal lens streak.
+    var flashA = Math.pow(Math.max(0, 1 - age / 0.24), 2);
+    if (flashA > 0) {
+      GL.draw(GL.SPR.GLOW, v.x, v.y, 360, 360, 0, 1, 0.64, 0.18, flashA * 0.5);
+      GL.draw(GL.SPR.STREAK, v.x, v.y, 26, 650, Math.PI / 2, 1, 0.93, 0.65, flashA);
+      GL.draw(GL.SPR.SPARK, v.x, v.y, 110, 110, 0, 1, 1, 0.92, flashA);
+    }
+  }
+  function drawKitBursts() {
+    for (var i = 0; i < G.kitBursts.length; i++) {
+      var v = G.kitBursts[i], age = G.time - v.t;
+      if (v.kind === 'horn') {
+        drawHornBlast(v, age);
+      } else if (v.kind === 'solar') {
+        drawSolarPressure(v, age);
+      } else if (v.kind === 'hammer' || v.kind === 'crunch') {
+        var hu = age / 0.34; if (hu > 1) continue;
+        var reach = (v.kind === 'crunch' ? 300 : 145) * (1 - Math.pow(1 - hu, 2)), fade = Math.pow(1 - hu, 2);
+        for (var shard = 0; shard < 12; shard++) {
+          var aa = shard * TAU / 12 + 0.11, rr = reach * (0.8 + 0.2 * Math.sin(shard * 2.7));
+          kitStroke(v.x + Math.cos(aa) * rr * 0.55, v.y + Math.sin(aa) * rr * 0.55,
+            v.x + Math.cos(aa) * rr, v.y + Math.sin(aa) * rr, 4 * fade + 1, 0.67, 0.82, 1, fade);
+        }
+      }
+    }
+  }
+  // Small flat kit silhouettes use the same geometric atlas as the bullets,
+  // not illustrated inventory art. Offsets rotate with the existing actor.
+  function kitShape(spr, x, y, angle, ox, oy, w, h, localAngle, r, g, b, a) {
+    var c = Math.cos(angle), s = Math.sin(angle);
+    GL.draw(spr, x + ox * c - oy * s, y + ox * s + oy * c,
+      w, h, angle + localAngle, r, g, b, a);
+  }
+  function drawSimpleHammer(x, y, size, angle) {
+    var rect = GL.SPR.FLAT_RECT;
+    GL.blendPremult();
+    // One block head, one short grip, one gold collar. Flat colors, no bevels,
+    // engraving, leather texture or extra face planes.
+    kitShape(rect, x, y, angle, 0, size * 0.17, size * 0.15, size * 0.58, 0, 0.035, 0.12, 0.17, 1);
+    kitShape(rect, x, y, angle, 0, size * 0.17, size * 0.07, size * 0.52, 0, 0.54, 0.75, 0.8, 1);
+    kitShape(rect, x, y, angle, 0, -size * 0.2, size * 0.88, size * 0.39, 0, 0.035, 0.12, 0.17, 1);
+    kitShape(rect, x, y, angle, 0, -size * 0.2, size * 0.78, size * 0.29, 0, 0.57, 0.85, 0.92, 1);
+    kitShape(rect, x, y, angle, 0, -size * 0.315, size * 0.78, size * 0.035, 0, 0.9, 1, 1, 1);
+    kitShape(rect, x, y, angle, 0, size * 0.045, size * 0.19, size * 0.07, 0, 0.95, 0.77, 0.35, 1);
+    kitShape(rect, x, y, angle, 0, size * 0.43, size * 0.19, size * 0.065, 0, 0.57, 0.85, 0.92, 1);
+    GL.blendAdditive();
+  }
+  function drawSimpleSerpent(hz) {
+    var size = 72 * (G.mods.quetzBig ? 1.35 : 1), n = hz.trail.length;
+    GL.blendPremult();
+    // Two continuous flat bands with round joins. No scales, feather combs,
+    // repeated stamps or decorative spine; the moving silhouette is the read.
+    for (var layer = 0; layer < 2; layer++) {
+      for (var i = 0; i + 3 < n; i += 2) {
+        var f = (i + 2) / n, width = size * (0.04 + 0.55 * f);
+        if (layer) width *= 0.68;
+        var r = layer ? 0.19 : 0.025, g = layer ? 0.78 : 0.22, b = layer ? 0.59 : 0.19;
+        kitStroke(hz.trail[i], hz.trail[i + 1], hz.trail[i + 2], hz.trail[i + 3], width, r, g, b, 1);
+        GL.draw(GL.SPR.FLAT_DISC, hz.trail[i + 2], hz.trail[i + 3], width, width, 0, r, g, b, 1);
+      }
+    }
+    var angle = n >= 4 ? Math.atan2(hz.y - hz.trail[n - 3], hz.x - hz.trail[n - 4]) + Math.PI / 2 : 0;
+    // A small, pointed jade head: flat outline/fill and two eye notches, no mane.
+    for (var face = 0; face < 2; face++) {
+      var scale = face ? 0.78 : 1, r = face ? 0.39 : 0.025, g = face ? 0.96 : 0.22, b = face ? 0.73 : 0.19;
+      kitShape(GL.SPR.FLAT_TRIANGLE, hz.x, hz.y, angle, 0, -size * 0.14, size * 0.67 * scale, size * 0.83 * scale, 0, r, g, b, 1);
+      kitShape(GL.SPR.FLAT_TRIANGLE, hz.x, hz.y, angle, 0, size * 0.22, size * 0.67 * scale, size * 0.28 * scale, Math.PI, r, g, b, 1);
+    }
+    for (var side = -1; side <= 1; side += 2)
+      kitShape(GL.SPR.FLAT_RECT, hz.x, hz.y, angle, side * size * 0.14, -size * 0.02, size * 0.045, size * 0.075, 0, 0.025, 0.22, 0.19, 1);
+    GL.blendAdditive();
+  }
   function drawHazards() {
     for (var i = 0; i < hazards.length; i++) {
       var hz = hazards[i]; if (!hz.active) continue;
@@ -1732,43 +1899,7 @@
         GL.draw(GL.SPR.GLOW, hz.x, G.player.y, hz.halfW * 3.2, hz.halfW * 1.1, 0, 1, 0.85, 0.4, 0.38 * pa);   // soft gold footprint band at the cover line (no ring — owner law)
       }
       else if (hz.type === 'serpent' && hz.trail) {
-        var segR2 = 72 * (G.mods.quetzBig ? 1.35 : 1);
-        var bodC = authCell('34-5b-sky-serpent-body'), tailC = authCell('34-5c-sky-serpent-tail');
-        var tlen = hz.trail.length, ti;
-        if (bodC >= 0 || tailC >= 0) {
-          // §9 authored coil: discrete segments along the trail — the tail-tip sprite
-          // at the OLDEST sample (index 0, farthest behind), body sprites toward the
-          // head; each rotated tangent to the coil so it points forward (toward higher
-          // index = nearer the head). Procedural head is drawn below as before.
-          for (ti = 0; ti < tlen; ti += 6) {
-            var fb = ti / Math.max(2, tlen);
-            var szb = segR2 * (1.4 + 0.5 * fb);
-            var nxb = (ti + 6 < tlen) ? hz.trail[ti + 6] : hz.x, nyb = (ti + 6 < tlen) ? hz.trail[ti + 7] : hz.y;
-            var sang = Math.atan2(nyb - hz.trail[ti + 1], nxb - hz.trail[ti]) + Math.PI / 2;
-            GL.draw(GL.SPR.GLOW, hz.trail[ti], hz.trail[ti + 1], szb * 0.9, szb * 0.9, 0, 0.35, 1, 0.75, 0.4);
-            var seg = (ti === 0 && tailC >= 0) ? tailC : (bodC >= 0 ? bodC : tailC);
-            GL.draw(seg, hz.trail[ti], hz.trail[ti + 1], szb, szb, sang, 1, 1, 1, 1);
-          }
-        } else {
-        for (ti = 0; ti < tlen; ti += 2) {
-          var f = ti / Math.max(2, tlen);
-          var col = Patterns.hue(hz.hue + f * 0.6);
-          var sz = segR2 * (0.6 + 0.4 * f);
-          GL.draw(GL.SPR.GLOW, hz.trail[ti], hz.trail[ti + 1], sz * 1.6, sz * 1.6, 0, col[0], col[1], col[2], 0.5);
-          GL.draw(GL.SPR.CORE, hz.trail[ti], hz.trail[ti + 1], sz * 0.7, sz * 0.7, 0, col[0], col[1], col[2], 0.8);
-        }
-        }
-        // head — authored Sky Serpent head (§9, nose-up → rotate to travel); the
-        // trailing coil above stays procedural. Procedural core on miss.
-        var shc = authCell('34-5-sky-serpent-head');
-        if (shc >= 0) {
-          var tln = hz.trail.length;
-          var shang = tln >= 4 ? Math.atan2(hz.y - hz.trail[tln - 3], hz.x - hz.trail[tln - 4]) + Math.PI / 2 : 0;
-          GL.draw(GL.SPR.GLOW, hz.x, hz.y, segR2 * 1.7, segR2 * 1.7, 0, 0.35, 1, 0.75, 0.5);
-          GL.draw(shc, hz.x, hz.y, segR2 * 2.1, segR2 * 2.1, shang, 1, 1, 1, 1);
-        } else {
-          GL.draw(GL.SPR.CORE, hz.x, hz.y, segR2, segR2, 0, 1, 1, 0.9, 0.9);
-        }
+        drawSimpleSerpent(hz);
       }
       else if (hz.type === 'zap') {
         // a thin charged boundary ring + faint core — the crackle IS the bolts spawned
@@ -1795,8 +1926,14 @@
         var swmx = hz.cx + swux * hz.len * 0.5, swmy = hz.cy + swuy * hz.len * 0.5;
         var swAng = hz.ang + Math.PI / 2;
         if (swc >= 0) {
-          GL.draw(GL.SPR.GLOW, swmx, swmy, hz.r * 3.2, hz.len * 1.02, swAng, 0.3, 0.95, 0.55, 0.34);
-          GL.draw(swc, swmx, swmy, hz.len * 1.08, hz.len * 1.08, swAng, 1, 1, 1, 0.98);
+          // Clockwise travel means the cutting edge must face screen-right when
+          // upright. Mirror only the art's local X, never the pivot or hit segment.
+          var from = Math.max(hz.ang0, hz.ang - 0.42);
+          kitArc(hz.cx, hz.cy, hz.len * 0.88, from, hz.ang, 24, [0.12, 0.65, 0.4], 0.24);
+          if (hz.ang > from + 0.04) kitArc(hz.cx, hz.cy, hz.len * 0.94, from + 0.04, hz.ang, 5, [0.66, 1, 0.77], 0.55);
+          GL.blendPremult();
+          GL.draw(swc, swmx, swmy, -hz.len * 1.08, hz.len * 1.08, swAng, 1, 1, 1, 0.98);
+          GL.blendAdditive();
           continue;
         }
         for (var sd = hz.len * 0.12; sd < hz.len; sd += 70) {
@@ -1871,23 +2008,54 @@
   }
   function drawRaBeam() {
     if (!G.ra.active) return;
-    var x = G.ra.tx, cy = (G.ra.ty0 + G.ra.ty1) / 2, hh = Math.abs(G.ra.ty0 - G.ra.ty1) + 20;
-    var pulse = 0.8 + 0.2 * Math.sin(G.time * 40), ramp = G.ra.ramp;
-    // COLOR (BOONS.md §RA, owner 2026-07-19 "laser should be way more red"): the sun as a
-    // FURNACE, never honey-gold — deep solar red (KINDLE) → red-orange (FLARE) → hot red-white
-    // (SOLAR) → white-hot core inside a red corona (CORONA), + a rotating corona flare. A
-    // sanctioned god-hue exception; the notch-glyphs below stay gold. Tier/lens math untouched.
-    // KEY: keep g≈b on every layer so the hue rides the RED→pink→white line and never
-    // drifts to amber/orange (g>b) — the owner's "way more red" is a furnace, not honey.
-    GL.draw(GL.SPR.GLOW, x, cy, 104 + ramp * 52, hh, 0, 1, 0.08 + 0.12 * ramp, 0.05 + 0.10 * ramp, 0.62 * pulse);  // deep blood-red corona sheath (wide)
-    GL.draw(GL.SPR.CORE, x, cy, 44 + ramp * 22, hh, 0, 1, 0.15 + 0.40 * ramp, 0.12 + 0.40 * ramp, 0.82 * pulse);   // deep red → red-white beam
-    GL.draw(GL.SPR.CORE, x, cy, 15 + ramp * 11, hh, 0, 1, 0.45 + 0.55 * ramp, 0.42 + 0.55 * ramp, pulse);          // core climbs to white-hot
-    GL.draw(GL.SPR.GLOW, x, G.ra.ty1, 130, 130, 0, 1, 0.14 + 0.18 * ramp, 0.10 + 0.16 * ramp, 0.7);                // red impact bloom
-    GL.draw(GL.SPR.RING, x, G.ra.ty0, 70 + ramp * 70, 70 + ramp * 70, G.time * 3, 1, 0.22, 0.16, 0.24 + 0.40 * ramp);   // rotating red corona flare (intensifies with ramp)
-    // THE LENS — 1..4 gold notch-glyphs riding the beam (occlusion-proof tier count).
-    for (var ni = 0; ni <= (G.ra.tier || 0); ni++) {
-      var ny = G.ra.ty0 - 40 - ni * 34;
-      GL.draw(GL.SPR.GOLD, x, ny, 20, 26, 0, 1, 0.85, 0.4, 0.9);
+    // The simulation muzzle predates the enlarged ship artwork. Keep its hit
+    // geometry untouched. The painted nose is 45% above the sprite centre;
+    // using the quad edge includes transparent padding and detaches the beam.
+    var x = G.ra.tx, y0 = Math.min(G.ra.ty0, G.player.y - shipDrawSize(45)), y1 = G.ra.ty1;
+    var length = y0 - y1;
+    if (length < 1) return;
+    var tier = G.ra.tier || 0, heat = Math.max(0, Math.min(1, G.ra.ramp));
+    var width = 12 + heat * 12, mid = (y0 + y1) / 2, t = G.time;
+    // Concentrated white-gold sunlight. A straight core carries the hit lane;
+    // heat builds in the mantle and contact flare, not a pulsing red oval.
+    // Constant-width mantle with flat ends too: never stretch an oval along
+    // the beam, since that makes even a rectangular core read as a needle.
+    GL.draw(GL.SPR.FLAT_RECT, x, mid, width + 24, length, 0, 1, 0.54, 0.08, 0.06 + heat * 0.025);
+    GL.draw(GL.SPR.FLAT_RECT, x, mid, width + 15, length, 0, 1, 0.7, 0.17, 0.1);
+    GL.draw(GL.SPR.FLAT_RECT, x, mid, width + 9, length, 0, 1, 0.67, 0.12, 0.46);
+    GL.draw(GL.SPR.FLAT_RECT, x, mid, width, length, 0, 1, 0.96, 0.69, 0.96);
+    GL.draw(GL.SPR.FLAT_RECT, x, mid, width * 0.42, length, 0, 1, 1, 0.96, 1);
+    // Sliding filaments on either edge travel toward the hit, not back to the ship.
+    for (var side = -1; side <= 1; side += 2) {
+      for (var p = 0; p < 4; p++) {
+        var f = (t * 1.65 + p / 4 + (side > 0 ? 0.12 : 0)) % 1;
+        var py = y0 + (y1 - y0) * f, env = Math.sin(Math.PI * f);
+        var px = x + side * (width * 0.6 + 4 + Math.sin(f * Math.PI) * (3 + heat * 3));
+        var filamentLength = Math.min(55, length * 0.22, 2 * (y0 - py), 2 * (py - y1));
+        if (filamentLength < 1) continue;
+        GL.draw(GL.SPR.STREAK, px, py, 3 + heat * 2, filamentLength, 0,
+          1, 0.81, 0.3, env * (0.45 + heat * 0.35));
+      }
+    }
+    var hasContact = G.ra.target && G.ra.target.active && !G.ra.target.dying && G.ra.target.seq === G.ra.targetSeq;
+    if (hasContact) {
+      // Close targets must not spill the impact glow back over the hull either.
+      var contactScale = Math.min(1, length / 80), size = (26 + heat * 34) * contactScale;
+      GL.draw(GL.SPR.GLOW, x, y1, size * 2.2, size * 2.2, 0, 1, 0.65, 0.12, 0.28);
+      GL.draw(GL.SPR.STREAK, x, y1, 8 + heat * 5, size * 2.4, Math.PI / 2, 1, 0.87, 0.43, 0.9);
+      GL.draw(GL.SPR.FLAT_RECT, x, y1, width + 15, Math.min(5, length), 0, 1, 1, 0.88, 0.95);
+      for (var k = 0; k < 7; k++) {
+        var phase = (t * (1.5 + (k % 3) * 0.22) + k * 0.618) % 1;
+        var a = k * 2.399 + Math.sin(k * 4.1) * 0.25, rad = (8 + phase * (30 + heat * 28)) * contactScale;
+        var alpha = (1 - phase) * (0.3 + heat * 0.4);
+        kitStroke(x + Math.cos(a) * rad, y1 + Math.sin(a) * rad,
+          x + Math.cos(a) * (rad + 7 * contactScale), y1 + Math.sin(a) * (rad + 7 * contactScale), 2, 1, 0.78, 0.24, alpha);
+      }
+    }
+    // A core-width emitter touches the nose without a broad cap hiding it.
+    GL.draw(GL.SPR.FLAT_RECT, x, y0 - 1, width * 0.42, 4, 0, 1, 0.94, 0.67, 0.85);
+    for (var ni = 0; ni <= tier; ni++) {
+      GL.draw(GL.SPR.FLAT_RECT, x + width / 2 + 15, y0 - 16 - ni * 12, 7, 3, 0, 1, 0.78, 0.22, 0.9);
     }
   }
   // HEIMDALL THE BIFRÖST v2 — a full-HEIGHT VERTICAL rainbow BRIDGE (BIFROST_W wide)
@@ -2049,6 +2217,13 @@
     GL.draw(GL.SPR.CORE, g.x, g.y, 26, 26, 0, 1, 1, 0.9, 0.9);
   }
   function markEnemy(e) { if (!e.marked && SFX.status) SFX.status('mark'); e.marked = true; e.markT = G.mods.odinMark ? 10 : 6; }   // Pass4: mark sting on the unmarked→marked edge only (bifrost re-marks stay silent)
+  function addWeakStacks(e, amount, cap, duration) {
+    if (e.dying) return;
+    var current = e.weakStacks || 0;
+    // A lower-cap source may refresh Weak, but must not erase another source's stacks.
+    e.weakStacks = Math.max(current, Math.min(cap, current + amount));
+    e.weak = true; e.weakT = Math.max(e.weakT || 0, duration);
+  }
 
   // LOKI — decoy. By design the Shadow-Twin NEVER attacks (the one sanctioned
   // exception to the damage-floor rule): its boss value is soaking pattern
@@ -2146,7 +2321,7 @@
   // pantheon-2 specials
   function solarFlare() {
     G.flashAll = Math.max(G.flashAll, 0.4); addShake(5);
-    ringShock(G.player.x, G.player.y, [1, 0.95, 0.6], 100, 5000, 0.6);
+    pushKitBurst('solar', G.player.x, G.player.y);
     Engine.enemies.forEach(function (e) { if (e.dying || e.charmed) return; applyBurn(e, 22 * G.stats.spDmg * G.specialR, 3.0); });
   }
   // ANUBIS THE WEIGHING — a hit loads the scales (scaleW += dmg dealt). At the tip:
@@ -2189,7 +2364,7 @@
     // (or a boss that survived a prior gate) gets its own min(0.05·specialR,0.15)·maxhp ceiling.
     Engine.enemies.forEach(function (e) { e.duatDmg = 0; });
     G.flashAll = Math.max(G.flashAll, 0.2); addShake(5);
-    ringShock(d.x, d.y, [0.85, 0.7, 0.3], 90, 3600, 0.5);
+    // The opening/closing sand aperture is animated by drawDuat itself.
     if (SFX.gateRoar) SFX.gateRoar();                     // Pass4: GATE OF DUAT tears open
   }
   // GATE OF DUAT feel (T5, owner 2026-07-21 "this basically doesn't feel like it works").
@@ -2262,37 +2437,41 @@
   }
   function drawDuat() {
     var d = G.duat; if (!d.active) return;
-    var t = G.time, life = Math.min(1, d.timer / 0.4);
-    // TRUE SAND-VORTEX (owner 2026-07-23 "I don't like the scythe graphic get rid of it").
-    // The counter-spinning TILTED ELLIPTICAL shells / streak arms (the `*0.55` y-squash + STREAK
-    // capsules that read as curved scythe blades) are GONE. Rebuilt so it reads as a hole in the
-    // world with sand pouring in: a dark occluding maw with a hot rim, perfectly CIRCULAR concentric
-    // rings (zero eccentricity/tilt — nothing can read as a blade edge), and a dense inward sand-grain
-    // spiral on circular orbits. Additive doctrine + Anubis amber / gold / dark-sand palette.
-    GL.draw(GL.SPR.GLOW, d.x, d.y, 470, 470, 0, 0.6, 0.46, 0.2, 0.5 * life);              // broad CIRCULAR dust haze
-    // DARK OCCLUDING MAW — the hole itself. Punch a dark-sand well into the field with the one
-    // darkening path in the additive pass (premult-over ONE, ONE_MINUS_SRC_ALPHA — same as the
-    // honest hitbox dot), then restore additive so the rim + grains glow on top.
+    var age = d.dur - d.timer, life = Math.min(1, d.timer / 0.55);
+    var opening = Math.min(1, age / 0.32), t = G.time;
+    // A dark aperture with sand streaming IN. No stacked target rings, no tilted
+    // scythe shapes. Flow accelerates toward the throat and vanishes there.
     GL.blendPremult();
-    GL.draw(GL.SPR.CORE, d.x, d.y, 156, 156, 0, 0.05, 0.035, 0.025, 0.92 * life);         // dark-sand well: an absence of world
+    var mouth = authCell('kit-duat-mouth');
+    if (mouth >= 0) GL.draw(mouth, d.x, d.y, 345 * opening, 345 * opening, age * 0.24, 1, 1, 1, life * 0.92);
+    else GL.draw(GL.SPR.CORE, d.x, d.y, 205 * opening, 205 * opening, 0, 0.025, 0.019, 0.028, life * 0.97);
     GL.blendAdditive();
-    GL.draw(GL.SPR.GLOW, d.x, d.y, 150, 150, 0, 1, 0.66, 0.26, 0.6 * life);               // hot amber rim around the maw
-    GL.draw(GL.SPR.CORE, d.x, d.y, 42, 42, t * 3, 1, 0.9, 0.55, 0.5 * life);              // hot inner ember at the throat
-    // CONCENTRIC CIRCULAR RINGS — perfectly round (equal w/h, zero rotation), radius PULSING per
-    // ring for a subtle radial-distortion / suck-in read. Warm sand-gold, fading outward.
-    for (var ri = 0; ri < 5; ri++) {
-      var rr = (92 + ri * 78) * (1 + 0.06 * Math.sin(t * 3 - ri * 0.9));                  // gentle in/out breathing
-      GL.draw(GL.SPR.RING, d.x, d.y, rr, rr, 0, 0.92, 0.74 - ri * 0.04, 0.34, (0.5 - ri * 0.07) * life);
+    for (var stream = 0; stream < 9; stream++) {
+      var offset = stream * TAU / 9;
+      for (var k = 0; k < 13; k++) {
+        var q = (k / 13 + age * 0.44 + stream * 0.019) % 1;
+        var rr = 42 + 235 * Math.pow(1 - q, 1.55);
+        var a = offset + q * 2.5 + t * 0.09;
+        var q2 = Math.min(1, q + 0.026), rr2 = 42 + 235 * Math.pow(1 - q2, 1.55), a2 = offset + q2 * 2.5 + t * 0.09;
+        var env = Math.sin(q * Math.PI) * opening * life;
+        kitStroke(d.x + Math.cos(a) * rr, d.y + Math.sin(a) * rr,
+          d.x + Math.cos(a2) * rr2, d.y + Math.sin(a2) * rr2,
+          2.2 + 2.5 * q, 0.95, 0.64 + q * 0.18, 0.3, env * 0.65);
+      }
     }
-    // DENSE INWARD SAND SPIRAL — grains streaming down the throat on CIRCULAR orbits (no y-squash),
-    // radius shrinking toward the maw so they read as pouring in. Amped from the old 12 wisps to 40,
-    // brightening as they fall (the life-drain wisps torn off gated foes still stream in from updateDuat).
-    for (var w = 0; w < 40; w++) {
-      var spiral = 1 - ((t * 0.55 + w * 0.137) % 1);                                      // 1 (outer) → 0 (maw): radius collapses inward
-      var wr = 34 + spiral * 250, wa = t * 1.5 + w * 0.61 + spiral * 5.0;                 // twist tightens toward the center
-      var wx = d.x + Math.cos(wa) * wr, wy = d.y + Math.sin(wa) * wr;                     // CIRCULAR — no eccentricity
-      var wsz = 4 + spiral * 7;
-      GL.draw(GL.SPR.CORE, wx, wy, wsz, wsz, 0, 0.96, 0.82 + 0.1 * spiral, 0.45, 0.5 * life * (0.3 + 0.7 * (1 - spiral)));
+    // Sparse grain field, not a glowing particle soup. Deterministic dust lanes.
+    for (var grain = 0; grain < 76; grain++) {
+      var f = (grain * 0.618034 + age * (0.3 + (grain % 5) * 0.025)) % 1;
+      var rad = 35 + 295 * Math.pow(1 - f, 1.6), ga = grain * 2.39996 + f * 2.5;
+      var sz = 1.5 + (grain % 3), alpha = Math.sin(f * Math.PI) * life * opening;
+      GL.draw(GL.SPR.CORE, d.x + Math.cos(ga) * rad, d.y + Math.sin(ga) * rad,
+        sz, sz * 1.7, ga, 1, 0.8, 0.44, alpha * 0.9);
+    }
+    // Four uneven hot lips imply a torn opening; none completes a targeting ring.
+    for (var lip = 0; lip < 4; lip++) {
+      var la = lip * Math.PI / 2 + t * 0.12;
+      kitArc(d.x, d.y, 64 * opening, la, la + 0.95, 5, [0.9, 0.58, 0.23], life * 0.8);
+      kitArc(d.x, d.y, 58 * opening, la + 0.16, la + 0.62, 2, [1, 0.87, 0.57], life * 0.7);
     }
   }
   function shadowTwin() {
@@ -2332,7 +2511,7 @@
         wk.timer = 1.5; wk.dur = 1.5; wk.tick = 0; wk.dmg = LANCE_DMG * 0.5 * G.stats.spDmg * G.specialR;
       }
     }
-    ringShock(hz.cx, hz.cy, [0.3, 0.95, 0.55], 70, 3000, 0.5);
+    // The blade's trailing arc carries the cast; no unrelated expanding ring.
     addShake(6);
   }
   // JADE EMPEROR — IMPERIAL JUDGEMENT (Leigong's Thunder Court). Two dark storm-clouds
@@ -2346,8 +2525,8 @@
     if (j.boltT <= 0) j.boltT = 0.8;
     if (G.jclouds.length < 2) {
       G.jclouds.length = 0;
-      G.jclouds.push({ x: W * 0.22, y: H * 0.16, seed: 0.3 });
-      G.jclouds.push({ x: W * 0.78, y: H * 0.16, seed: 2.1 });
+      G.jclouds.push({ x: W * 0.22, y: H * 0.16, seed: 0.3, born: G.time, flashT: 0 });
+      G.jclouds.push({ x: W * 0.78, y: H * 0.16, seed: 2.1, born: G.time, flashT: 0 });
     }
     flash(W * 0.22, H * 0.16, [0.5, 0.4, 0.7], 160, 0.4);
     flash(W * 0.78, H * 0.16, [0.5, 0.4, 0.7], 160, 0.4);
@@ -2361,6 +2540,7 @@
   }
   function updateJudgement(dt) {
     var j = G.judge; if (!j.active) return;
+    for (var vf = 0; vf < G.jclouds.length; vf++) G.jclouds[vf].flashT = Math.max(0, (G.jclouds[vf].flashT || 0) - dt);
     j.timer -= dt;
     if (j.timer <= 0) {   // dissipate — recall the clouds (§5 fly-up + gem implode)
       for (var c = 0; c < G.jclouds.length; c++) recallFx(G.jclouds[c].x, G.jclouds[c].y);
@@ -2374,6 +2554,7 @@
       var cloud = G.jclouds[j.side];
       var target = G.mods.jadeMirror ? highestCurHpEnemy() : randomLiveFoe();   // MIRROR REFLECTION → strongest LIVE foe (current hp)
       if (target && !target.dying) {
+        cloud.flashT = 0.2;
         var dmg = LANCE_DMG * 1.2 * G.stats.spDmg * G.specialR;
         if (G.mods.jadeMirror) {   // the zhaoyaojing hangs between the clouds; the bolt banks off it
           var mx = (G.jclouds[0].x + G.jclouds[1].x) / 2, my = (G.jclouds[0].y + G.jclouds[1].y) / 2 + 46;
@@ -2394,13 +2575,19 @@
   }
   // §5 owned-entity draw: roiling dark puffs + gold under-flicker, cyan heart in the core.
   function drawJudgement() {
-    var t = G.time, life = Math.min(1, G.judge.timer);
+    var t = G.time, life = Math.min(1, G.judge.timer / 0.55);
     var cc = authCell('34-3-thunder-court-storm-cloud');   // §9 storm-cloud sprite
     for (var i = 0; i < G.jclouds.length; i++) {
-      var c = G.jclouds[i], flick = 0.5 + 0.5 * Math.sin(t * 3 + c.seed);
-      GL.draw(GL.SPR.GLOW, c.x, c.y + 16, 140, 74, 0, 0.5 * flick, 0.36 * flick, 0.12, 0.5 * life);   // gold under-flicker
+      var c = G.jclouds[i], entrance = Math.min(1, (t - (c.born == null ? t - 1 : c.born)) / 0.38);
+      var next = i === (G.judge.side ^ 1), charge = next ? Math.max(0, 1 - G.judge.boltT / 0.26) : 0;
+      var strike = Math.min(1, (c.flashT || 0) / 0.2), alpha = life * entrance;
+      var cy = c.y - 28 * (1 - entrance) + Math.sin(t * 1.8 + c.seed) * 5;
+      var span = 390 * (0.9 + 0.1 * entrance + strike * 0.025);
       if (cc >= 0) {
-        GL.draw(cc, c.x, c.y, 180, 180, 0, 1, 1, 1, life);                                            // authored cumulus slab
+        GL.blendPremult();
+        GL.draw(cc, c.x, cy, (i ? -1 : 1) * span, span, Math.sin(t * 1.1 + c.seed) * 0.025, 1, 1, 1, alpha);
+        GL.blendAdditive();
+        if (strike > 0) GL.draw(cc, c.x, cy, (i ? -1 : 1) * span, span, 0, 0.62, 0.74, 1, strike * alpha * 0.32);
       } else {
         for (var p = 0; p < 4; p++) {
           var pa = t * 0.6 + c.seed + p * 1.6, px = c.x + Math.cos(pa) * 36, py = c.y + Math.sin(pa) * 16;
@@ -2408,7 +2595,15 @@
           GL.draw(GL.SPR.CORE, px, py, 32, 24, 0, 0.06, 0.05, 0.09, 0.55 * life);
         }
       }
-      drawOwnedGem(c.x, c.y, life);                                                                    // §5 cyan heart glint
+      // Condensing charge gathers at the underside; the same point blooms when
+      // the live alternating strike fires, instead of an unrelated idle flicker.
+      for (var w = 0; w < 3; w++) {
+        var wx = c.x + (w - 1) * 68, wy = cy + 23 + Math.sin(t * 2 + w) * 3;
+        kitStroke(wx - 22, wy, wx + 22, wy - 4, 2, 0.69, 0.78, 1, alpha * (0.18 + charge * 0.6));
+      }
+      GL.draw(GL.SPR.SPARK, c.x, cy + 24, 16 + 34 * charge + 40 * strike, 16 + 34 * charge + 40 * strike,
+        0, 0.85, 0.91, 1, alpha * (charge * 0.7 + strike));
+      drawOwnedGem(c.x, cy + 20, alpha * 0.6);
     }
     // MIRROR REFLECTION (jadeMirror): the zhaoyaojing hangs between the two clouds,
     // the bank point the chain-bolts ricochet off. §9 disc sprite; gem stays on top.
@@ -2603,7 +2798,7 @@
   var MJOLNIR_BIG_RETURN_V = 1300;
   function throwHammer(big, dmg, kb) {
     var tgt = big ? highestHpEnemy() : null;
-    G.hammers.push({ x: G.player.x, y: G.player.y - 24, state: 'out', vy: -(big ? MJOLNIR_BIG_OUT_V : MJOLNIR_OUT_V), retV: big ? MJOLNIR_BIG_RETURN_V : MJOLNIR_RETURN_V, t: 0, dmg: dmg, kb: kb, big: big, spin: 0, hoverT: 0, hit: [], target: tgt, targetSeq: tgt ? tgt.seq : 0 });
+    G.hammers.push({ x: G.player.x, y: G.player.y - 24, state: 'out', vy: -(big ? MJOLNIR_BIG_OUT_V : MJOLNIR_OUT_V), retV: big ? MJOLNIR_BIG_RETURN_V : MJOLNIR_RETURN_V, t: 0, dmg: dmg, kb: kb, big: big, stun: big || G.mods.thorStun, spin: 0, hoverT: 0, hit: [], target: tgt, targetSeq: tgt ? tgt.seq : 0 });
   }
   function giantsBane() {
     var dmg = LANCE_DMG * 3.0 * G.stats.spDmg * G.specialR * (G.mods.thorBelt ? 1.4 : 1);
@@ -2612,16 +2807,17 @@
   }
   function hammerImpact(h, ix, iy, crunch, e) {
     addShake(h.big ? (crunch ? 7 : 3) : 2);
-    ringShock(ix, iy, [0.62, 0.66, 0.78], crunch ? 120 : (h.big ? 70 : 42), crunch ? 3400 : 1700, 0.4);
+    pushKitBurst(crunch ? 'crunch' : 'hammer', ix, iy);
     if (crunch || Math.random() < 0.5) SFX.thud();
     if (e && !e.dying) {
       damageEnemy(e, h.dmg * (crunch ? 1.6 : 1), false);
+      if (h.stun && !e.dying && !e.boss) e.stunT = Math.max(e.stunT, 1.2);
       pushDisp(e, G.player.x, G.player.y, h.kb); e.impactDmg = h.dmg * 0.5;
       if (G.duos.stormfathers) chainLightning(e, h.dmg * 0.35, false);   // STORMFATHERS
       if (G.duos.heraldOfRagnarok) miniHornShove(ix, iy);                // HERALD OF RAGNARÖK
     }
     if (crunch && h.big) {
-      Engine.enemies.forEach(function (o) { if (o.dying || o.charmed || o === e) return; var dx = o.x - ix, dy = o.y - iy; if (dx * dx + dy * dy < 260 * 260) { damageEnemy(o, h.dmg * 0.6, false); pushDisp(o, ix, iy, h.kb * 1.1); o.impactDmg = h.dmg * 0.4; } });
+      Engine.enemies.forEach(function (o) { if (o.dying || o.charmed || o === e) return; var dx = o.x - ix, dy = o.y - iy; if (dx * dx + dy * dy < 260 * 260) { damageEnemy(o, h.dmg * 0.6, false); if (h.stun && !o.dying && !o.boss) o.stunT = Math.max(o.stunT, 1.2); pushDisp(o, ix, iy, h.kb * 1.1); o.impactDmg = h.dmg * 0.4; } });
     }
   }
   function hammerSweep(h) {
@@ -2657,13 +2853,9 @@
     }
   }
   function drawHammers() {
-    var mc = authCell('33-1-mjolnir');   // §9 Mjölnir sprite (tumbling side profile)
     for (var i = 0; i < G.hammers.length; i++) {
-      var h = G.hammers[i], sz = h.big ? 130 : 78;
-      GL.draw(GL.SPR.GLOW, h.x, h.y, sz * 1.5, sz * 1.5, 0, 0.5, 0.6, 0.75, 0.5);
-      if (mc >= 0) GL.draw(mc, h.x, h.y, sz * 1.15, sz * 1.15, h.spin, 1, 1, 1, 1);
-      else GL.draw(GL.SPR.SHIP_MID, h.x, h.y, sz, sz, h.spin, 0.6, 0.66, 0.8, 1);
-      GL.draw(GL.SPR.CORE, h.x, h.y, sz * 0.4, sz * 0.4, 0, 0.95, 0.35, 0.3, 0.7);
+      var h = G.hammers[i], size = h.big ? 130 : 78;
+      drawSimpleHammer(h.x, h.y, size, h.spin * 0.55);
     }
   }
   // RAGNAROK duo — a Giant's Bane crunch at a point (70% power)
@@ -2843,8 +3035,8 @@
           var dx = e.x - p.x, dy = e.y - p.y, inside = (dx * dx + dy * dy < 200 * 200);
           if (!inside) { if (e.adoreT > 0) e.adoreT = Math.max(0, e.adoreT - dt); return; }
           if (e.boss) {
-            e.adoreT += dt;   // bosses accrue a Weak stack (cap 3) per ~0.6s dwelt inside the aura
-            if (e.adoreT >= 0.6) { e.adoreT = 0; e.weakStacks = Math.min(3, (e.weakStacks || 0) + 1); e.weak = true; e.weakT = 6; flash(e.x, e.y, [1, 0.4, 0.7], 70, 0.2); }
+            e.adoreT += dt;   // bosses accrue a Weak stack (cap 2) per ~0.6s dwelt inside the aura
+            if (e.adoreT >= 0.6) { e.adoreT = 0; addWeakStacks(e, 1, 2, 6); flash(e.x, e.y, [1, 0.4, 0.7], 70, 0.2); }
           } else {
             e.adoreT += dt;
             if (e.adoreT >= 0.4) charmEnemy(e);
@@ -3289,8 +3481,8 @@
     if (guan) dmg *= 1.7 * G.attackR * (isClone ? 0.55 : 1) * ((G.mods.guanOath && focus) ? 1.3 : 1);
     var ww = (guan && G.mods.guanWide) ? 1.3 : 1;         // wider crescents
 
-    // ARTEMIS THE HUNT — silver arrow-needles (kind 9). Straight until a Hunted is
-    // branded, then they home to it (weak on purpose; the ramp is the skill).
+    // ARTEMIS — silver arrow-needles (kind 9). Straight until the first attack Mark,
+    // then gently home to that foe. No Hunt Depth or kill-chain mechanics.
     if (artemis) {
       var reach = G.mods.artemisCrit ? 0.6 : 0;           // HUNTER'S REACH re-anchor: +0.6 turn
       var admg = (focus ? 1.0 : 1.05) * SHOT_DMG * G.stats.atkDmg * G.attackR * dmgScale;
@@ -3302,7 +3494,7 @@
         as.vx = Math.cos(aa) * SHOT_SPEED; as.vy = Math.sin(aa) * SHOT_SPEED;
         as.radius = 12; as.scale = 40; as.damage = admg; as.age = 0; as.life = 1.7;
         as.pierce = 1; as.kind = 9; as.faction = 0; as.big = false;
-        as.homing = true; as.turn = 2.2 + reach; as.huntHome = true;
+        as.homing = true; as.turn = 2.2 + reach; as.artemisHome = true;
         as.r = 0.85; as.g = 0.9; as.b = 1.0;
       }
       return;
@@ -3359,7 +3551,7 @@
       s.faction = 0; s.big = false; s.cloneShot = !!isClone;
       s.crescent = guan;
       if (guan) { s.r = 0.30; s.g = 0.95; s.b = 0.55; }
-      else if (quetz) { s.weave = 1; s.phase = i * (TAU / 3); s.r = 0.4; s.g = 1.0; s.b = 0.7; }   // locked triple-helix (no RNG phase)
+      else if (quetz) { s.plume = true; s.weave = 1; s.phase = i * (TAU / 3); s.r = 0.4; s.g = 1.0; s.b = 0.7; }   // locked triple-helix (no RNG phase)
       else if (G.attackGod === 'heimdall') { s.r = 1.0; s.g = 0.92; s.b = 0.8; }                    // dawn-gold below the bridge
       else { s.r = 0.6; s.g = 1.0; s.b = 1.0; }
     }
@@ -3446,9 +3638,9 @@
     Engine.shots.forEach(function (s) {
       s.age += dt;
       if (s.homing && s.turn > 0) {                       // Jade edict homing
-        // ARTEMIS arrows steer ONLY toward the branded Hunted; with none branded
-        // they fly dead straight (huntHome, no fallback) — the "straight until branded" law.
-        var t = s.huntHome ? huntFoe() : s.loosed ? loosedTarget() : nearestEnemy(s.x, s.y);
+        // ARTEMIS arrows steer ONLY toward their reserved Mark; with no target
+        // they fly dead straight (artemisHome, no fallback) — the "straight until branded" law.
+        var t = s.artemisHome ? artemisTarget() : s.loosed ? loosedTarget() : nearestEnemy(s.x, s.y);
         // LOOSED ARROW only re-aims at a target roughly AHEAD (forward cone) — it
         // pierces through, never U-turns back onto a foe it already passed.
         if (t && s.loosed) { var fdx = aimTargetX(t) - s.x, fdy = aimTargetY(t) - s.y; if (fdx * s.vx + fdy * s.vy <= 0) t = null; }
@@ -3535,7 +3727,7 @@
     // ULTIMATES (§2.5) per-foe fields — GREAT HUNT column tag, ADORATION dwell timer.
     // Reset ONLY here on pool reuse (cleared live at wave/swap).
     e.huntTag = false; e.adoreT = 0;
-    e.burnT = 0; e.burnDps = 0; e.trickStacks = 0; e.stunT = 0; e.trickBudget = 0; e.judgeT = 0; e.sealT = 0;
+    e.burnT = 0; e.burnDps = 0; e.trickStacks = 0; e.stunT = 0; e.trickBudget = 0; e.judgeT = 0;
     e.gateT = 0;   // GATE OF DUAT: >0 = being dragged this window (suspends scripted pathing so the pull wins)
     // ODIN NINE NIGHTS — carved runes (0..9) are PERMANENT for this enemy's life
     // (per-enemy knowledge; reset ONLY here on pool reuse, never by phase transitions).
@@ -3712,7 +3904,6 @@
     }
     if (e.stunT > 0) e.stunT -= dt;
     if (e.gateT > 0) e.gateT -= dt;   // GATE OF DUAT drag flag decays (refreshed each frame while gated)
-    if (e.sealT > 0) e.sealT -= dt;   // JADE edict style-C seal-mark fade (drawn in drawKitOverlays)
     // Terror has one timer for every enemy; bosses keep moving and firing.
     if (e.terrorT > 0) e.terrorT -= dt;
     // charm meter slow decay
@@ -5239,8 +5430,8 @@
       if (G.mods.raSpread && e.burnT > 0) spreadBurn(e);
       if (G.attackGod === 'ares') addFrenzy();                              // WAR-HEAT gravy
       if (G.ult.god === 'aristeia') G.ult.t = Math.min(8, G.ult.t + 0.3);   // ARISTEIA ultimate: each kill extends the contract (cap 8s)
-      // ARTEMIS THE HUNT — a Hunted kill splinters + chains the brand to the next prey.
-      if (G.attackGod === 'artemis' && G.hunt.foe === e && G.hunt.foeSeq === e.seq) huntChainOnKill(e);
+      // Do not auto-chain: the next foe actually struck receives Artemis's attack Mark.
+      if (G.artemisMark.foe === e && G.artemisMark.foeSeq === e.seq) clearArtemisTarget();
       if (G.charms.charmOdin) G.ravenKills++;                               // HUGINN & MUNINN MEMORY
       if (G.mods.artemisSpread && e.marked) spreadMark(e);
       if (G.mods.zeusField) spawnZapField(e.x, e.y);
@@ -5335,17 +5526,14 @@
       if (b.gild && ((((G.time * 60) | 0) + b._i) & 3) === 0) flash(b.x, b.y, [1, 0.8, 0.34], 15, 0.14);
       // Loki flipped (friendly) bullets: hit enemies, ignore the player. During a
       // TALOS nail phase they may only damage the nail (the body is immune).
-      // DORMANT until Pass 2 PILFER — nothing sets b.friendly=true this pass (Confuse
-      // is deleted), so this branch never runs; the per-frame cost is just the boolean
-      // check below. KEEP it: PILFER's bullet-snatch is its consumer next pass.
       if (b.friendly) {
-        // PILFER — gentle-home (2.2 rad/s) to the nearest OTHER live enemy.
-        var htgt = null, hbd = 1e18;
-        Engine.enemies.forEach(function (e) { if (e.dying || e.charmed || (e._i === b.srcId && e.seq === b.srcSeq)) return; var dx = e.x - b.x, dy = e.y - b.y, d = dx * dx + dy * dy; if (d < hbd) { hbd = d; htgt = e; } });
+        // PILFER returns fire to its emitter; pooled-slot reuse must not retarget it.
+        var source = Engine.enemies.items[b.srcId];
+        var htgt = source && source.active && !source.dying && !source.charmed && source.seq === b.srcSeq ? source : nearestEnemy(b.x, b.y);
         if (htgt) { var des = Math.atan2(htgt.y - b.y, htgt.x - b.x), dd = des - b.dir; while (dd > Math.PI) dd -= TAU; while (dd < -Math.PI) dd += TAU; var mx = 2.2 * dt; if (dd > mx) dd = mx; if (dd < -mx) dd = -mx; b.dir += dd; }
         var hitF = false;
         Engine.enemies.forEach(function (e) {
-          if (hitF || e.dying || e.charmed || (e._i === b.srcId && e.seq === b.srcSeq)) return;
+          if (hitF || e.dying || e.charmed) return;
           var tx = e.nailActive ? e.nailX : e.x, ty = e.nailActive ? e.nailY : e.y, tr = e.nailActive ? e.nailR : e.radius;
           if (Engine.hit(b.x, b.y, b.radius, tx, ty, tr)) {
             var fd = flipDmg;
@@ -5398,7 +5586,7 @@
     if (s.faction === 0 && G.attackGod === 'aphrodite' && (e.weak || e.charmMeter > 0)) dmg *= 1.15;
     if (s.kind === 5) { // HEARTSEEKER — charm a minion, or Weaken + gild a boss's bullets
       if (e.boss) {
-        e.weakStacks = Math.min(3, (e.weakStacks || 0) + 1); e.weak = true; e.weakT = 6;
+        addWeakStacks(e, 1, 2, 6);
         damageEnemy(e, dmg, false);
         // sweep enemy bullets within 220px of the boss to gold
         Engine.bullets.forEach(function (b) { if (b.friendly) return; var dx = b.x - e.x, dy = b.y - e.y; if (dx * dx + dy * dy < 220 * 220) { if (Engine.gold.freeTop > 0) spawnGold(b.x, b.y, 1, 0.4); spark(b.x, b.y, [1, 0.5, 0.85], 2, 160, 16); Engine.bullets.release(b); } });
@@ -5406,22 +5594,14 @@
       } else { charmEnemy(e, G.specialR); flash(e.x, e.y, [1, 0.5, 0.85], 60, 0.2); }   // §7 fix #2: HEARTSEEKER charm duration rides specialR
       return;
     }
-    // ARTEMIS THE LOOSED ARROW — the first foe struck becomes the Hunted at full ramp.
-    if (s.kind === 4 && s.loosed && !s.brandedFirst && G.attackGod === 'artemis') { s.brandedFirst = true; brandHunted(e, 8 + (G.mods.artemisCrit ? 2 : 0)); }
-    if (s.kind === 7) { // JADE imperial edict — Stun the non-boss it condemns
-      damageEnemy(e, dmg, isCrit);
-      if (!e.boss && !e.dying) { e.stunT = Math.max(e.stunT, 0.9); flash(e.x, e.y, [0.8, 0.6, 1], 70, 0.2); }
-      if (GL.edictStyle === 'C' && !e.dying) {   // seal-stamp chop: stamp state now, DRAW the ring at render (drawKitOverlays)
-        flash(e.x, e.y, [1, 0.85, 0.4], 90, 0.22); e.sealT = 0.3;
-      }
+    if (s.kind === 7) { // JADE imperial edict — loads the shared Weighing meter.
+      anubisWeighHit(e, dmg, isCrit);
       return;
     }
     // ANUBIS THE WEIGHING — amber ankh-bolt loads the scales; the Verdict fires at the tip.
     if (s.kind === 17 && s.faction === 0) { anubisWeighHit(e, dmg, isCrit); return; }
     if (s.markHit) { e.marked = true; e.markT = 6; }
-    // ARTEMIS THE HUNT — ramp on the branded Hunted / brand-on-first-hit / sticky.
-    // Returns the ramped damage; kill-chain + splinter fire from killEnemy.
-    if (s.kind === 9 && s.faction === 0) dmg = artemisHuntHit(e, dmg);
+    if (s.kind === 9 && s.faction === 0 && G.attackGod === 'artemis') artemisMarkHit(e);
     // QUETZ THE COIL — a quetz weave hit tightens the coil on THIS foe (0..6, ×1.60 max).
     if (s.weave && s.faction === 0 && G.attackGod === 'quetz') dmg = quetzCoilHit(e, dmg);
     // ODIN NINE NIGHTS — permanent per-foe runes: ×(1+0.15·runes), carve every 4th hit.
@@ -5447,63 +5627,25 @@
     e.nodeState = 1; e.nodeT = 0.4; e.nodeDX = dx; e.nodeDY = dy;
   }
 
-  // ================= ARTEMIS — THE HUNT =================
-  function huntFoe() { var h = G.hunt; return (h.foe && h.foe.active && !h.foe.dying && h.foe.seq === h.foeSeq) ? h.foe : null; }
-  function clearHunt() { var h = G.hunt; h.foe = null; h.foeSeq = 0; h.stacks = 0; h.stackT = 0; h.stray = null; h.straySeq = 0; h.swap = 0; }
-  function brandHunted(e, stacks) {
-    var h = G.hunt;
-    h.foe = e; h.foeSeq = e.seq; h.stacks = Math.max(0, Math.min(8 + (G.mods.artemisCrit ? 2 : 0), stacks || 0)); h.stackT = 3.0;
-    h.stray = null; h.straySeq = 0; h.swap = 0;
-    flash(e.x, e.y, [0.8, 0.9, 1.0], 80, 0.22); SFX.hit();
+  // ================= ARTEMIS — SINGLE ATTACK MARK =================
+  function artemisTarget() {
+    var m = G.artemisMark, e = m.foe;
+    return e && e.active && !e.dying && !e.charmed && e.seq === m.foeSeq ? e : null;
   }
-  // Called on a kind-9 arrow hit; returns ramped damage. Manages brand/ramp/sticky.
-  function artemisHuntHit(e, dmg) {
-    var h = G.hunt, hunted = huntFoe();
-    if (!hunted) { brandHunted(e, 0); return dmg; }              // first foe hit → the Hunted at 0
-    if (e === hunted) {
-      var per = G.mods.artemisMulti ? 0.18 : 0.12;              // DEEPER HUNT re-anchor
-      var mult = 1 + per * h.stacks;                             // ramp uses current depth
-      var cap = 8 + (G.mods.artemisCrit ? 2 : 0);
-      h.stacks = Math.min(cap, h.stacks + 1); h.stackT = 3.0; h.stray = null; h.swap = 0;
-      if (G.mods.artemisRefund && h.stacks >= 6) addCharge(0.1); // re-anchor: 6+ stacks refund charge
-      return dmg * mult;
-    }
-    // STICKY — a stray hit on a non-Hunted foe never re-brands; 3 consecutive on the
-    // SAME other foe abandon the hunt and re-brand it at 0 (a deliberate switch).
-    if (e === h.stray && e.seq === h.straySeq) h.swap++;
-    else { h.stray = e; h.straySeq = e.seq; h.swap = 1; }
-    if (h.swap >= 3) { SFX.graze(); brandHunted(e, 0); }         // slack-string abandon
-    return dmg;
+  function clearArtemisTarget() { G.artemisMark.foe = null; G.artemisMark.foeSeq = 0; }
+  function artemisMarkHit(e) {
+    if (!artemisTarget()) { G.artemisMark.foe = e; G.artemisMark.foeSeq = e.seq; }
+    if (artemisTarget() === e) markEnemy(e);
+  }
+  function updateArtemisTarget() {
+    if (G.attackGod !== 'artemis' || !artemisTarget()) { clearArtemisTarget(); return; }
+    // The attack's one mark lasts until death. Other sources retain normal timers.
+    var e = artemisTarget(); e.marked = true; e.markT = Math.max(e.markT, 6);
   }
   function nearestOtherEnemy(e) {
     var best = null, bd = 1e18;
     Engine.enemies.forEach(function (o) { if (o === e || o.dying || o.charmed) return; var dx = o.x - e.x, dy = o.y - e.y, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = o; } });
     return best;
-  }
-  // On a Hunted death: SPLINTER (stacks silver shards to nearby foes) + CHAIN
-  // (auto-brand the nearest other foe, carrying stacks−1 — or ALL with DEEPER HUNT reach).
-  function huntChainOnKill(e) {
-    var st = G.hunt.stacks;
-    var shardDmg = 0.4 * SHOT_DMG * G.stats.atkDmg * G.attackR;
-    for (var i = 0; i < st; i++) {
-      var t = nearestOtherEnemy(e); if (!t) break;
-      var s = allocShot(); if (!s) break;
-      var a = Math.atan2(t.y - e.y, t.x - e.x) + (Math.random() - 0.5) * 0.5;
-      s.x = e.x; s.y = e.y; s.vx = Math.cos(a) * 1300; s.vy = Math.sin(a) * 1300;
-      s.radius = 10; s.scale = 26; s.damage = shardDmg; s.age = 0; s.life = 0.6;
-      s.r = 0.85; s.g = 0.92; s.b = 1.0; s.pierce = 0; s.kind = 10; s.faction = 0;
-      s.homing = true; s.turn = 6.0; s.huntHome = false;
-      spark(e.x, e.y, [0.85, 0.92, 1], 2, 260, 18);
-    }
-    var carry = G.mods.artemisSpread ? st : Math.max(0, st - 1);   // artemisSpread: carry ALL stacks
-    var nt = nearestOtherEnemy(e);
-    if (nt) brandHunted(nt, carry); else clearHunt();
-  }
-  function updateHunt(dt) {
-    if (G.attackGod !== 'artemis') { if (G.hunt.foe) clearHunt(); return; }
-    var h = G.hunt;
-    if (!huntFoe()) { if (h.foe) clearHunt(); return; }
-    if (h.stackT > 0) { h.stackT -= dt; if (h.stackT <= 0) h.stacks = 0; }
   }
 
   // ================= QUETZ — THE COIL =================
@@ -5537,7 +5679,7 @@
   }
 
   // ================= LOKI — PILFER =================
-  // At the 3rd MISCHIEF mark, snatch the `count` live enemy bullets nearest the foe
+  // At the 3rd MISCHIEF mark, snatch up to `count` of this foe's own bullets
   // within 240px — biased to bullets already >80px from any emitter (never a whiff,
   // never a panic-clear). Each flips friendly, reverses 180°, gently homes to its own kind.
   function lokiPilfer(foe, count) {
@@ -5545,7 +5687,7 @@
     // gather candidates within 240px, scored by distance minus an emitter-proximity bias
     var cand = [];
     Engine.bullets.forEach(function (b) {
-      if (b.friendly) return;
+      if (b.friendly || b.ownerId !== foe.seq) return;
       var dx = b.x - foe.x, dy = b.y - foe.y, d = Math.sqrt(dx * dx + dy * dy);
       if (d > 240) return;
       // the score only needs whether ANY live emitter is within 80px — early-exit the
@@ -5558,11 +5700,10 @@
     cand.sort(function (a, b) { return a.s - b.s; });
     var n = Math.min(count, cand.length);
     // boss self-harm budget: a single cast can bleed a boss for at most 0.5% maxhp.
-    var boss = G.boss;
-    if (boss && !boss.dying) boss.trickBudget = Math.min(boss.maxhp * 0.005, (boss.trickBudget || 0) + boss.maxhp * 0.005);   // clamp: unspent budget never exceeds ONE cast's cap (delayed daggers can't dump multiple casts)
+    if (n > 0 && foe.boss && !foe.dying) foe.trickBudget = foe.maxhp * 0.005;
     for (var i = 0; i < n; i++) {
       var b = cand[i].b;
-      b.friendly = true; b.srcId = foe._i; b.srcSeq = foe.seq;   // stamp seq: a reused pool slot is NOT the source foe (mismatch => no exclusion)
+      b.friendly = true; b.srcId = foe._i; b.srcSeq = foe.seq;   // return target, guarded against pool reuse
       b.r = 0.55; b.g = 1.0; b.b = 0.35;
       b.dir += Math.PI;                              // reverse 180°
       b.flash = 0.15;
@@ -5724,7 +5865,7 @@
     // drop one player-faction shot at (x,y) heading up — lets the harness fire at
     // the nail vs the body and confirm the routing (body=0, nail drains) via collideShots.
     testShot: function (x, y, dmg) {
-      var s = allocShot(); if (!s) return;   // allocShot resets ALL per-shot flags (huntHome/loosed/weave/turn/phase/…) so a recycled slot can't leak state into the verify surface
+      var s = allocShot(); if (!s) return;   // allocShot resets ALL per-shot flags (artemisHome/loosed/weave/turn/phase/…) so a recycled slot can't leak state into the verify surface
       s.x = x; s.y = y; s.vx = 0; s.vy = -1200; s.radius = 12; s.damage = dmg || 1000; s.faction = 0;
       s.pierce = 0; s.kind = 0; s.big = false; s.age = 0; s.life = 2.5; s.grazed = false;
     },
@@ -5829,11 +5970,11 @@
     forceClearBeat: function (kind) { startClearBeat(kind || 'wave'); },   // verify: exercise the wave-boundary state drop
     fireNow: function (focus) { fireShots(!!focus); },
     specialNow: function () { doSpecial(true); },
-    huntInfo: function () { var h = G.hunt; return { foeSeq: h.foe ? h.foeSeq : 0, foeIdx: (h.foe ? h.foe._i : -1), stacks: h.stacks, swap: h.swap }; },
+    artemisMarkInfo: function () { var e = artemisTarget(); return { foeSeq: e ? e.seq : 0, foeIdx: e ? e._i : -1 }; },
     frenzyInfo: function () { return { f: G.frenzy.frenzyF, boost: G.frenzy.boost, pinT: G.frenzy.pinT, stacks: G.frenzy.stacks, prevTier: G.frenzy.prevTier }; },
     setFrenzy: function (f) { G.frenzy.frenzyF = f; G.frenzy.stacks = Math.round(f * 10); },
     addFrenzy: function () { addFrenzy(); },   // cross-kit gravy hook (GODS OF WAR / WILD HUNT feed)
-    enemyKit: function (i) { var e = Engine.enemies.items[i]; if (!e || !e.active) return null; return { runes: e.runes, runeHits: e.runeHits, coilQ: e.coilQ, coilT: e.coilT, mischief: e.mischief, scaleW: e.scaleW, nodeState: e.nodeState, nodeDX: e.nodeDX, nodeDY: e.nodeDY, marked: e.marked, weak: e.weak, weakStacks: e.weakStacks || 0, trickBudget: e.trickBudget || 0, hp: e.hp, maxhp: e.maxhp, sealT: e.sealT || 0, duatDmg: e.duatDmg || 0 }; },
+    enemyKit: function (i) { var e = Engine.enemies.items[i]; if (!e || !e.active) return null; return { runes: e.runes, runeHits: e.runeHits, coilQ: e.coilQ, coilT: e.coilT, mischief: e.mischief, scaleW: e.scaleW, nodeState: e.nodeState, nodeDX: e.nodeDX, nodeDY: e.nodeDY, marked: e.marked, weak: e.weak, weakStacks: e.weakStacks || 0, trickBudget: e.trickBudget || 0, hp: e.hp, maxhp: e.maxhp, duatDmg: e.duatDmg || 0 }; },
     // set per-enemy kit state directly (verify only): runes/coilQ/mischief/weakStacks.
     setKitState: function (i, o) { var e = Engine.enemies.items[i]; if (!e || !e.active) return; if (o.runes != null) e.runes = o.runes; if (o.runeHits != null) e.runeHits = o.runeHits; if (o.coilQ != null) { e.coilQ = o.coilQ; e.coilT = 0.9; } if (o.mischief != null) { e.mischief = o.mischief; e.mischiefT = 2.5; } if (o.weakStacks != null) e.weakStacks = o.weakStacks; },
     // run one PILFER cast off enemy i (adds one cast's trickBudget to the boss, clamped).
@@ -5841,7 +5982,7 @@
     // place enemy i precisely (verify only) — lets the harness build deterministic Ra columns.
     setEnemyPos: function (i, x, y) { var e = Engine.enemies.items[i]; if (e && e.active) { e.x = x; e.y = y; e.vx = 0; e.vy = 0; } },
     // read a shot slot's per-shot flags (verify only) — proves testShot leaks no stale state.
-    shotAt: function (i) { var s = Engine.shots.items[i]; if (!s || !s.active) return null; return { kind: s.kind, homing: !!s.homing, weave: s.weave, turn: s.turn, phase: s.phase, huntHome: !!s.huntHome, loosed: !!s.loosed }; },
+    shotAt: function (i) { var s = Engine.shots.items[i]; if (!s || !s.active) return null; return { kind: s.kind, homing: !!s.homing, weave: s.weave, turn: s.turn, phase: s.phase, artemisHome: !!s.artemisHome, loosed: !!s.loosed }; },
     openNode: function (i) { var e = Engine.enemies.items[i]; if (e && e.active) openNode(e, 0, -e.scale * 0.2); },
     forceNodeOpen: function (i) { var e = Engine.enemies.items[i]; if (e && e.active) { e.nodeState = 2; e.nodeT = 2.0; e.nodeDX = 0; e.nodeDY = 0; e.nodeX = e.x; e.nodeY = e.y; } },
     setCoil: function (i, q) { var e = Engine.enemies.items[i]; if (e && e.active) { e.coilQ = q; e.coilT = 0.9; } },
@@ -5996,6 +6137,7 @@
   // ---------------------------------------------------------------------
   function updateCombat(dt) {
     G.time += dt;
+    for (var vi = G.kitBursts.length - 1; vi >= 0; vi--) if (G.time - G.kitBursts[vi].t > 1.15) G.kitBursts.splice(vi, 1);
     // CURSED-GOLD gild suppresses action inputs: a golden statue can't SPECIAL
     // (its recoil would even shove the frozen body) or APOTHEOSIS. Read the edge
     // first so it's consumed-and-discarded — a press mid-freeze can't buffer onto
@@ -6008,7 +6150,7 @@
     updateTimers(dt);
     updateSpecial(dt);
     updateFrenzy(dt);
-    updateHunt(dt);
+    updateArtemisTarget();
     updateBifrost(dt);
     updatePlayer(dt);
     updateDecoy(dt);
@@ -6141,7 +6283,7 @@
       G.ra.active = false; G.ra.target = null; G.ra.targetSeq = 0; G.ra.ramp = 0; G.ra.hold = 0;   // stale beam can't paint post-swap
       expireKitHazards('zap');                                  // zeusField attack-mod hazard
       // §9 hygiene — attack-kit state clears on swap: Artemis brand, WAR-HEAT, BIFRÖST band.
-      clearHunt();
+      clearArtemisTarget();
       G.frenzy.frenzyF = 0; G.frenzy.boost = 0; G.frenzy.pinT = 0; G.frenzy.stacks = 0; G.frenzy.prevTier = 0;
       // per-enemy player-brand state is keyed to the OLD attack god (this runs BEFORE
       // G.attackGod changes): clear it across ALL live enemies so it can't linger/redraw
@@ -6149,7 +6291,7 @@
       if (G.attackGod === 'odin') Engine.enemies.forEach(function (e) { e.runes = 0; e.runeHits = 0; });
       else if (G.attackGod === 'quetz') Engine.enemies.forEach(function (e) { e.coilQ = 0; e.coilT = 0; });
       else if (G.attackGod === 'loki') Engine.enemies.forEach(function (e) { e.mischief = 0; e.mischiefT = 0; e.pilferCd = 0; });
-      else if (G.attackGod === 'anubis') Engine.enemies.forEach(function (e) { e.scaleW = 0; });   // THE WEIGHING scales clear (+overlay gates on attackGod)
+      else if (G.attackGod === 'anubis' || G.attackGod === 'jade') Engine.enemies.forEach(function (e) { e.scaleW = 0; });
       G.bifrost.active = false; G.bifrost.seamT = 0; G.bifrost.life = 0; G.bifrost.t = 0;
     } else {
       if (G.decoy.active) { recallFx(G.decoy.x, G.decoy.y); G.decoy.active = false; }
@@ -6211,9 +6353,7 @@
       case 'zeusFork': M.zeusFork = true; break;
       case 'zeusField': M.zeusField = true; break;
       case 'artemisCrit': M.artemisCrit += 0.08 * mag; break;
-      case 'artemisRefund': M.artemisRefund = true; break;
       case 'artemisSpread': M.artemisSpread = true; break;
-      case 'artemisMulti': M.artemisMulti = true; break;
       case 'aphroLong': M.aphroLong = true; break;
       case 'aphroExplode': M.aphroExplode = true; break;
       case 'aphroTaunt': M.aphroTaunt = true; break;
@@ -6254,6 +6394,7 @@
       case 'thorFast': M.thorFast = true; break;
       case 'thorGauntlet': M.thorGauntlet = true; break;
       case 'thorSkymark': M.thorSkymark = true; break;
+      case 'thorStun': M.thorStun = true; break;
       case 'guanWide': M.guanWide = true; break;
       case 'guanOath': M.guanOath = true; break;
       case 'guanWake': M.guanWake = true; break;
@@ -6529,6 +6670,7 @@
       // PASS A — additive base: everything the opaque bullet bodies draw over
       // (explosions included, so a bullet frozen over a white blast still reads).
       drawHazards();
+      drawKitBursts();
       drawBifrost();          // HEIMDALL rainbow bridge / dawn-seam telegraph (drawn hazard)
       drawDuat();             // ANUBIS GATE OF DUAT sand-vortex (drawn hazard)
       drawSkyfall();          // ZEUS SKYFALL transient column
@@ -6549,7 +6691,7 @@
       if (G.player.alive) drawPlayer();
       if (G.flashAll > 0) GL.draw(GL.SPR.GLOW, W / 2, H / 2, W * 2, H * 2, 0, 0.5, 0.7, 1.0, G.flashAll * 0.5);
     }
-    GL.composite(G.chroma, G.bloom, 0.62);
+    GL.composite(G.chroma, G.bloom, 0.62, hornPressure());
 
     var lb = GL.letterbox();
     var scale = lb.w / W;
@@ -7270,21 +7412,10 @@
       GL.draw(GL.SPR.SPARK, cx + Math.cos(ga) * R * 1.2, cy + Math.sin(ga) * R * 1.2, ds * 0.34, ds * 0.34, 0.6, 0.9, 0.98, 1.0, 0.85 * openT);
     }
   }
-  // Pass-2 KIT OVERLAYS — player-brand marks drawn near the enemy loop (the Hunted
-  // chevron is a player brand, NOT a status; the rune-band is Odin's meter; the coil
+  // KIT OVERLAYS — the rune-band is Odin's meter; the coil
   // rings are Quetz's; the diamond node is §3 PRECISION). Read by shape, not hue.
   function drawKitOverlays(e) {
     var s = e.scale, t = G.time;
-    // ARTEMIS — the tightening chevron bracket on the Hunted, cinching with stacks.
-    if (G.hunt.foe === e && e.seq === G.hunt.foeSeq) {
-      var cinch = 1 - 0.5 * (G.hunt.stacks / 8);          // brackets close inward as stacks climb
-      var off = s * (0.85 * cinch), arm = s * 0.3, th = s * 0.06;
-      for (var ci = 0; ci < 2; ci++) {
-        var sx = ci ? 1 : -1, cx = e.x + sx * off, cy = e.y - s * 0.1;
-        GL.draw(GL.SPR.STREAK, cx, cy, th, arm, sx * 0.25, 0.75, 0.9, 1.0, 0.95);        // slanted chevron arm
-        GL.draw(GL.SPR.STREAK, cx, cy, th, arm, -sx * 0.25 + Math.PI, 0.75, 0.9, 1.0, 0.95);
-      }
-    }
     // ODIN — carved runes: small gold glyphs filling a band arced over the hull.
     if (e.runes > 0 && G.attackGod === 'odin') {
       var ignite = e.runes >= 9, gy = e.y - s * 0.75, span = s * 1.0;
@@ -7311,7 +7442,7 @@
     }
     // ANUBIS THE WEIGHING — gold scales glyph over the hull, visibly tipping left as
     // accrued weight loads. Five ordered poses make the approach to the Verdict legible.
-    if (e.scaleW > 0 && G.attackGod === 'anubis' && !e.dying) {
+    if (e.scaleW > 0 && (G.attackGod === 'anubis' || G.attackGod === 'jade') && !e.dying) {
       var frac = Math.min(1, e.scaleW / (e.maxhp * ANUBIS_K));
       var tilt = frac * 0.5, gy = e.y - s * 0.7;                 // beam tips as the scales load
       // §36.1 ordered authored frames: LEVEL → four steadily harder LEFT leans.
@@ -7346,13 +7477,6 @@
       } else {
         GL.draw(GL.SPR.GOLD, e.nodeX, e.nodeY, nr * 1.0, nr * 1.2, t * 3, col[0], col[1], col[2], 0.6 * pu);   // armed but sealed: a small pulsing diamond bud
       }
-    }
-    // JADE edict style-C — the seal-mark, stamped on hit (e.sealT). Owner ring law: the
-    // authored seal glyph (36-6) alone + a GOLD RIM-LIGHT PULSE on the sealed foe; no ring.
-    if (e.sealT > 0 && !e.dying) {
-      var sealC = authCell('36-6-seal'), sealF = Math.min(1, e.sealT / 0.3), sealP = 0.6 + 0.4 * Math.sin(t * 6);
-      stateRim(enemyDrawCell(e), e.x, e.y, s, e.rot, 1, 0.82, 0.4, 0.42 * sealP * sealF, 1.08);   // gold seal rim-light pulse
-      if (sealC >= 0) GL.draw(sealC, e.x, e.y, s * 0.6, s * 0.6, 0, 1, 1, 1, 0.95 * sealF);          // §36 authored seal glyph
     }
     // LOKI — MISCHIEF: one then two real pickpocket knives over the crown. The
     // third hit fires Pilfer immediately, so it never needs a lingering third icon.
@@ -7485,7 +7609,7 @@
     // §9 signature cells resolved ONCE per frame (drawGold's coinC pattern), not per shot.
     var cHunt = authCell('33-11-hunt-arrow'), cRune = authCell('33-13-rune-bolt'),
         cAnkh = authCell('33-12-ankh-bolt'), cHeart = authCell('33-14-heartseeker'),
-        cLoosed = authCell('33-8-loosed-arrow'), cCres = authCell('33-15-green-dragon-guandao');
+        cLoosed = authCell('33-8-loosed-arrow');
     Engine.shots.forEach(function (s) {
       var ang = Math.atan2(s.vy, s.vx) + Math.PI / 2;
       // ZEUS THE STORM (kind 3) — the shot is a crackling ribbon mini-bolt, not a streak.
@@ -7548,18 +7672,28 @@
         if (drawSigShot(s, cLoosed, 1.0, 3.0, ang, 0.7, 0.85, 1.0, 0.5, 2.4, ang)) return;   // §9 great moon-silver arrow
       }
       if (s.crescent) {
-        // A compact full guandao flicks through a short alternating slash as it flies;
-        // this is deliberately distinct from the long ceremonial special weapon.
-        var cw = s.scale, perp = ang + Math.PI / 2;
-        var pow = Math.min(1, (s.damage - 1) * 0.12);
-        var slashDir = (s.fireId & 1) ? 1 : -1;
-        var slashT = Math.min(1, s.age / 0.22);
-        var weaponAng = ang + Math.sin(slashT * Math.PI) * 0.55 * slashDir;
-        if (drawSigShot(s, cCres, 1.6, 2.2, weaponAng, s.r, s.g, s.b, 0.45 + 0.3 * pow, 2.8, weaponAng)) return;   // §9 compact Green Dragon guandao
-        drawShotWake(s, 1.2, s.r, s.g, s.b, 0.35);
-        GL.draw(GL.SPR.STREAK, s.x, s.y, cw * 0.7, cw * 2.0, perp, s.r, s.g, s.b, 0.95);
-        GL.draw(GL.SPR.STREAK, s.x, s.y, cw * 0.4, cw * 1.3, perp, 1, 1, 1, 0.85);
-        GL.draw(GL.SPR.CORE, s.x, s.y, cw * 0.34, cw * 0.34, 0, 1, 1, 1, 0.8);
+        // One flying crescent cut, not a tiny complete polearm. The leading
+        // edge is perpendicular to travel and its ends taper into a short wake.
+        var cr = s.scale * 0.66, cx = s.x - Math.sin(ang) * cr * 0.6, cy = s.y + Math.cos(ang) * cr * 0.6;
+        kitArc(cx, cy, cr, ang - 2.88, ang - 0.26, 11, [0.08, 0.56, 0.3], 0.8);
+        kitArc(cx, cy, cr + 2, ang - 2.82, ang - 0.32, 4, [0.51, 1, 0.68], 0.95);
+        kitArc(cx, cy, cr + 3, ang - 2.65, ang - 0.49, 1.6, [0.9, 1, 0.86], 0.95);
+        return;
+      }
+      if (s.plume) {
+        // Jade feather-lances: a gold shaft and swept-back barbs, aligned to
+        // the existing helix trajectory. No collision or cadence changes.
+        var ux = Math.sin(ang), uy = -Math.cos(ang), px = -uy, py = ux, L = s.scale * 0.9;
+        for (var k = 0; k < 3; k++) {
+          var along = L * (0.5 - k * 0.42), spread = L * (0.26 + k * 0.045);
+          for (var side = -1; side <= 1; side += 2) {
+            var ax = s.x + ux * along, ay = s.y + uy * along;
+            var bx = ax - ux * L * 0.48 + px * spread * side, by = ay - uy * L * 0.48 + py * spread * side;
+            kitStroke(ax, ay, bx, by, 5, 0.13, 0.74, 0.51, 0.95);
+            kitStroke(ax, ay, bx, by, 1.5, 0.75, 1, 0.79, 0.9);
+          }
+        }
+        kitStroke(s.x - ux * L, s.y - uy * L, s.x + ux * L * 0.85, s.y + uy * L * 0.85, 2, 0.98, 0.84, 0.45, 1);
         return;
       }
       if (s.big) {

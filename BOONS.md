@@ -14,6 +14,29 @@ owned entities may additionally get authored sprites** (owner call 2026-07-18,
 art/PROMPTS.md §9 + §12 below) with the procedural draw as the live fallback —
 dense streams, FX and status glyphs stay procedural-only.
 
+## Current status-review amendments — 2026-10-03
+
+These owner-reviewed rules supersede conflicting historical kit notes below.
+
+- Hunted is removed. Artemis uses one persistent attack Mark; special/ultimate Marks remain.
+- Terror includes boss behavior; Shaken is not a separate status. Boss Terror remains shorter
+  and does not suppress firing or scripted movement. No separate Stagger is introduced.
+- Jade edicts load the shared Weighing meter instead of Stunning or stamping Seal.
+  Imperial Judgement keeps its primary-target Stun; the rider fires Weighing edicts,
+  without the former mass Stun. The unrelated Imperial Seal gold-reward charm remains.
+- Gjallarhorn Stuns surviving foes for 1.2s, including bosses, instead of Marking them.
+  Bifröst, Dawnbreak, and the Heimdall rider still Mark.
+- Giant's Bane Stuns surviving non-boss direct/splash victims for 1.2s. The explicit
+  THUNDERSTRUCK attack upgrade adds the same Stun to the ordinary hammer. Giant's End is unchanged.
+- Aphrodite builds at most two Weak stacks. A lower-cap source never deletes stacks
+  already applied by a higher-cap source. Jade and Anubis Verdicts add two stacks per
+  application up to three. Weak keeps its damage-taken effect in this phase.
+- Pilfer returns up to eight of the victim's own nearby bullets, homes back to that victim,
+  and can damage its emitter (including a lone boss). Mischief timing/cooldown and the
+  per-Pilfer boss damage budget remain. Loki's unrelated Weak rider is removed.
+- Mods/duos are not broadly redesigned here. Only dead Hunted dependencies and the
+  specifically requested Thor attack-Stun upgrade change.
+
 ## 1. The Boon Laws
 
 1. **Every transform is immediately visible.** The moment a god is equipped the
@@ -72,49 +95,30 @@ armory, Odin NINE NIGHTS, Heimdall THE BIFRÖST.
   into terrain." / "★★★ ×2.25 impact damage"
 - **★/BOSS** atk→knockback dmg · sp→wall dmg & eat-count. Wall eats the dense volley to gold; shove = displacement-lite (heavier body).
 
-**ARTEMIS** — THE HUNT · THE LOOSED ARROW (REWORKED, artemis rec + owner chain/sticky amendments 2026-07-18)
-- **ATK THE HUNT**: 3 (focus 4) arrow-needles — **kind 9**, faction 0, pierce 1, radius 12, speed
-  `SHOT_SPEED`, oriented to velocity. With no Hunted branded, arrows fly STRAIGHT (normal forward spread);
-  the first foe hit is branded **Hunted**. Branded: arrows gently home to the Hunted via Jade block
-  (`homing, turn=2.2` — weak on purpose; the ramp is the skill). Each hit on the Hunted `+12%` dmg, cap 8
-  = `+96%`; stacks hold 3s (refresh on hit). **CHAIN**: killing the Hunted auto-brands the nearest foe and
-  CARRIES stacks −1 per hop. **STICKY**: stray hits on non-Hunted foes do NOT re-brand; 3 consecutive hits
-  on the same other foe abandon the hunt and re-brand it at 0 (deliberate switch only). **SPLINTER**: a
-  Hunted kill bursts `huntStacks` silver shards (small, shard fam) into nearby foes for `0.4×` arrow dmg
-  each — deep hunts pay out in crowd damage. State `G.hunted`, `G.huntStacks`, `G.huntSwap` (0-3 counter).
-  *Silver-white body + moon-blue rim; a tightening chevron bracket on the Hunted cinches with stacks.*
-  Voice BOW thwip + ramp pizzicato (+semitone/stack) + slack-string reset (only on abandon, not on chain).
-- **SP THE LOOSED ARROW** (specials rec is authority; owner-amended interlock): kind 4, radius
-  14, scale ~64, `vy=-2600` (fastest), `homing, turn=5.0, pierce 999, forceCrit=1` (always **precise** ×2.5),
-  `markHit=1`. Target: marked → lowest-HP → boss → up; only re-aims if nothing in a ~40px forward cone.
-  Every pierced foe gets `markEnemy` (+25% taken); the FIRST foe struck becomes the Hunted at FULL ramp (8)
-  — thread a line, then chain kills down your own Marked trail. *Moon-silver CORE needle + white head +
-  2 fletches, vapor trail, visible bank (unified to the player cool-fire law — acid-green rejected; reads
-  by silhouette/speed, not hue).* Voice ARTEMIS THWIP (triangle 220→60Hz/30ms + 4kHz fletch, ~80ms, dry).
-- **CRIT RETIRED → PRECISION** (§3): delete all RNG crit rolls (`artemisCritChance`, `G.critBonus` roll,
-  `huntersEye` always-crit). Keep `damageEnemy`'s crit path, rename read `precise` ×2.5, driven **only** by
-  weak-point overlap or `forceCrit`; keeps gold pop + spark + APOTHEOSIS/HUBRIS feed.
-- **★** atk→arrow dmg (ramp base) · sp→LOOSED ARROW dmg.
-- **CARD ATK**: "Silver arrows brand the first foe hit as your HUNTED and home to it." / ▸ "Hits on the
-  Hunted ramp +12% (max +96%); kills chain the hunt to the next prey." / "★★★ ×2.25 arrow damage"
-- **BOSS** arrows converge on the lone body, ramp climbs uncontested — Artemis's peak.
-- **RE-ANCHORS** SILVER FLETCHING→**PRECISION** (+precise dmg, +15% node size); huntersEye→Marked foes always
-  expose a node; deathSentence→max-ramp hit executes <40%; godsOfWar→crescents precise vs Terrified.
-  Mods: artemisCrit→HUNTER'S REACH (+2 cap, +0.6 turn); artemisMulti→DEEPER HUNT (0.12→0.18/stack);
-  artemisRefund→6+ stacks refund 0.1 charge; artemisSpread→chain hops carry ALL stacks (no −1 decay).
-  Optional mod **THE QUIVER**: special banks up to 3 arrows, dump as seeking crits.
+**ARTEMIS** — single-target Mark · THE LOOSED ARROW (status review 2026-10-03)
+- **ATK**: kind-9 arrow-needles fly straight until their first hit Marks a foe. Arrows then
+  gently home to that reserved target, and its attack Mark remains until it dies or leaves.
+  Stray hits do not switch targets. After death, the next foe actually struck gets the Mark:
+  no automatic transfer, Hunt Depth, ramp, splinter burst, or separate Hunted overlay.
+- **SP THE LOOSED ARROW**: a fast piercing precise needle; every struck foe is Marked.
+  It does not replace the attack's reserved target. Other Mark sources may mark multiple foes.
+- **PRECISION**: weak-point overlap or forceCrit only; unchanged by the status review.
+- **★** attack scales arrow damage; special scales needle damage. Bosses are fully Markable.
+- **Dependencies**: Hunter's Reach retains homing only; Marked-death spread remains a modifier.
+  Hunted-only refund and deeper-ramp upgrades are retired, not offered as dead choices.
+  Mods and duos otherwise await their separate review phase.
 
 **APHRODITE** — Charm · HEARTSEEKER (special REWORKED, specials rec)
 - **ATK CHARM** (unchanged): shots charm foes to your side. *Pink shot; charmed hull recolors cyan + rising
   hearts (§4).* Voice CHARM (soft sine chime + minor-3rd gliss, **no noise**).
 - **SP HEARTSEEKER**: kind 5, `vy=−900`, `weave=1, homing, turn=3.0, pierce 0`, seeks nearest un-charmed foe.
-  Non-boss → `charmEnemy`. **Boss** → `weakStacks` (0..3, +8% taken ea, `weakT=6`; mult `1.10+0.08*stacks`)
+  Non-boss → `charmEnemy`. **Boss** → `weakStacks` (0..2 from Aphrodite, +8% taken ea, `weakT=6`; mult `1.10+0.08*stacks`)
   **and** sweeps enemy bullets within 220px to gold. Recast stacks Weaken. *Two GLOW lobes + CORE point =
   heart, magenta, SHARD petals along a weave; boss-hit bullets spiral in → gold.* Voice APHRODITE CHIME-SWELL
   (sine 523/784Hz, 200ms attack, vibrato, light reverb).
 - **★** atk→charm shot dmg & duration · sp→charmMissile dmg (`*specialR` — **bug fix** §7) + duration +40% @★★★.
 - **CARD SP**: "HEARTSEEKER — a slow heart weaves to the nearest foe." / ▸ "Charms a minion, or Weakens a boss
-  (+8%/heart ×3) and melts its bullets to gold." / "★★★ ×2.25 charm damage & +40% duration"
+  (+8%/heart, up to two stacks) and melts its bullets to gold." / "★★★ ×2.25 charm damage & +40% duration"
 - **BOSS** Weaken-stack + bullet-lull-to-gold is the primary read (no minion).
 
 **ARES** — WAR-HEAT (proximity) · Phobos & Deimos (attack REWORKED, ares rec)
@@ -161,13 +165,12 @@ armory, Odin NINE NIGHTS, Heimdall THE BIFRÖST.
   State `G.ra.hold`, `graceT=0.30`. No/switched target bleeds ONE tier per 0.30s (a dying-then-replaced column
   enemy or adjacent flick inside 0.30s is free). **BOSS LOCK**: boss target → `hold` monotonic, never decays; CORONA
   reachable/held (Ra's boss signature). raRamp charm scales thresholds ×0.556, caps ×2.875. APOTHEOSIS forces CORONA.
-  *Primary VARIANT A tightening-lance (render A/B/C §11): 3 STREAK rays muzzle→knot, spread tightens ±10px KINDLE →
-  ±2px CORONA (one hard line); knot CORE 30→8px; stage-up RING 26→70px + 6 SPARKs (hard CLICK/rung); 1–4 gold RING
-  notch-glyphs ride the beam (occlusion-proof count). **COLOR (owner 2026-07-19: "laser should be way more red"):**
-  the ramp runs RED — deep solar red KINDLE → red-orange FLARE → hot red-white SOLAR → white-hot core inside a red
-  corona at CORONA, + rotating corona flare. Sun-as-furnace, never honey-gold; the old bronze→amber→white-gold ramp
-  is dead. Ra joins Ares as a sanctioned god-hue exception to the cool player-fire law (the notch-glyphs stay gold).*
-- **SP SOLAR FLARE** (unchanged): ignites all with **Burn**. Voice white-noise flash swell ~0.5s.
+  **VISUAL (owner 2026-10-13):** concentrated white-gold beam with a consistent-width core and flat ends,
+  not a pointed oval. Gold mantle, upward-moving filaments, separate contact flare; 1–4 small gold notches
+  sit beside the muzzle. Heat increases beam width and contact intensity without changing the hit lane,
+  endpoints, thresholds, or damage. This supersedes the earlier red-furnace direction.
+- **SP SOLAR FLARE**: ignites all with **Burn** (mechanics unchanged). White-gold ignition tears outward
+  into an uneven corona with trailing jets; no floating sun image. Voice white-noise flash swell ~0.5s.
 - **VOICE BEAM**: live 3-osc (one/stream) converging detune ±(18−16*frac)c to unison as tier climbs (you *hear* it
   focus); lowpass 600→2500Hz; stage-up ramps root +4 semitones + bell ping; stage-drop warn blip. One oscillator, no per-shot.
 - **★** atk→beam DPS (all tiers) · sp→Solar Flare burn dmg.
@@ -259,6 +262,8 @@ armory, Odin NINE NIGHTS, Heimdall THE BIFRÖST.
   feeds frenzy; theAllseeing→bolt & Gungnir +40% to Marked. (Retired 'shop rerolls half' perk — OPEN CALLS.)
 
 **THOR** — Mjölnir · Giant's Bane
+- **VISUAL (owner 2026-10-13):** attack/special use a flat ice-cyan block hammer, dark outline,
+  short grip and one gold collar. No engraving, perspective or illustrated texture; flight and impacts unchanged.
 - **ATK MJÖLNIR** (unchanged): returning kinetic hammer, spring-damped displacement (lurch, wall-slams). *Slate hammer arcs
   out and returns; hulls lurch.* Voice KINETIC + **doubleHit** (throw + return).
 - **SP GIANT'S BANE** (unchanged): colossal crush — pure force, never lightning. *Huge slate slab-slam + heavy displacement.*
@@ -281,9 +286,16 @@ I don't want the fan out"; owner picked SPECTRUM LANCE)
   through the hull. *Voice BELL; seam = rising arpeggio (3 bells, 5th+8ve); lance = crystalline shimmer
   (throttled 6/s); bridge-fade = soft descending pair.* State: `G.bifrost {t, x, seamT}` — no pooled
   entities; band is a drawn hazard.
-- **SP GJALLARHORN** (unchanged): horn blast wounds + **Marks** every foe + shoves the whole field (`timeScale/slowT`).
-  *Expanding shockwave, field shoved out.*
-- **★** atk→lance dmg · sp→horn dmg & Mark potency.
+- **SP GJALLARHORN**: immediate horn blast wounds every foe, **Stuns survivors for 1.2s**
+  (bosses included), and shoves hostile bullets outward.
+  *October 13 visual: a broad white-gold mass of compressed air, a bright throat flash,
+  and supporting scene refraction. No horn sprite, streaks, rings, or wave outlines.
+  VFX clears within 0.46s; distortion clears within 0.38s and leaves the player's
+  immediate area undistorted. VFX draws behind bullets. Damage remains screen-wide.
+  Sound: dedicated low brass/reed body with a breath onset and short release (0.96s),
+  routed through the normal mute, de-dupe and limiter; Bifröst keeps its bell voice.
+  The actual Echo mod still produces its separate blast. Bifröst retains the rainbow identity.*
+- **★** atk→lance dmg · sp→horn dmg.
 - **CARD ATK**: "THE BIFRÖST — a rainbow bridge lays down your lane on a beat; fire from the bridge to
   loose spectrum lances." / ▸ "A dawn-seam warns first, at your feet. Foes on the bridge are Marked." /
   "★★★ ×2.25 lance damage"
@@ -348,6 +360,8 @@ I don't want the fan out"; owner picked SPECTRUM LANCE)
   `coilQ` (1–6), with dark return strokes and pale front strokes; no floating dots or pulsing silhouette.* Voice SERPENT breathy "fwip" (triangle ~180Hz + 2–3k breath); COIL quantized rising whistle
   0.9k→2.4k/6 stacks; max = hiss + 90Hz crush; uncoil downward slide.
 - **SP SKY SERPENT** (unchanged): eats bullets into your **apotheosis gauge**; extends `hazards`.
+  **VISUAL (owner 2026-10-13):** a smooth two-tone jade ribbon and compact geometric serpent head;
+  no feather comb, scales or painted mane. Existing sweep path and hit/eat radii are unchanged.
 - **★** atk→weave & coil-multiplied dmg · sp→serpent eat-rate / gauge feed.
 - **CARD ATK**: "Your three streams braid into a plumed helix — wider coverage, pierces 1." / ▸ "Hold the braid on ONE body
   to COIL it +10%/bite up to +60%; look away and it uncoils." / "★★★ ×2.25 weave damage"

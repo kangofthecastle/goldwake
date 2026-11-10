@@ -49,10 +49,11 @@ for (const [name, cfg] of targets) {
   if(cfg.sheet)loadedSheetFrames.push(name);
 }
 
-const h = gameHarness(42, (s, file) => file === 'game.js' ? s.replace("  if (document.readyState === 'loading')", "  Game.offlineDraw = { drawInfantry, drawEnemies, drawShots, ANUBIS_K, makeDestinationLandmark, spawnLandmarkInfantry, makeBackground, drawEnvironmentFlow, drawEnvironmentLandmark, spawnApostate, drawBackground, drawBulletHalos, drawBulletBodies, drawPlayer, drawHurledStones, spawnDarter, spawnGunship, spawnAegis, spawnAcolyte, spawnMoth, spawnCarrier, spawnSplitter, spawnGardener, spawnTurret, spawnWheelShip, spawnReactor, spawnMidship, spawnFlanker, spawnRainmaker, drawPauseTo:function(ctx){var old=hud;hud=ctx;try{pauseOverlay();}finally{hud=old;}} };\n  if (document.readyState === 'loading')") : file === 'run.js' ? s.replace('  Run.getArt = getArt;', '  Run.offlineArt = artCache; Run.getArt = getArt;') : s);
+const h = gameHarness(42, (s, file) => file === 'game.js' ? s.replace("  if (document.readyState === 'loading')", "  Game.offlineDraw = { drawKitBursts, drawHazards, drawBifrost, drawDuat, drawSkyfall, drawGold, drawParticles, drawBolts, drawDecoy, drawClones, drawRavens, drawGungnir, drawRaBeam, drawWraiths, drawJudgement, drawHammers, drawDebris, drawVerdictStamps, drawDashGhosts, spawnClone, drawInfantry, drawEnemies, drawShots, ANUBIS_K, makeDestinationLandmark, spawnLandmarkInfantry, makeBackground, drawEnvironmentFlow, drawEnvironmentLandmark, spawnApostate, drawBackground, drawBulletHalos, drawBulletBodies, drawPlayer, drawHurledStones, spawnDarter, spawnGunship, spawnAegis, spawnAcolyte, spawnMoth, spawnCarrier, spawnSplitter, spawnGardener, spawnTurret, spawnWheelShip, spawnReactor, spawnMidship, spawnFlanker, spawnRainmaker, drawPauseTo:function(ctx){var old=hud;hud=ctx;try{pauseOverlay();}finally{hud=old;}} };\n  if (document.readyState === 'loading')") : file === 'run.js' ? s.replace('  Run.getArt = getArt;', '  Run.offlineArt = artCache; Run.getArt = getArt;') : s);
 h.context.GL.SPR = atlasContext.GL.SPR;
 h.context.GL.authoredSpr = atlasContext.GL.authoredSpr;
 h.context.GL.sprFill = atlasContext.GL.sprFill;
+h.context.GL.hornRefraction = atlasContext.GL.hornRefraction;
 h.Game.setMode('playing');
 const calls = [];
 let blend = "lighter", bulletShader=false;
@@ -110,6 +111,10 @@ function panel(ctx, col, row, label, draw, grounded = true) {
   ctx.save();ctx.beginPath();ctx.rect(8,8,204,174);ctx.clip();ctx.translate(110,95);draw();composite(ctx,1);ctx.restore();
   ctx.fillStyle = '#d6d2cb'; ctx.font = '14px sans-serif'; ctx.fillText(label, 12, 205);
   ctx.restore();
+}
+if (process.argv.includes('--roster')) {
+  await require('./render-roster.cjs')({h, createCanvas, sharp, composite, out, clearTint:()=>tinted.clear()});
+  return;
 }
 const lm = h.Game.offlineDraw.makeDestinationLandmark(1);
 lm.y = 200; h.Game.st().bg.landmark = lm;
@@ -411,8 +416,8 @@ if(process.argv.includes('--menus')) {
   }
 }
 if(process.argv.includes('--marks')) {
-  const rows=[['Hunted','artemis',[0,4,8]],['Runes','odin',[1,5,9]],['Coiled','quetz',[1,3,6]],
-    ['Weighing','anubis',[.05,.40,.85]],['Seal','jade',[0,.15,.30]],['Mischief','loki',[0,1,2]],['Precision','zeus',[0,1,2]]];
+  const rows=[['Runes','odin',[1,5,9]],['Coiled','quetz',[1,3,6]],
+    ['Weighing','anubis',[.05,.40,.85]],['Weighing','jade',[.05,.40,.85]],['Mischief','loki',[0,1,2]],['Precision','zeus',[0,1,2]]];
   const cv=createCanvas(1080,2320),ctx=cv.getContext('2d');ctx.fillStyle='#10151d';ctx.fillRect(0,0,1080,2320);
   ctx.fillStyle='#e2ddd4';ctx.font='18px sans-serif';ctx.fillText('Combat marks / actual Game.drawEnemies + drawKitOverlays',14,26);
   ctx.font='13px sans-serif';ctx.fillText('Real spawned gunship at 1x / native Canvas / no WebGL or GPU bloom',14,49);
@@ -420,11 +425,9 @@ if(process.argv.includes('--marks')) {
     h.Game.resetRun({});h.Game.setMode('playing');h.Game.test.setAttackGod(god);h.Game.offlineDraw.spawnGunship(true);
     const e=h.Engine.enemies.items.find(e=>e.active&&e.arch==='gunship');h.Game.test.forceSize(e._i);
     e.x=e.y=0;e.rot=Math.PI;e.motionShot=1;e.nodeState=0;e.aura=null;e.shieldT=1;h.Game.st().time=.25;
-    if(name==='Hunted')Object.assign(h.Game.st().hunt,{foe:e,foeSeq:e.seq,stacks:value});
     if(name==='Runes')e.runes=value;
     if(name==='Coiled'){e.coilQ=value;e.coilT=.9;}
     if(name==='Weighing')e.scaleW=e.maxhp*h.Game.offlineDraw.ANUBIS_K*value;
-    if(name==='Seal')e.sealT=value;
     if(name==='Mischief'){e.mischief=value;e.mischiefT=2.5;}
     if(name==='Precision'){e.nodeState=value;e.nodeX=0;e.nodeY=0;e.nodeHit=0;}
     ctx.save();ctx.translate(col*360,70+row*320);ctx.fillStyle='#26313a';ctx.fillRect(8,8,344,278);

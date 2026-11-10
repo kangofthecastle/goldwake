@@ -180,8 +180,8 @@
                  attack: 'Attacks arc chain lightning to nearby foes.',
                  special: 'SKYFALL: a bolt cracks straight down your lane and forks to nearby foes; struck foes are Stunned.' },
     artemis:   { name: 'ARTEMIS', epithet: 'the Huntress', pantheon: 'OLYMPUS', css: '#b6ff5a', color: [0.7, 1.0, 0.3],
-                 attack: 'Silver arrows brand the first foe hit as your HUNTED and home to it; hits ramp, kills chain the hunt.',
-                 special: 'THE LOOSED ARROW: a piercing precise needle that Marks all it strikes; the first becomes your Hunted at full ramp.' },
+                 attack: 'Silver arrows Mark and home to one foe until it dies. Your next hit selects the next Mark.',
+                 special: 'THE LOOSED ARROW: a piercing precise needle that Marks all it strikes.' },
     aphrodite: { name: 'APHRODITE', epithet: 'the Beguiling', pantheon: 'OLYMPUS', css: '#ff77c8', color: [1.0, 0.45, 0.8],
                  attack: 'Attacks stack Charm; +15% damage to the charm-touched and Weakened.',
                  special: 'HEARTSEEKER: a slow heart weaves to a foe — charms a minion, or Weakens a boss and melts its bullets to gold.' },
@@ -190,7 +190,7 @@
                  special: 'Phobos & Deimos dive-bomb foes, sowing Terror with every strike.' },
     heimdall:  { name: 'HEIMDALL', epithet: 'the Watchman', pantheon: 'ASGARD', css: '#ffe3c2', color: [1.0, 0.89, 0.76],
                  attack: 'THE BIFRÖST: a rainbow bridge lays down your lane on a beat; fire from it to loose spectrum lances. Foes on the bridge are Marked.',
-                 special: 'Gjallarhorn: a blast that wounds and Marks all foes, hurling their bullets away.' },
+                 special: 'Gjallarhorn: a blast that wounds and Stuns all survivors for 1.2s, hurling their bullets away.' },
     ra:        { name: 'RA', epithet: 'the Radiant', pantheon: 'KEMET', css: '#ffe89a', color: [1.0, 0.9, 0.55],
                  attack: 'SOLAR LENS: hold fire on ONE foe to focus the beam through 4 heat stages, up to ×2.5.',
                  special: 'Solar Flare: a screen flash that ignites every foe with Burn.' },
@@ -199,7 +199,7 @@
                  special: 'GATE OF DUAT: a gate of sand opens below; the wounded are dragged toward judgment, bleeding missing health.' },
     loki:      { name: 'LOKI', epithet: 'the Trickster', pantheon: 'ASGARD', css: '#8cff5a', color: [0.55, 1.0, 0.35],
                  // PASS2: SNATCH text is pre-set so a restore of the Loki ATTACK draft is already correct.
-                 attack: 'SNATCH — your hits pickpocket a foe (3 marks); on the third, snatch the 8 nearest enemy bullets.',
+                 attack: 'SNATCH — your hits pickpocket a foe (3 marks); on the third, return up to 8 of that foe’s nearby bullets to their sender.',
                  special: 'Shadow-Twin: a decoy that draws all aimed fire and soaks bullets.' },
     odin:      { name: 'ODIN', epithet: 'the Allfather', pantheon: 'ASGARD', css: '#cfd6e0', color: [0.8, 0.85, 0.92],
                  attack: 'NINE NIGHTS: one heavy rune-bolt; every 4th hit carves a rune into the foe, each +15% against it — forever.',
@@ -211,14 +211,14 @@
                  attack: 'Shots become crescent blades that cleave, gaining power per foe pierced.',
                  special: 'Crescent Moon Sweep: a colossal blade sweeps the field, hurling foes aside.' },
     jade:      { name: 'JADE EMPEROR', epithet: 'Sovereign of Heaven', pantheon: 'CELESTIAL COURT', css: '#c99aff', color: [0.79, 0.60, 1.0],
-                 attack: 'IMPERIAL EDICTS: five homing edicts fan out, seek foes, and Stun them.',
+                 attack: 'IMPERIAL EDICTS: five homing edicts seek foes and load Weighing; a full meter triggers Verdict.',
                  special: 'IMPERIAL JUDGEMENT: twin storm-clouds smite random foes with chain lightning; recast to refresh.' },
     quetz:     { name: 'QUETZALCOATL', epithet: 'the Plumed Serpent', pantheon: 'FIFTH SUN', css: '#5affc0', color: [0.35, 1.0, 0.75],
                  attack: 'Three streams braid into a plumed helix (pierces 1); hold it on ONE body to COIL it +10%/bite, up to +60%.',
                  special: 'Sky Serpent sweeps the field, eating bullets into your DIVINE INTERVENTION gauge.' },
     thor:      { name: 'THOR', epithet: 'the Thunderer', pantheon: 'ASGARD', css: '#8fb4d8', color: [0.56, 0.66, 0.82],
                  attack: 'Mjölnir: a returning hammer that smashes twice per throw.',
-                 special: "Giant's Bane: a colossal hammer crushes the toughest foe." }
+                 special: "Giant's Bane: a colossal hammer crushes and Stuns surviving non-bosses for 1.2s." }
   };
   Run.GODS = GODS;
   // RETIRED GODS — ids that were shipped in older builds but have since been pulled
@@ -239,19 +239,19 @@
   var GOD_CARD = {
     zeus:      { aDesc: 'Attacks arc chain lightning between nearby foes.', aHow: 'Each hit forks to the next foe.',
                  sDesc: 'SKYFALL cracks a bolt straight down your lane.', sHow: 'Forks to nearby foes; struck are Stunned.' },
-    artemis:   { aDesc: 'Arrows home toward your Hunted target.', aHow: 'Repeated hits grow stronger; kills transfer the hunt.',
-                 sDesc: 'Fire a piercing arrow.', sHow: 'Marks all it strikes; first becomes Hunted.' },
+    artemis:   { aDesc: 'Arrows Mark and home toward one target.', aHow: 'After it dies, your next hit Marks a new target.',
+                 sDesc: 'Fire a piercing arrow.', sHow: 'Marks every foe it strikes.' },
     aphrodite: { aDesc: 'Attacks stack Charm across the swarm.', aHow: '+15% damage to Charmed or Weakened foes.',
                  sDesc: 'Launch a homing heart.', sHow: 'Charms a minion, or Weakens a boss.' },
     ares:      { aDesc: 'Close range builds War Heat.', aHow: 'Firing at medium range also builds heat.',
                  sDesc: 'Phobos & Deimos dive-bomb the field.', sHow: 'Strikes inflict Terror.' },
     heimdall:  { aDesc: 'A Bifröst bridge forms in your lane.', aHow: 'Fire from the bridge to launch lances.',
-                 sDesc: 'Gjallarhorn wounds and Marks every foe.', sHow: 'Hurls their bullets away.' },
+                 sDesc: 'Gjallarhorn wounds and Stuns survivors.', sHow: 'Hurls their bullets away.' },
     ra:        { aDesc: 'Focus a beam on one target.', aHow: 'Stay on target for up to ×2.5 damage.',
                  sDesc: 'Solar Flare flashes the screen white.', sHow: 'Ignites every foe with Burn.' },
     anubis:    { aDesc: 'Hits build Judgment on each foe.', aHow: 'Full Judgment executes weak foes; damages bosses.',
                  sDesc: 'Open a vortex below your ship.', sHow: 'Pulls foes in; damage scales with missing health.' },
-    loki:      { aDesc: 'Hits add Mischief marks.', aHow: 'On the third, snatch 8 nearby bullets.',
+    loki:      { aDesc: 'Hits add Mischief marks.', aHow: 'Third hit returns up to 8 of that foe’s bullets.',
                  sDesc: 'Shadow-Twin decoy stands in for you.', sHow: 'Draws all aimed fire; soaks bullets.' },
     odin:      { aDesc: 'Fire a heavy rune bolt.', aHow: 'Every fourth hit adds +15% damage to that foe.',
                  sDesc: 'Gungnir never misses, piercing foe after foe.', sHow: 'Marks each foe it runs through.' },
@@ -259,19 +259,19 @@
                  sDesc: 'Ruyi Jingu Bang slams the column above you.', sHow: '' },
     guanyu:    { aDesc: 'Shots become crescent blades that cleave.', aHow: 'Each pierce feeds the next with power.',
                  sDesc: 'Crescent Moon Sweep clears the whole field.', sHow: 'Hurls struck foes aside.' },
-    jade:      { aDesc: 'Fire five homing edicts.', aHow: 'They seek foes and Stun them.',
+    jade:      { aDesc: 'Fire five homing edicts.', aHow: 'They load Weighing; a full meter triggers Verdict.',
                  sDesc: 'Summon clouds that chain lightning.', sHow: 'Recast to refresh the twin storm-clouds.' },
     quetz:     { aDesc: 'Three streams braid into a plumed helix.', aHow: 'Stay on one target: +10% per bite, up to +60%.',
                  sDesc: 'Sky Serpent sweeps the field of bullets.', sHow: 'Absorbed bullets charge Divine Intervention.' },
     thor:      { aDesc: 'Mjölnir returns, smashing twice per throw.', aHow: '',
-                 sDesc: "Giant's Bane crushes the toughest foe.", sHow: '' }
+                 sDesc: "Giant's Bane crushes the toughest foe.", sHow: 'Stuns surviving non-bosses for 1.2s.' }
   };
 
   // §7 STARLINE table — per god×slot the concrete quantity a SIGNATURE star scales.
   // starLine() prints "★★★  ×2.25 <qtyLabel> & <secondary>" from LADDER[tierOf(cur)].
   var STARLINE = {
     zeus:      { attack: { qtyLabel: 'arc damage', secondary: '+chain reach' }, special: { qtyLabel: 'bolt damage', secondary: 'wider stun' } },
-    artemis:   { attack: { qtyLabel: 'arrow damage', secondary: 'hunt ramp' }, special: { qtyLabel: 'needle damage', secondary: 'marks' } },
+    artemis:   { attack: { qtyLabel: 'arrow damage', secondary: 'marks' }, special: { qtyLabel: 'needle damage', secondary: 'marks' } },
     aphrodite: { attack: { qtyLabel: 'charm damage', secondary: 'Weaken' }, special: { qtyLabel: 'heart damage', secondary: 'charm dwell' } },
     ares:      { attack: { qtyLabel: 'armory damage', secondary: 'war-heat' }, special: { qtyLabel: 'Terror damage', secondary: 'dread' } },
     heimdall:  { attack: { qtyLabel: 'lance damage', secondary: 'marks' }, special: { qtyLabel: 'horn damage', secondary: '+shove' } },
@@ -281,7 +281,7 @@
     odin:      { attack: { qtyLabel: 'bolt damage', secondary: 'rune carve' }, special: { qtyLabel: 'Gungnir damage', secondary: 'pierce' } },
     wukong:    { attack: { qtyLabel: 'clone fire', secondary: 'spawn odds' }, special: { qtyLabel: 'staff damage', secondary: 'stun' } },
     guanyu:    { attack: { qtyLabel: 'crescent damage', secondary: 'per-pierce' }, special: { qtyLabel: 'sweep damage', secondary: 'shove' } },
-    jade:      { attack: { qtyLabel: 'edict damage', secondary: 'stun' }, special: { qtyLabel: 'judgement damage', secondary: 'chain' } },
+    jade:      { attack: { qtyLabel: 'edict damage', secondary: 'weighing' }, special: { qtyLabel: 'judgement damage', secondary: 'chain' } },
     quetz:     { attack: { qtyLabel: 'helix damage', secondary: 'coil bite' }, special: { qtyLabel: 'serpent damage', secondary: 'DI gauge' } },
     thor:      { attack: { qtyLabel: 'hammer damage', secondary: 'double-smash' }, special: { qtyLabel: "Bane damage", secondary: 'knockback' } }
   };
@@ -347,7 +347,7 @@
   // per-god mod cards: [id, desc, slotReq]  (slotReq: attack / special / any)
   var MODS = {
     zeus: [['zeusChain', '+1 chain lightning jump', 'attack'], ['zeusCrit', 'chains crit-strike the source', 'attack'], ['zeusFork', 'chains fork to a 2nd target', 'attack'], ['zeusField', 'kills leave a static zap field', 'attack']],
-    artemis: [['artemisCrit', "HUNTER'S REACH: +2 ramp cap & +0.6 arrow homing", 'attack'], ['artemisRefund', 'a 6+ stack Hunted hit refunds special charge', 'attack'], ['artemisSpread', 'chain hops carry ALL stacks (no decay)', 'attack'], ['artemisMulti', 'DEEPER HUNT: ramp +0.18/stack (from +0.12)', 'attack']],
+    artemis: [['artemisCrit', "HUNTER'S REACH: +0.6 arrow homing", 'attack'], ['artemisSpread', 'Marked deaths spread Marked to a nearby foe', 'attack']],
     aphrodite: [['aphroLong', 'charm lasts longer', 'any'], ['aphroExplode', 'charmed foes explode on expiry', 'any'], ['aphroTaunt', 'foes near a charmed ally target it', 'any'], ['aphroFast', 'charm at fewer hits', 'attack']],
     ares: [['aresDecay', 'frenzy decays half as fast', 'attack'], ['aresCharge', 'frenzy charges special 2x at 5+', 'attack'], ['aresTerror', 'terror lasts +1.5s', 'special'], ['aresSpoils', 'terror-slams drop gold', 'special']],
     heimdall: [['heimVigil', '+20% damage to Marked foes', 'any'], ['heimHorn', 'Gjallarhorn hits harder; shove 350px', 'special'], ['heimEcho', 'the horn echoes once at 50% after 1s', 'special']],
@@ -358,19 +358,19 @@
     odin: [['odinRaven', 'odinFury: runes carve every 3rd hit (from 4th)', 'attack'], ['odinMark', 'Gungnir marks last; bonus x1.4', 'special'], ['odinRavenMark', 'odinSunder: doom-bolts splash 50% to a nearby foe', 'attack'], ['odinGungnir', 'Gungnir +50% damage & longer', 'special']],
     wukong: [['wukongClones', 'clones last 7s, cap 3', 'attack'], ['wukongStaff', 'staff wider; survivors Stunned', 'special'], ['wukongSpecial', 'clones echo your special at 25%', 'special'], ['wukongChance', 'clone spawn 20% → 35%', 'attack']],
     quetz: [['quetzBig', 'serpent larger & slower', 'special'], ['quetzGold', 'eaten bullets also pay gold', 'special'], ['quetzCircle', 'serpent circles you at the end', 'special'], ['quetzPierce', '+1 more pierce', 'attack']],
-    thor: [['thorBelt', 'Megingjörð: +40% dmg, +50% knockback', 'any'], ['thorFast', 'throw cycle 1.4s → 0.9s', 'attack'], ['thorGauntlet', 'Járngreipr: catch grants +30% stream 2s', 'any'], ['thorSkymark', 'hammer hovers spinning at apex', 'attack']],
+    thor: [['thorBelt', 'Megingjörð: +40% dmg, +50% knockback', 'any'], ['thorFast', 'throw cycle 1.4s → 0.9s', 'attack'], ['thorGauntlet', 'Járngreipr: catch grants +30% stream 2s', 'any'], ['thorSkymark', 'hammer hovers spinning at apex', 'attack'], ['thorStun', 'THUNDERSTRUCK: attack hammer Stuns non-bosses for 1.2s', 'attack']],
     guanyu: [['guanWide', 'crescents wider; +1 pierce', 'attack'], ['guanOath', 'Peach-Garden Oath: +30% attack damage while Focused', 'attack'], ['guanWake', 'the sweep leaves a burning arc', 'special'], ['guanSpoils', 'foes slain by the sweep pay +50% gold', 'special']],
     jade: [['jadeOften', 'IMPERIAL JUDGEMENT hurls bolts every 0.5s (from 0.8s)', 'special'], ['jadeStun', 'Stunned foes take +25% damage', 'any'], ['jadeMirror', 'MIRROR REFLECTION: bolts bank off a mirror to the strongest foe', 'special'], ['jadeTribute', 'Weakened foes pay +30% gold on death', 'any']]
   };
   Run.MODS = MODS;
   // mods that are one-shot (skip once owned); zeusChain / artemisCrit stack
   var BOOL_MODS = { zeusCrit: 1, zeusFork: 1, zeusField: 1,
-    artemisRefund: 1, artemisSpread: 1, artemisMulti: 1, aphroLong: 1, aphroExplode: 1, aphroTaunt: 1, aphroFast: 1,
+    artemisSpread: 1, aphroLong: 1, aphroExplode: 1, aphroTaunt: 1, aphroFast: 1,
     aresDecay: 1, aresCharge: 1, aresTerror: 1, aresSpoils: 1, heimVigil: 1, heimPrism: 1, heimHorn: 1, heimEcho: 1,
     raRamp: 1, raSpread: 1, raSplit: 1, raBurn: 1, anubisHeavy: 1, anubisFeast: 1, anubisRefund: 1, anubisShard: 1,
     lokiLong: 1, lokiBoom: 1, lokiVaunt: 1, lokiChance: 1, odinRaven: 1, odinMark: 1, odinRavenMark: 1, odinGungnir: 1,
     wukongClones: 1, wukongStaff: 1, wukongSpecial: 1, wukongChance: 1, quetzBig: 1, quetzGold: 1, quetzCircle: 1, quetzPierce: 1,
-    thorBelt: 1, thorFast: 1, thorGauntlet: 1, thorSkymark: 1,
+    thorBelt: 1, thorFast: 1, thorGauntlet: 1, thorSkymark: 1, thorStun: 1,
     guanWide: 1, guanOath: 1, guanWake: 1, guanSpoils: 1, jadeOften: 1, jadeStun: 1, jadeMirror: 1, jadeTribute: 1 };
 
   // ---- transform level ladder (pom-style upgrades) --------------------

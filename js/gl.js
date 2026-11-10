@@ -210,19 +210,36 @@
 'uniform sampler2D u_bloomQuarter;\n' +
 'uniform float u_chroma;\n' +
 'uniform float u_bloom;\n' +
+'uniform vec4 u_horn;\n' + // cast x/y in playfield fractions, age, enabled
+'uniform vec2 u_hornPlayer;\n' +
+'uniform vec4 u_field;\n' + // letterbox origin/size in framebuffer UV
 'out vec4 frag;\n' +
 'void main(){\n' +
+'  vec2 uv = v_uv;\n' +
+'  float pressure = 0.0;\n' +
+'  if (u_horn.w > 0.5) {\n' +
+'    vec2 p = (v_uv - u_field.xy) / u_field.zw; p.y = 1.0-p.y;\n' +
+'    float t = clamp(u_horn.z / 0.38, 0.0, 1.0);\n' +
+'    float front = u_horn.y - 0.08 - t*1.25;\n' +
+'    float q = (p.y-front-0.1*(p.x-u_horn.x)*(p.x-u_horn.x))/0.095;\n' +
+'    float protect = clamp((length((p-u_hornPlayer)*vec2(1080.0,1920.0))-140.0)/100.0,0.0,1.0);\n' +
+'    float edge = clamp(min(min(p.x,1.0-p.x),min(p.y,1.0-p.y))/0.03,0.0,1.0);\n' +
+'    pressure = sin(3.14159265*t)*pow(1.0-t,0.7)*exp(-q*q*1.4)*protect*edge;\n' +
+'    vec2 shift = vec2(sin((p.y-front)*14.0)*9.0*clamp((p.x-u_horn.x)*4.0,-1.0,1.0),sin(q*2.3)*14.0)*pressure;\n' +
+'    uv += vec2(shift.x/1080.0,-shift.y/1920.0)*u_field.zw;\n' +
+'  }\n' +
 '  vec2 dir = v_uv - 0.5;\n' +
 '  float off = u_chroma;\n' +
 '  vec3 scene;\n' +
-'  scene.r = texture(u_scene, v_uv + dir*off).r;\n' +
-'  scene.g = texture(u_scene, v_uv).g;\n' +
-'  scene.b = texture(u_scene, v_uv - dir*off).b;\n' +
+'  scene.r = texture(u_scene, uv + dir*off).r;\n' +
+'  scene.g = texture(u_scene, uv).g;\n' +
+'  scene.b = texture(u_scene, uv - dir*off).b;\n' +
 '  vec3 bloom;\n' +
-'  bloom.r = texture(u_bloomHalf, v_uv + dir*off*2.0).r + texture(u_bloomQuarter, v_uv + dir*off*2.0).r;\n' +
-'  bloom.g = texture(u_bloomHalf, v_uv).g + texture(u_bloomQuarter, v_uv).g;\n' +
-'  bloom.b = texture(u_bloomHalf, v_uv - dir*off*2.0).b + texture(u_bloomQuarter, v_uv - dir*off*2.0).b;\n' +
+'  bloom.r = texture(u_bloomHalf, uv + dir*off*2.0).r + texture(u_bloomQuarter, uv + dir*off*2.0).r;\n' +
+'  bloom.g = texture(u_bloomHalf, uv).g + texture(u_bloomQuarter, uv).g;\n' +
+'  bloom.b = texture(u_bloomHalf, uv - dir*off*2.0).b + texture(u_bloomQuarter, uv - dir*off*2.0).b;\n' +
 '  vec3 col = scene + bloom * u_bloom;\n' +
+'  col *= 1.0-pressure*0.13;\n' +
 '  col = col / (1.0 + col * 0.28);\n' +      // gentle reinhard so glow rolls off instead of hard-clipping
 '  col = pow(col, vec3(0.92));\n' +          // slight lift
 '  frag = vec4(col, 1.0);\n' +
@@ -313,6 +330,9 @@
     // Keep ordinary cells and their alpha-derived collision sizing untouched.
     // Boss animation gets native-sized storage instead of enlarging 128px art.
     if (i >= 112 && i <= 115) return { x: 1024 + ((i - 112) % 2) * 512, y: Math.floor((i - 112) / 2) * 512, size: 512 };
+    // The field-spanning guandao needs more than the ordinary 128px cell.
+    // Bottom-right 256px block is outside the status/role art allocations.
+    if (i === 57) return { x: 1792, y: 1792, size: 256 };
     if (i >= 151 && i <= 156) return { x: 1024 + (i - 151) * CELL, y: 1792, size: CELL };
     if (i >= 144 && i <= 150) return { x: 1024 + ((i - 144) % 4) * 256, y: 1280 + Math.floor((i - 144) / 4) * 256, size: 256 };
     if (i >= 128 && i < 192) return { x: 1024 + ((i - 128) % 8) * CELL, y: 1024 + Math.floor((i - 128) / 8) * CELL, size: CELL };
@@ -1122,6 +1142,10 @@
       name = AUTH_NAMES2[i];
       authored[name] = { cell: AUTH_DELTA_BASE + i, rot: 0, ready: false };
     }
+    // Brief kit-cast accents; 116..118 are separate from infantry 120..127.
+    ['kit-gjallarhorn', 'kit-solar-eruption', 'kit-duat-mouth'].forEach(function (name, i) {
+      authored[name] = { cell: 116 + i, rot: 0, ready: false };
+    });
     var roles = ['32-19-bell-sentry', '32-20-wheel-guard', '32-21-reactor-scarab',
       '32-22-war-barge', '32-23-flank-crossbow', '32-24-rain-ewer', '32-25-bronze-rivet'];
     for (var ri = 0; ri < roles.length; ri++) {
@@ -1569,7 +1593,21 @@
   }
 
   // chroma: 0..~0.02 uv offset; bloom: strength multiplier
-  GL.composite = function (chroma, bloomStrength, threshold) {
+  // CPU reference for offline previews/tests; mirrors FS_COMPOSITE's refraction.
+  // Returns source-sampling offsets in logical pixels, not entity displacement.
+  GL.hornRefraction = function (x, y, horn) {
+    if (!horn || horn.age < 0 || horn.age >= 0.38) return [0, 0, 0];
+    var p = x / GL.W, py = y / GL.H, hx = horn.x / GL.W;
+    var t = horn.age / 0.38, front = horn.y / GL.H - 0.08 - t * 1.25;
+    var q = (py - front - 0.1 * (p - hx) * (p - hx)) / 0.095;
+    var protect = Math.max(0, Math.min(1, (Math.hypot(x - horn.playerX, y - horn.playerY) - 140) / 100));
+    var edge = Math.max(0, Math.min(1, Math.min(p, 1 - p, py, 1 - py) / 0.03));
+    var pressure = Math.sin(Math.PI * t) * Math.pow(1 - t, 0.7) * Math.exp(-q * q * 1.4) * protect * edge;
+    return [Math.sin((py - front) * 14) * 9 * Math.max(-1, Math.min(1, (p - hx) * 4)) * pressure,
+      Math.sin(q * 2.3) * 14 * pressure, pressure * 0.13];
+  };
+
+  GL.composite = function (chroma, bloomStrength, threshold, horn) {
     flushSprites();
 
     gl.disable(gl.BLEND);
@@ -1604,6 +1642,9 @@
     gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, tQuartB.tex); gl.uniform1i(uComp.u_bloomQuarter, 2);
     gl.uniform1f(uComp.u_chroma, chroma || 0);
     gl.uniform1f(uComp.u_bloom, bloomStrength);
+    gl.uniform4f(uComp.u_horn, horn ? horn.x / GL.W : 0, horn ? horn.y / GL.H : 0, horn ? horn.age : 0, horn ? 1 : 0);
+    gl.uniform2f(uComp.u_hornPlayer, horn ? horn.playerX / GL.W : 0, horn ? horn.playerY / GL.H : 0);
+    gl.uniform4f(uComp.u_field, lb.x / vpW, lb.y / vpH, lb.w / vpW, lb.h / vpH);
     fullscreenPass();
     gl.activeTexture(gl.TEXTURE0);
   };
@@ -1689,7 +1730,7 @@
     uSpriteBullet = uniforms(progSpriteBullet, ['u_playfield', 'u_atlas']);
     uThresh = uniforms(progThresh, ['u_tex', 'u_threshold']);
     uBlur = uniforms(progBlur, ['u_tex', 'u_dir']);
-    uComp = uniforms(progComp, ['u_scene', 'u_bloomHalf', 'u_bloomQuarter', 'u_chroma', 'u_bloom']);
+    uComp = uniforms(progComp, ['u_scene', 'u_bloomHalf', 'u_bloomQuarter', 'u_chroma', 'u_bloom', 'u_horn', 'u_hornPlayer', 'u_field']);
 
     buildAtlas();
     loadOverrides();   // async; the game renders the procedural cells until (and unless) art lands
